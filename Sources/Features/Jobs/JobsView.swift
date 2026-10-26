@@ -388,7 +388,14 @@ private struct ApplyFormView: View {
     }
     /// В телефоне 10–11 цифр: «123» раньше уходило работодателю, и связаться
     /// с соискателем было невозможно.
-    private var phoneOk: Bool { (10...11).contains(phone.filter(\.isNumber).count) }
+    /// А107: паритет с Android (JobsScreen) — российский номер: 10 цифр или 11 с 7/8.
+    /// Сервер отклик не проверяет (только normalizePhone), и номер с лишней цифрой
+    /// («928 123 45 678», «+7 8928…») уходил работодателю чужим.
+    private var phoneOk: Bool {
+        let d = phone.filter { $0.isASCII && $0.isNumber }
+        if d.count == 10 { return true }
+        return d.count == 11 && (d.hasPrefix("7") || d.hasPrefix("8"))
+    }
 
     var body: some View {
         NavigationStack {
@@ -447,7 +454,7 @@ private struct ApplyFormView: View {
     private func submit() {
         // Второе нажатие до перерисовки кнопки отправляло второй отклик.
         guard !sending, valid else { return }
-        guard phoneOk else { error = "Проверьте номер телефона: нужно 10–11 цифр"; return }
+        guard phoneOk else { error = "Номер в формате +7 900 000-00-00"; return }
         error = nil
         sending = true
         let n = name.trimmingCharacters(in: .whitespaces)

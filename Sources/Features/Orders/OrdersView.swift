@@ -25,9 +25,12 @@ enum OrderFlow {
     /// Заголовки шагов для таймлайна. `shopType` — shop | cafe | service:
     /// шаги одни и те же, слова разные (кафе готовит, магазин собирает,
     /// салон работает). Параметр необязательный — старые вызовы не ломаются.
-    static func stepTitle(_ key: String, shopType: String? = nil) -> String {
+    static func stepTitle(_ key: String, shopType: String? = nil, deliveryType: String? = nil) -> String {
         // А64: бронь жилья — «Бронь создана / Подтверждена / Завершена».
         if shopType == "lodging", let l = OrderStatus.lodgingLabel(key) { return l }
+        // А107: самовывоз и «в зале» — «Выдаётся» / «Выдан», как у сервера.
+        if OrderStatus.isHandover(shopType: shopType, deliveryType: deliveryType),
+           let h = OrderStatus.handoverLabel(key) { return h }
         switch key {
         case "new":
             return shopType == "service" ? "Запись создана" : "Заказ оформлен"
@@ -522,7 +525,7 @@ private struct OrderCard: View {
     /// коды), иначе — свой словарь. Как в Android OrdersScreen.
     private var statusText: String {
         if let t = order.statusTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
-        return OrderStatus.label(order.status, shopType: order.shopType)
+        return OrderStatus.label(order.status, shopType: order.shopType, deliveryType: order.deliveryType)
     }
 
     /// VoiceOver: время предзаказа тоже читается (лейбл карточки заменяет детей).
@@ -547,6 +550,8 @@ private struct OrderCard: View {
         // Самовывоз, заказ за столиком и запись не «доставлены».
         if OrderFlow.isDone(order.status) {
             if order.shopType == "service" || order.shopType == "lodging" { return "завершена" }
+            // А107: самовывоз и «в зале» — «выдан», как подпись сервера слева.
+            if OrderStatus.isHandover(shopType: order.shopType, deliveryType: order.deliveryType) { return "выдан" }
             if let dt = order.deliveryType, !dt.isEmpty, dt != "delivery" { return "выполнен" }
             return "доставлен"
         }

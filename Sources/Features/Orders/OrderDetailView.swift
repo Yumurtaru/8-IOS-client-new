@@ -654,7 +654,8 @@ struct OrderDetailView: View {
         // Подпись сервера — только если трек не ушёл вперёд статуса карточки.
         let st = vm.track?.status ?? vm.order?.status
         let base = OrderStatus.label(st, shopType: vm.order?.shopType,
-                                     title: st == vm.order?.status ? vm.order?.statusTitle : nil)
+                                     title: st == vm.order?.status ? vm.order?.statusTitle : nil,
+                                     deliveryType: vm.order?.deliveryType)
         if let m = mins, m > 0 { return "\(base) · \(m) мин до вас" }
         return base
     }
@@ -734,6 +735,10 @@ struct OrderDetailView: View {
         if let t = o.statusTimeline?.step(key)?.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
         // А64: бронь жилья — свои слова («Завершена», а не «Выполнен»).
         if o.shopType == "lodging" { return OrderFlow.stepTitle(key, shopType: "lodging") }
+        // А107: шага ещё нет в status_timeline (или старый сервер) — у самовывоза
+        // и «в зале» те же слова, что у сервера («Выдаётся» / «Выдан»).
+        if OrderStatus.isHandover(shopType: o.shopType, deliveryType: o.deliveryType),
+           let h = OrderStatus.handoverLabel(key) { return h }
         if noCourier, key == "done", vm.order?.shopType != "service" { return "Выполнен" }
         return OrderFlow.stepTitle(key, shopType: vm.order?.shopType)
     }

@@ -468,6 +468,14 @@ private struct ChatThreadScreen: View {
         }
     }
 
+    /// Подпись статуса на плашке: серверная status_title, иначе свой словарь
+    /// (с учётом самовывоза / «в зале», А107).
+    private var chatStatusText: String {
+        if let t = vm.order?.statusTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
+        return OrderStatus.label(vm.order?.status, shopType: vm.order?.shopType,
+                                 deliveryType: vm.order?.deliveryType)
+    }
+
     // Плашка привязки к заказу «№… · В пути» + состав·сумма
     private var orderLinkPlate: some View {
         HStack(spacing: YMSpace.sm) {
@@ -476,7 +484,8 @@ private struct ChatThreadScreen: View {
             VStack(alignment: .leading, spacing: 1) {
                 // Подпись сервера (status_title) — для кодов, которых нет в словаре:
                 // раньше здесь мог показаться код латиницей (как в списке и детали — уже нет).
-                Text("Заказ №\(vm.order?.dailyNumber ?? orderId) · \(OrderStatus.label(vm.order?.status, shopType: vm.order?.shopType, title: vm.order?.statusTitle))")
+                // А107: сначала подпись сервера (знает тип организации и самовывоз), свой словарь — запасной.
+                Text("Заказ №\(vm.order?.dailyNumber ?? orderId) · \(chatStatusText)")
                     .font(.system(size: 13, weight: .bold)).foregroundStyle(YMColor.text)
                 if let o = vm.order {
                     Text("\(o.items?.count ?? 0) поз. · \(Money.format(Money.parse(o.total)))")

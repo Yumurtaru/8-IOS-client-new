@@ -108,10 +108,14 @@ enum OrderStatus {
     /// Параметр со значением по умолчанию — старые вызовы продолжают работать.
     /// `title` — подпись сервера (status_title): нужна для кодов, которых нет в
     /// словаре ниже — раньше человек видел их латиницей.
-    static func label(_ s: String?, shopType: String? = nil, title: String? = nil) -> String {
+    /// `deliveryType` — delivery | pickup | dine_in (А107): у самовывоза и «в зале»
+    /// «Выдаётся» / «Выдан», как у сервера. Не передан — прежние слова.
+    static func label(_ s: String?, shopType: String? = nil, title: String? = nil,
+                      deliveryType: String? = nil) -> String {
         // А64: бронь жилья — свои слова (как status_title сервера); «Доставлен»
         // у завершённого проживания читался как ошибка.
         if shopType == "lodging", let l = lodgingLabel(s) { return l }
+        if isHandover(shopType: shopType, deliveryType: deliveryType), let h = handoverLabel(s) { return h }
         switch s {
         case "new", "pending": return "Новый"
         case "accepted": return "Принят"
@@ -138,6 +142,25 @@ enum OrderStatus {
         default:
             if let t = title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
             return s ?? "—"
+        }
+    }
+
+    /// А107: самовывоз и заказ «в зале» не везут — сервер подписывает их
+    /// «Выдаётся» / «Выдан» вместо «В пути» / «Доставлен» (orderStatusTitles в
+    /// routes/api_v1.php). Бронь жилья и запись на услугу — со своими словами.
+    /// Нет типа организации (старый сервер) — как у сервера: правило действует.
+    static func isHandover(shopType: String?, deliveryType: String?) -> Bool {
+        let sh = (shopType ?? "").lowercased()
+        let dt = (deliveryType ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+        return sh != "lodging" && sh != "service" && (dt == "pickup" || dt == "dine_in")
+    }
+
+    /// А107: подписи самовывоза / «в зале» для кодов доставки; прочие — nil.
+    static func handoverLabel(_ s: String?) -> String? {
+        switch s {
+        case "in_delivery", "delivering": return "Выдаётся"
+        case "done", "delivered", "completed": return "Выдан"
+        default: return nil
         }
     }
 
