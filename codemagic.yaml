@@ -62,6 +62,30 @@ workflows:
           PLIST="Generated/Info.plist"
           VERSION="${APP_VERSION:-$(grep -m1 'CFBundleShortVersionString:' project.yml | sed 's/.*: *"\(.*\)"/\1/')}"
 
+          # АВТОМАТИЧЕСКИЙ НОМЕР ВЕРСИИ (26.10.2026, просьба владельца: не останавливать
+          # сборку из-за занятого номера). Если номер из project.yml в App Store уже
+          # закрыт (выпущен/одобрен) или ниже выпущенного — берём следующий после
+          # последнего закрытого (1.0.7 → 1.0.8, 1.3 → 1.4) и передаём его следующим
+          # шагам через $CM_ENV (APP_VERSION). Не получилось спросить Apple — номер
+          # остаётся из project.yml, сборку не роняем.
+          APP_ID_AV="6794675250"
+          if OUT_AV=$(app-store-connect apps app-store-versions "$APP_ID_AV" --platform IOS --json 2>/tmp/asc_av_err.txt); then
+            printf '%s' "$OUT_AV" > /tmp/asc_av.json
+            NEWV=$(V="$VERSION" python3 -c "import json,os;d=json.load(open('/tmp/asc_av.json'));d=d.get('data',d) if isinstance(d,dict) else d;d=[d] if isinstance(d,dict) else (d or []);a=[i.get('attributes') or {} for i in d if isinstance(i,dict)];closed={'READY_FOR_SALE','READY_FOR_DISTRIBUTION','APPROVED','ACCEPTED','PENDING_DEVELOPER_RELEASE','PENDING_APPLE_RELEASE','PROCESSING_FOR_APP_STORE','PROCESSING_FOR_DISTRIBUTION','REPLACED_WITH_NEW_VERSION'};ok=lambda s:bool(s) and all(p.isdigit() for p in s.split('.'));t=lambda s:tuple(int(p) for p in s.split('.'));cl=[t(x['versionString']) for x in a if ok(x.get('versionString') or '') and ({x.get('appStoreState'),x.get('appVersionState'),x.get('state')} & closed)];v=os.environ['V'];top=max(cl) if cl else None;print(v if (not ok(v) or top is None or t(v)>top) else '.'.join(str(n) for n in top[:-1]+(top[-1]+1,)))" 2>/tmp/asc_av_perr.txt || true)
+            if [ -n "$NEWV" ] && [ "$NEWV" != "$VERSION" ]; then
+              echo "─────────────────────────────────────────"
+              echo "  Номер $VERSION в App Store уже закрыт — беру следующий свободный: $NEWV"
+              echo "  (в project.yml его можно поднять потом, сборку это не останавливает)"
+              echo "─────────────────────────────────────────"
+              VERSION="$NEWV"
+            elif [ -z "$NEWV" ]; then
+              echo "Не разобрал список версий App Store — номер из project.yml: $VERSION. $(head -c 200 /tmp/asc_av_perr.txt | tr '\n' ' ')"
+            fi
+          else
+            echo "App Store Connect не ответил — номер из project.yml: $VERSION. $(head -c 200 /tmp/asc_av_err.txt | tr '\n' ' ')"
+          fi
+          if [ -n "${CM_ENV:-}" ]; then echo "APP_VERSION=$VERSION" >> "$CM_ENV"; fi
+
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$PLIST"
           # Номер сборки (CFBundleVersion) должен быть больше уже загруженного в
@@ -72,7 +96,7 @@ workflows:
           # «bundle version must be higher». Берём наибольшее из счётчика и
           # последней сборки у Apple + 1. Не получилось спросить Apple — остаётся
           # счётчик (как было), сборку не роняем.
-          APP_ID_BN="6794675250"
+          APP_ID_BN="$APP_ID_AV"
           NUM="${BUILD_NUMBER:-1}"
           case "$NUM" in ''|*[!0-9]*) NUM=1;; esac
           LAST=0
