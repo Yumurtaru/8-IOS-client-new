@@ -55,6 +55,8 @@ struct CartView: View {
         }
         .navigationBarHidden(true)
         .task(id: cart.shopSlug) { await loadFeeShop() }
+        // AT-3: неотвеченное оформление старше суток — снимаем при открытии корзины.
+        .onAppear { cart.expireStalePending() }
     }
 
     // MARK: - Header «‹ Корзина»
@@ -89,6 +91,45 @@ struct CartView: View {
                 VStack(spacing: 0) {
                     storeBanner
                         .padding(.bottom, YMSpace.lg)
+
+                    // AT-3: исход прошлого оформления неизвестен — корзина не меняется.
+                    // Пока запрос ещё летит — без плашки (уйти с оформления в это время нельзя).
+                    if cart.pendingOrder?.unknown == true {
+                        Button(action: { Haptics.light(); onCheckout() }) {
+                            VStack(alignment: .leading, spacing: YMSpace.xs) {
+                                Text("Прошлое оформление не завершилось")
+                                    .font(YMFont.headline).foregroundStyle(YMColor.text)
+                                Text("Ответ сервера не дошёл — заказ мог создаться. Откройте оформление: повторите отправку или проверьте «Мои заказы». Корзину можно менять после этого.")
+                                    .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Открыть оформление")
+                                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(YMColor.accent)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(YMSpace.lg)
+                            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .strokeBorder(YMColor.statusCancel.opacity(0.55), lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, YMSpace.lg)
+                    }
+                    // AT-3: запись старше суток снята — человек должен об этом узнать.
+                    if cart.pendingExpired {
+                        Button(action: { cart.pendingExpired = false }) {
+                            VStack(alignment: .leading, spacing: YMSpace.xs) {
+                                Text("Прошлое оформление сутки назад не завершилось — проверьте «Мои заказы», не создался ли заказ.")
+                                    .font(YMFont.caption).foregroundStyle(YMColor.text)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Text("Понятно").font(.system(size: 14, weight: .semibold)).foregroundStyle(YMColor.accent)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(YMSpace.lg)
+                            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(.bottom, YMSpace.lg)
+                    }
 
                     SectionKicker("Ваш заказ")
                         .padding(.bottom, YMSpace.md)
@@ -173,6 +214,8 @@ struct CartView: View {
                 .foregroundStyle(YMColor.muted)
             TextField("Комментарий к заказу…", text: $comment, axis: .vertical)
                 .focused($commentFocused)
+                // AT-3: при неотвеченном оформлении комментарий не правится (уйдёт прежний).
+                .disabled(cart.pendingOrder != nil)
                 .font(.system(size: 13.5))
                 .foregroundStyle(YMColor.text)
                 .tint(YMColor.accent)
@@ -382,6 +425,10 @@ private struct CartRow: View {
         .padding(.horizontal, 4)
         .frame(height: 34)
         .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        // AT-3: пока исход прошлого оформления неизвестен, состав не меняется
+        // (плашка над списком объясняет почему).
+        .disabled(cart.pendingOrder != nil)
+        .opacity(cart.pendingOrder != nil ? 0.45 : 1)
     }
 }
 

@@ -731,9 +731,12 @@ struct OrderCreateResult: Codable {
     var etaMin: Int? = nil
     var etaMax: Int? = nil
     var preorderAt: String? = nil
+    /// AT-3: true — заказ по этому ключу уже был создан раньше (повтор после
+    /// обрыва связи): сервер вернул его, второй не создан (api_v1.php, v1DupOrderReply).
+    var duplicate: Bool? = nil
 
     enum CodingKeys: String, CodingKey { case id, dailyNumber, orderId, promotions, gifts, pointsSpent, pointsEarned
-        case deliveryType, etaMin, etaMax, preorderAt }
+        case deliveryType, etaMin, etaMax, preorderAt, duplicate }
     /// Когда приходит этот ответ, заказ УЖЕ создан. Раньше любое поле акций не
     /// того типа (строка "0.00" вместо числа, null в имени акции) роняло разбор
     /// целиком: человек видел «Не удалось обработать ответ», корзина оставалась,
@@ -754,6 +757,7 @@ struct OrderCreateResult: Codable {
         etaMax = try c.decode(LenientInt.self, forKey: .etaMax).wrappedValue
         let pre = (try? c.decodeIfPresent(String.self, forKey: .preorderAt)) ?? nil
         preorderAt = (pre?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) ? nil : pre
+        duplicate = (try? c.decodeIfPresent(Bool.self, forKey: .duplicate)) ?? nil
     }
 }
 // Ответ создания онлайн-платежа (YooKassa). Декодер сам делает snake_case → CodingKeys не нужны.

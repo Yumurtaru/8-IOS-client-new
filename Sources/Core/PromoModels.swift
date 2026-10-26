@@ -58,3 +58,30 @@ struct PromoPreview: Codable {
     let deliveryPrice: Double?
     let total: Double?
 }
+
+/* AT-2: POST /api/cart/validate (routes/cart.php → cartRecompute, конверт сайта
+ * {ok,data}). Строки ответа — с номером строки запроса (row): один товар бывает
+ * в корзине несколькими строками с разными добавками. Цены — по базе магазина
+ * на сейчас; linePrice — цена единицы вместе с добавками. */
+struct CartValidateBody: Encodable {
+    let shopId: Int
+    let items: [PromoCartItem]
+}
+struct CartValidateMod: Decodable {
+    let id: Int?
+    let price: Double?
+}
+struct CartValidateLine: Decodable {
+    let row: Int?
+    let productId: Int?
+    let basePrice: Double?
+    let linePrice: Double?
+    let qty: Double?
+    let modifiers: [CartValidateMod]?
+    let available: Bool?
+}
+struct CartValidateResult: Decodable {
+    let items: [CartValidateLine]?
+    let subtotal: Double?
+    let hasIssues: Bool?
+}

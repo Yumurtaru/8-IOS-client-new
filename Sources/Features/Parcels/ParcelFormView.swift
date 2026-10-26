@@ -186,7 +186,7 @@ final class ParcelFormModel: ObservableObject {
             // 503) — посылки сейчас недоступны.
             if let e = error as? APIError {
                 switch e {
-                case .network, .timeout, .http: return
+                case .network, .notConnected, .timeout, .http: return
                 default: break
                 }
             }

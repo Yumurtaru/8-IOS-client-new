@@ -312,6 +312,12 @@ final class OrderDetailViewModel: ObservableObject {
         // этом, но ПОСЛЕ применения: иначе текст «добавили остальные» висел бы
         // под диалогом подтверждения, когда ещё ничего не добавлено.
         let partial = lines.count < items.count
+        // AT-3: неотвеченное оформление — сначала его исход (текст — на этом экране).
+        if cart.checkLocked() {
+            Haptics.warning()
+            reorderError = OrderDetailViewModel.lockedText
+            return
+        }
         if let cur = cart.shopId, cur != shopId, !cart.isEmpty {
             pendingReorder = (lines, shopId, data.shopName, data.shopSlug, partial)
             conflictShopName = data.shopName
@@ -325,11 +331,19 @@ final class OrderDetailViewModel: ObservableObject {
     var pendingReorder: (lines: [CartLine], shopId: Int, shopName: String?, shopSlug: String?, partial: Bool)?
 
     func applyReorder(_ lines: [CartLine], shopId: Int, shopName: String?, shopSlug: String?, partial: Bool, cart: Cart) {
-        cart.setLines(lines, shopId: shopId, shopName: shopName, shopSlug: shopSlug)
+        // AT-3: исход прошлого оформления неизвестен — корзину не заменяем.
+        guard cart.setLines(lines, shopId: shopId, shopName: shopName, shopSlug: shopSlug) else {
+            Haptics.warning()
+            reorderError = OrderDetailViewModel.lockedText
+            return
+        }
         reorderError = partial ? "Часть позиций больше не продаётся — добавили остальные." : nil
         Haptics.success()
         reorderDone = true
     }
+
+    /// AT-3: корзину нельзя менять, пока исход прошлого оформления неизвестен.
+    static let lockedText = "Прошлое оформление не завершилось — заказ мог создаться. Откройте корзину → «Оформить» и узнайте исход, потом повторяйте заказ."
 
     func confirmPendingReorder(cart: Cart) {
         guard let p = pendingReorder else { return }

@@ -26,7 +26,9 @@ import SwiftUI
 //
 
 // ── Тело создания заказа (контракт как в старом клиенте, snake_case) ──
-private struct OrderItemBody: Encodable {
+// AT-3: Codable — тело хранится в корзине (Cart.pendingOrder) и при неизвестном
+// исходе уходит повторно ровно тем же.
+private struct OrderItemBody: Codable {
     let productId: Int; let qty: Double; let modifiers: [Int]?
     enum CodingKeys: String, CodingKey { case productId = "product_id", qty, modifiers }
 }
@@ -37,7 +39,7 @@ private struct OrderItemBody: Encodable {
 /// из него поля (city/street/house/apartment): из строки они получали
 /// undefined, и адрес доставки у продавца и курьера был ПУСТОЙ. Плюс сервер не
 /// находил в адресе координаты и никогда не считал время в пути (eta_minutes).
-private struct OrderAddressBody: Encodable {
+private struct OrderAddressBody: Codable {
     let label: String?
     let city: String?
     let street: String?
@@ -49,7 +51,7 @@ private struct OrderAddressBody: Encodable {
     let lat: Double?
     let lng: Double?
 }
-private struct OrderBody: Encodable {
+private struct OrderBody: Codable {
     let shopId: Int; let items: [OrderItemBody]; let deliveryType: String
     let paymentType: String; let address: OrderAddressBody?; let comment: String?
     let deliveryPrice: Double?
@@ -162,6 +164,8 @@ private enum Payment: String, CaseIterable, Hashable {
 struct CheckoutView: View {
     var onSuccess: (OrderCreateResult) -> Void = { _ in }
     var onBack: () -> Void = {}
+    /// AT-3: исход оформления неизвестен — «Проверить мои заказы».
+    var onOpenOrders: () -> Void = {}
 
     @ObservedObject private var cart = Cart.shared
     /// Сессия: истекла посреди оформления — раньше оставалась только надпись
@@ -196,6 +200,16 @@ struct CheckoutView: View {
     @State private var preorderAt: String?
     @State private var placing = false
     @State private var errorText: String?
+    /// AT-3: «Изменить заказ» при неизвестном исходе — только после предупреждения.
+    @State private var askAbandon = false
+    /// AT-2: «Цены обновились: было X, стало Y» — над кнопкой.
+    @State private var priceNote: String?
+    /// AT-2: сверяем цены строк с магазином — итог ещё может смениться.
+    @State private var pricesChecking = false
+    /// Состав, по которому уже сверяли (без зацикливания при остаточной разнице).
+    @State private var pricesCheckedFor: String?
+    /// Номер последней сверки: флаг снимает только своя (старая не гасит новую).
+    @State private var pricesToken = 0
     /// Почему не посчиталась доставка (обрыв связи, 5xx). Раньше ошибка
     /// проглатывалась: кнопка «Оформить заказ» просто становилась серой и
     /// молчала — человек жал в неё и не понимал, что происходит.
@@ -235,7 +249,15 @@ struct CheckoutView: View {
 
     // MARK: - Деньги (всё Decimal)
 
-    private var subtotal: Decimal { Money.parse(cart.total) }
+    /// AT-2: сумма товаров — по серверу. Предпросмотр акций считает её по
+    /// ТЕКУЩИМ ценам магазина (routes/promotions.php → cartRecompute), а корзина
+    /// хранит цену с момента добавления, иногда сутками: кнопка показывала одну
+    /// сумму, а заказ создавался на другую. Нет ответа предпросмотра — как раньше.
+    private var serverGoods: Double? {
+        if let s = promo?.subtotal, s > 0 { return s }
+        return nil
+    }
+    private var subtotal: Decimal { Money.parse(serverGoods ?? cart.total) }
 
     // Стоимость доставки — ТОЛЬКО из серверного расчёта по адресу. До адреса / при
     // недоступности / для самовывоза-и-стола → 0.
@@ -243,7 +265,7 @@ struct CheckoutView: View {
         guard fulfillment == .delivery, let q = quote, q.available else { return 0 }
         return Money.parse(q.deliveryPrice ?? 0)
     }
-    private var serviceFee: Decimal { Money.parse(Fees.service(subtotal: cart.total, shop: shop)) }
+    private var serviceFee: Decimal { Money.parse(Fees.service(subtotal: serverGoods ?? cart.total, shop: shop)) }
 
     // Итоги: если сервер посчитал акции — используем ЕГО числа, иначе прежний
     // локальный расчёт (старый сервер, обрыв связи — оформление не блокируем).
@@ -336,6 +358,7 @@ struct CheckoutView: View {
             await MainActor.run {
                 promo = r
                 promoPending = false
+                reconcilePrices(r)
                 // Списывать нечего — тумблер сам гаснет.
                 if (r?.pointsSpendMax ?? 0) <= 0 { spendPoints = false }
                 // Скидка/баллы изменили оплачиваемую сумму — пересчитываем доставку:
@@ -448,6 +471,7 @@ struct CheckoutView: View {
             && (!needTime || preorderValid)
             && (cart.shopSlug == nil || shop != nil) && !promoPending
             && !fulfillmentNone && !paymentNone && !tableMissing
+            && !pricesChecking
     }
 
     /// Почему «Оформить заказ» сейчас серая — коротко, прямо у кнопки. Причины
@@ -486,13 +510,33 @@ struct CheckoutView: View {
     var body: some View {
         ZStack {
             YMColor.bg.ignoresSafeArea()
-            VStack(spacing: 0) {
-                header
-                scrollContent
-                bottomCTA
+            // AT-3: исход оформления неизвестен (обрыв связи, таймаут, 5xx,
+            // выгрузка приложения). Раньше форма оставалась редактируемой, а
+            // повтор тем же ключом возвращал СТАРЫЙ заказ — новые адрес, оплата и
+            // время молча терялись. Теперь вместо формы — что именно ушло,
+            // «Повторить» (тот же ключ и то же тело), «Проверить мои заказы» и
+            // «Изменить заказ» с предупреждением.
+            if let po = cart.pendingOrder, po.unknown {
+                pendingPanel(po)
+            } else {
+                VStack(spacing: 0) {
+                    header
+                    scrollContent
+                    bottomCTA
+                }
             }
         }
         .navigationBarHidden(true)
+        .alert("Изменить заказ?", isPresented: $askAbandon) {
+            Button("Всё равно изменить", role: .destructive) {
+                cart.abandonPendingOrder()
+                errorText = nil
+            }
+            Button("Мои заказы") { onOpenOrders() }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Прежний заказ мог уже создаться — сначала проверьте «Мои заказы». Если изменить заказ и оформить его снова, может получиться второй заказ.")
+        }
         .sheet(isPresented: $showAddAddress, onDismiss: { Task { await loadAddresses() } }) {
             AddAddressSheet(cityName: cityName) { newAddr in
                 // Свежесозданный адрес выбираем и сразу считаем доставку.
@@ -528,7 +572,8 @@ struct CheckoutView: View {
         // прежнего заведения.
         .onChange(of: cart.shopId) { _ in reloadForShop() }
         .onChange(of: session.token) { _ in resetForAccount() }
-        .onAppear { restoreDraft() }
+        // AT-3: неотвеченное оформление старше суток снимаем (корзина скажет, что проверить).
+        .onAppear { cart.expireStalePending(); restoreDraft() }
         // Один параметр в onChange: двухпараметрический вариант — iOS 17, цель 16.0.
         .onChange(of: cart.lines.count) { _ in refreshPromo() }
         .onChange(of: cart.total) { _ in
@@ -537,6 +582,10 @@ struct CheckoutView: View {
             if let c = appliedCode { Task { await applyCode(c, silent: true) } }
         }
         .onChange(of: spendPoints) { _ in refreshPromo() }
+        // AT-2: состав корзины сменился (без учёта цен) — пометка прошлой сверки к нему не относится.
+        .onChange(of: cart.lines.map { "\($0.key)x\($0.qty)" }.joined(separator: ";")) { comp in
+            if let done = pricesCheckedFor, done != comp { priceNote = nil; pricesCheckedFor = nil }
+        }
         .onChange(of: selectedAddress?.id) { _ in refreshPromo() }
     }
 
@@ -1130,6 +1179,16 @@ struct CheckoutView: View {
             Spacer()
             Text(Money.format(grandTotal)).font(.system(size: 22, weight: .heavy)).foregroundStyle(YMColor.text)
         }
+        // AT-2: заметно, прямо над кнопкой — до нажатия «Оформить».
+        if let n = priceNote {
+            Text(n).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, YMSpace.md).padding(.vertical, YMSpace.sm)
+                .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(YMColor.accent.opacity(0.6), lineWidth: 1))
+        }
         if let e = errorText {
             Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -1265,7 +1324,9 @@ struct CheckoutView: View {
 
     /// Что клиент платит за товары: корзина минус скидка и баллы (не меньше 0).
     private var goodsForQuote: Double {
-        let paid = Money.parse(cart.total) - promoDiscount - codeOff - pointsSpent
+        // AT-2: от той же суммы товаров, что и итог (серверной, если она есть):
+        // «бесплатно от» и минимум сервер считает по своим ценам.
+        let paid = subtotal - promoDiscount - codeOff - pointsSpent
         let v = NSDecimalNumber(decimal: max(0, paid)).doubleValue
         return (v * 100).rounded() / 100
     }
@@ -1316,7 +1377,6 @@ struct CheckoutView: View {
             }
         }
         Haptics.medium()
-        placing = true; errorText = nil
 
         let items = cart.lines.map {
             OrderItemBody(productId: $0.productId, qty: $0.qty,
@@ -1346,23 +1406,242 @@ struct CheckoutView: View {
             changeFrom: payment == .cash && !changeDigits.isEmpty ? changeDigits : nil
         )
 
+        // AT-3: тело и ключ — в корзину (на диск) ДО запроса; что ушло — для
+        // экрана «исход неизвестен».
+        guard let data = try? JSONEncoder().encode(body) else { errorText = "Не удалось подготовить заказ"; return }
+        var summary: [String] = ["Получение: " + fulfillment.title]
+        if fulfillment == .delivery, let a = composedAddress() { summary.append("Адрес: " + a) }
+        let t = tableNumber.trimmingCharacters(in: .whitespaces)
+        if fulfillment == .dineIn && !t.isEmpty { summary.append("Стол: " + String(t.prefix(20))) }
+        if needTime, let p = preorderAt { summary.append("Ко времени: " + SuccessView.preorderText(p)) } else { summary.append("Как можно скорее") }
+        summary.append("Оплата: " + payment.title
+            + (payment == .cash && !changeDigits.isEmpty ? ", сдача с \(changeDigits) ₽" : ""))
+        if let c = appliedCode { summary.append("Промокод: " + c) }
+        if spendPoints { summary.append("Часть оплатить баллами") }
+        if !trimmed.isEmpty { summary.append("Комментарий: " + trimmed) }
+        cart.beginOrder(PendingOrder(
+            body: data, key: body.idempotencyKey, lines: cart.lines, shopName: cart.shopName,
+            summary: summary, shownTotal: Money.format(grandTotal),
+            unknown: false, at: Date().timeIntervalSince1970
+        ))
+        send(body, retry: false)
+    }
+
+    /// Повтор неотвеченного оформления: то же тело, тот же ключ.
+    private func retryPending() {
+        guard !placing, let po = cart.pendingOrder else { return }
+        guard session.isLoggedIn else { showAuth = true; return }
+        guard let body = try? JSONDecoder().decode(OrderBody.self, from: po.body) else {
+            errorText = "Не удалось повторить — проверьте «Мои заказы»"
+            return
+        }
+        Haptics.medium()
+        send(body, retry: true)
+    }
+
+    /// Отправка заказа. Task не привязан к экрану: ответ доходит и после ухода.
+    private func send(_ body: OrderBody, retry: Bool) {
+        placing = true; errorText = nil
+        let key = body.idempotencyKey
         Task {
             do {
                 let r: OrderCreateResult = try await API.shared.post("api/v1/orders", body: body)
                 await MainActor.run {
                     Haptics.success()
-                    CheckoutDraft.clear()
-                    cart.clear()
+                    // Корзину чистим, только если это ответ на СВОЮ запись (ключ совпал).
+                    if cart.pendingOrder?.key == key {
+                        CheckoutDraft.clear()
+                        cart.clear()          // снимает и запись неотвеченного оформления
+                    }
                     placing = false
+                    // AT-3: и дубль — на экран успеха с номером: там пометка «уже был
+                    // оформлен по прошлому нажатию». Алерт здесь терялся: пустая корзина
+                    // снимала экран оформления (CartFlow), и человек видел пустую корзину.
                     onSuccess(r)
                 }
             } catch {
                 await MainActor.run {
                     Haptics.error()
+                    let keep = Self.outcomeUnknown(error) || (retry && Self.beforeDupCheck(error))
+                    if keep { cart.markOrderUnknown(key: key) } else { cart.dropPendingOrder(key: key) }
                     errorText = error.localizedDescription
                     placing = false
                 }
             }
+        }
+    }
+
+    /// AT-3: исход неизвестен — сервер мог создать заказ, но ответ не дошёл.
+    fileprivate static func outcomeUnknown(_ e: Error) -> Bool {
+        guard let a = e as? APIError else { return true }
+        return a.isUnknownOutcome
+    }
+    /// Повтор неотвеченного: отказ, который сервер даёт ДО поиска заказа по ключу,
+    /// ничего не говорит о прошлом заказе — запись не снимаем. Это вход (401),
+    /// лимит запросов (429), «Магазин недоступен» (422, api_v1.php — проверка
+    /// магазина стоит раньше поиска дубля) и повтор, который вовсе не ушёл (нет сети).
+    fileprivate static func beforeDupCheck(_ e: Error) -> Bool {
+        guard let a = e as? APIError else { return false }
+        switch a {
+        case .unauthorized, .guestNeedsLogin, .notConnected: return true
+        case .rejected(let status, let message, _):
+            return status == 429 || (status == 422 && message == "Магазин недоступен")
+        default: return false
+        }
+    }
+
+    // MARK: - AT-2: сверка цен строк с магазином
+
+    /// Сумма предпросмотра разошлась с корзиной — цены в магазине поменялись.
+    /// Перечитываем строки (POST /api/cart/validate: цена каждой строки по базе) и
+    /// обновляем цены корзины; человеку — пометка «было / стало» над кнопкой.
+    /// Один раз на состав корзины (без зацикливания при остаточной разнице).
+    private func reconcilePrices(_ p: PromoPreview?) {
+        guard let srv = p?.subtotal, srv > 0, cart.pendingOrder == nil, !cart.isEmpty,
+              let sid = cart.shopId else { return }
+        let local = Money.parse(cart.total)
+        let server = Money.parse(srv)
+        guard local != server else { return }
+        let sent = cart.lines
+        let sig = sent.map { "\($0.key)x\($0.qty)" }.joined(separator: ";")
+        guard pricesCheckedFor != sig else { return }
+        pricesCheckedFor = sig
+        pricesToken += 1
+        let token = pricesToken
+        pricesChecking = true
+        priceNote = nil
+        let body = CartValidateBody(shopId: sid, items: sent.map {
+            PromoCartItem(productId: $0.productId, qty: $0.qty, modifiers: $0.modifierIds)
+        })
+        Task {
+            let v: CartValidateResult? = try? await API.shared.post("api/cart/validate", body: body)
+            await MainActor.run {
+                // Флаг снимает только последняя сверка: старая не гасит идущую новую.
+                if pricesToken == token { pricesChecking = false }
+                // Корзину за это время поменяли — сверим по следующему пересчёту.
+                guard cart.lines.map({ "\($0.key)x\($0.qty)" }).joined(separator: ";") == sig else {
+                    pricesCheckedFor = nil
+                    return
+                }
+                var prices: [String: Double] = [:]
+                var gone: [String] = []
+                var cut: [String] = []
+                for (i, line) in sent.enumerated() {
+                    guard let row = v?.items?.first(where: { $0.row == i && $0.productId == line.productId }) else { continue }
+                    if row.available != true { gone.append(line.name); continue }
+                    // Набор добавок сервер урезал — цену такой строки не подменяем.
+                    let mods = Set((row.modifiers ?? []).compactMap { $0.id })
+                    guard mods == Set(line.modifierIds) else { cut.append(line.name); continue }
+                    guard let lp = row.linePrice else { continue }
+                    prices[line.key] = lp
+                }
+                let changed = v != nil && cart.applyPrices(prices)
+                let now = Money.parse(cart.total)
+                // Причину называем точно: недоступная позиция или урезанные добавки —
+                // это не «цены изменились».
+                var parts: [String] = []
+                if changed && now != local {
+                    parts.append("Цены обновились: было \(Money.format(local)), стало \(Money.format(now))")
+                }
+                if !gone.isEmpty { parts.append("Часть товаров недоступна: " + gone.joined(separator: ", ")) }
+                if !cut.isEmpty { parts.append("Часть добавок недоступна: " + cut.joined(separator: ", ")) }
+                if parts.isEmpty {
+                    parts.append("Сумма товаров по данным магазина — \(Money.format(server)) (в корзине \(Money.format(local))). Итог посчитан по данным магазина.")
+                }
+                priceNote = parts.joined(separator: "\n")
+            }
+        }
+    }
+
+    // MARK: - AT-3: исход неизвестен
+
+    private func pendingPanel(_ po: PendingOrder) -> some View {
+        VStack(spacing: 0) {
+            header
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: YMSpace.md) {
+                    VStack(alignment: .leading, spacing: YMSpace.xs) {
+                        Text(placing ? "Отправляем заказ повторно…" : "Не знаем, оформился ли заказ")
+                            .font(YMFont.headline).foregroundStyle(YMColor.text)
+                        Text("Ответ сервера не дошёл — заказ мог создаться. «Повторить» отправит тот же заказ: если он уже есть, сервер вернёт его, а второй не создаст. Пока исход неизвестен, изменить адрес, оплату, время, промокод или состав нельзя.")
+                            .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let e = errorText, !placing {
+                            Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(YMSpace.lg)
+                    .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(YMColor.statusCancel.opacity(0.55), lineWidth: 1))
+
+                    VStack(alignment: .leading, spacing: YMSpace.xs) {
+                        Text("Что отправлено" + (po.shopName.map { " · " + $0 } ?? ""))
+                            .font(YMFont.headline).foregroundStyle(YMColor.text)
+                        ForEach(po.lines) { l in
+                            HStack(alignment: .top) {
+                                Text("\(fmtQty(l.qty, l.unit)) · \(l.name)")
+                                    .font(.system(size: 13.5)).foregroundStyle(YMColor.text)
+                                Spacer(minLength: 8)
+                                Text(Money.format(Money.parse(l.unitPrice) * (Decimal(string: String(l.qty)) ?? 0)))
+                                    .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                            }
+                        }
+                        ForEach(Array(po.summary.enumerated()), id: \.offset) { _, line in
+                            Text(line).font(YMFont.caption).foregroundStyle(YMColor.muted)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if !po.shownTotal.isEmpty {
+                            Text("Итого на экране было: " + po.shownTotal)
+                                .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(YMSpace.lg)
+                    .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(YMColor.hairline, lineWidth: 1))
+
+                    Button(action: retryPending) {
+                        HStack(spacing: YMSpace.sm) {
+                            if placing { ProgressView().tint(YMColor.onAccent) }
+                            Text(placing ? "Отправляем…" : "Повторить")
+                        }
+                    }
+                    .buttonStyle(YMPrimaryButtonStyle())
+                    .disabled(placing)
+
+                    Button(action: { Haptics.light(); onOpenOrders() }) {
+                        Text("Проверить мои заказы")
+                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(YMColor.text)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(YMColor.hairline, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(placing)
+
+                    Button(action: { askAbandon = true }) {
+                        Text("Изменить заказ")
+                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(YMColor.statusCancel)
+                            .frame(maxWidth: .infinity, minHeight: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(placing)
+                }
+                .padding(.horizontal, YMSpace.xl)
+                .padding(.bottom, YMSpace.xl)
+            }
+        }
+        // Шторка входа: «Повторить» без входа (сессия истекла) ведёт сюда.
+        .sheet(isPresented: $showAuth) {
+            NavigationStack {
+                AuthView(onAuthed: { showAuth = false })
+            }
+            .environmentObject(Session.shared)
         }
     }
 }

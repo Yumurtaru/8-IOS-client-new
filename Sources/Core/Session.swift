@@ -94,6 +94,8 @@ final class Session: ObservableObject {
         if wasLoggedIn && clearLocalData {
             Task { @MainActor in
                 Cart.shared.clear()
+                // AT-7: неотвеченную бронь жилья прежнего аккаунта не повторяем.
+                LodgingPendingStore.clearAll()
                 SearchHistoryStore.clear()
                 RecentStore.clear()
                 // Комментарий к заказу и номер стола прежнего человека (черновик

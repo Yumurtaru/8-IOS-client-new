@@ -4,6 +4,10 @@ enum APIError: LocalizedError {
     case server(String)   // ошибка уровня приложения (success=false) — не повторяем
     case http(Int)        // HTTP-статус ошибки — повторяем при >= 500
     case network          // нет соединения — повторяем
+    /// AT-3: запрос точно НЕ ушёл на сервер (нет интернета, адрес не нашёлся,
+    /// соединение не установилось). Для создания заказа/брони это окончательный
+    /// ответ «не создано»; текст тот же, что у .network.
+    case notConnected
     case timeout          // истёк таймаут — повторяем
     case unauthorized     // 401 — нужен повторный вход
     /// 401 на запрос гостя (ушёл без токена). Паритет с Android (Repo.safeS):
@@ -23,7 +27,7 @@ enum APIError: LocalizedError {
         case .rejected(_, let m, _): return m
         // Код ответа человеку ничего не говорит («Ошибка сервера (502)») — пишем по-русски.
         case .http:          return "Сервер временно недоступен. Попробуйте позже"
-        case .network:       return "Нет соединения с интернетом"
+        case .network, .notConnected: return "Нет соединения с интернетом"
         case .timeout:       return "Превышено время ожидания. Попробуйте ещё раз"
         case .unauthorized:  return "Сессия истекла, войдите снова"
         case .guestNeedsLogin: return "Войдите, чтобы продолжить"
@@ -57,7 +61,7 @@ enum APIError: LocalizedError {
     /// Стоит ли повторять запрос при этой ошибке (для идемпотентных GET).
     var isRetryable: Bool {
         switch self {
-        case .network, .timeout: return true
+        case .network, .notConnected, .timeout: return true
         case .http(let c):       return c >= 500
         default:                 return false
         }
@@ -81,10 +85,24 @@ enum APIError: LocalizedError {
     /// П-27.14: код отказа ключа повтора (idempotency_in_progress,
     /// idempotency_key_reused…). perform кладёт его в details отказа.
     var idempotencyCode: String? { rejectDetails?["idempotency_code"] }
+    /// AT-3/AT-7: исход создания неизвестен — сервер мог записать заказ/бронь, но
+    /// ответ не дошёл (нет связи, таймаут, 5xx, ответ не разобрался, «запрос ещё
+    /// выполняется»). Повторять тогда можно только тем же ключом и тем же телом.
+    /// false — ответ окончательный: отказ 4xx, нужен вход, не хватает денег.
+    var isUnknownOutcome: Bool {
+        switch self {
+        case .network, .timeout, .http, .server, .decoding: return true
+        case .rejected(let status, _, _): return status == 408 || idempotencyCode == "idempotency_in_progress"
+        case .unauthorized, .guestNeedsLogin, .walletShortage, .notConnected: return false
+        }
+    }
 }
 
 final class API {
     static let shared = API()
+    /// AT-3: коды URLError, при которых запрос точно не ушёл на сервер.
+    static let notSentCodes: Set<URLError.Code> = [.notConnectedToInternet, .cannotFindHost,
+                                                   .cannotConnectToHost, .dnsLookupFailed]
     static let base = "https://yumurta.ru"
 
     /// Вызывается при 401 (истёкший токен). Session подписывается, чтобы выйти из аккаунта.
@@ -220,6 +238,8 @@ final class API {
                 if await API.offlineNow() { throw APIError.network }
                 throw APIError.timeout
             }
+            // AT-3: соединения не было вовсе — запрос точно не ушёл.
+            if API.notSentCodes.contains(urlError.code) { throw APIError.notConnected }
             throw APIError.network
         } catch is CancellationError {
             throw CancellationError()
@@ -683,7 +703,8 @@ final class RetryKeys {
         if error is CancellationError { return true }
         guard let e = error as? APIError else { return false }
         switch e {
-        case .network, .timeout: return true
+        // .notConnected — как .network: ключ держим (AT-3, раньше эти URLError давали .network).
+        case .network, .notConnected, .timeout: return true
         case .http(let c):       return c >= 500
         default:                 return e.idempotencyCode == "idempotency_in_progress"
         }
@@ -730,6 +751,8 @@ extension API {
                 if await API.offlineNow() { throw APIError.network }
                 throw APIError.timeout
             }
+            // AT-3: соединения не было вовсе — запрос точно не ушёл.
+            if API.notSentCodes.contains(urlError.code) { throw APIError.notConnected }
             throw APIError.network
         } catch is CancellationError {
             throw CancellationError()

@@ -60,7 +60,7 @@ struct SuccessView: View {
     }
 
     /// «2026-10-12 14:30:00» (время Москвы) → «12 октября, 14:30». Не разобрали — как есть.
-    private static func preorderText(_ raw: String) -> String {
+    static func preorderText(_ raw: String) -> String {
         let s = raw.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "T", with: " ")
         let inF = DateFormatter()
         inF.locale = Locale(identifier: "en_US_POSIX")
@@ -121,6 +121,18 @@ struct SuccessView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, YMSpace.sm)
                     .padding(.horizontal, YMSpace.xxl)
+
+                // AT-3: повтор вернул заказ, созданный по прошлому нажатию (duplicate):
+                // правки формы после обрыва связи в него не попали — говорим прямо.
+                if order.duplicate == true {
+                    Text("Этот заказ уже был оформлен по прошлому нажатию — второй не создан. Проверьте в нём адрес, оплату и время.")
+                        .font(YMFont.callout)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(YMColor.statusCancel)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, YMSpace.md)
+                        .padding(.horizontal, YMSpace.xxl)
+                }
 
                 // П-22.2: срок/время предзаказа — только если сервер их прислал.
                 if let eta = etaLine {

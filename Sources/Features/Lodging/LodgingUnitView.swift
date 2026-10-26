@@ -17,6 +17,37 @@ import SwiftUI
  ============================================================================
  */
 
+// MARK: - Неотвеченная бронь (AT-7)
+
+/// Ключ и тело брони с неизвестным исходом — вне экрана, на диске (как ключ
+/// корзины): ушёл с объекта, вернулся, приложение выгрузили — повтор идёт тем же
+/// ключом и телом, и вторая бронь не появится. Запись создаётся до отправки и
+/// живёт до окончательного ответа, не дольше суток.
+enum LodgingPendingStore {
+    private struct Entry: Codable { let body: LodgingBookReq; let at: TimeInterval }
+    private static let storeKey = "lodging_pending_books"
+    private static let ttl: TimeInterval = 24 * 60 * 60
+
+    private static func all() -> [String: Entry] {
+        guard let d = UserDefaults.standard.data(forKey: storeKey),
+              let m = try? JSONDecoder().decode([String: Entry].self, from: d) else { return [:] }
+        let now = Date().timeIntervalSince1970
+        return m.filter { abs(now - $0.value.at) <= ttl }
+    }
+    private static func save(_ m: [String: Entry]) {
+        if m.isEmpty { UserDefaults.standard.removeObject(forKey: storeKey); return }
+        if let d = try? JSONEncoder().encode(m) { UserDefaults.standard.set(d, forKey: storeKey) }
+    }
+    static func get(slug: String) -> LodgingBookReq? { all()[slug]?.body }
+    static func put(slug: String, body: LodgingBookReq) {
+        var m = all(); m[slug] = Entry(body: body, at: Date().timeIntervalSince1970); save(m)
+    }
+    static func clear(slug: String) {
+        var m = all(); m[slug] = nil; save(m)
+    }
+    static func clearAll() { save([:]) }
+}
+
 // MARK: - Модель
 
 @MainActor
@@ -32,6 +63,14 @@ final class LodgingUnitVM: ObservableObject {
 
     @Published var message: String?
     @Published var sending = false
+    /// AT-7: исход брони неизвестен (обрыв связи, таймаут, 5xx) — бронь могла
+    /// пройти. Раньше экран пересчитывал цену, и расчёт по тем же датам отвечал
+    /// «занято» — занято как раз нашей бронью. Теперь — подсказка, «Мои поездки»
+    /// и повтор тем же ключом и телом.
+    @Published var bookUnknown = false
+    @Published var bookUnknownErr: String?
+    /// Последняя отправленная бронь (тело с ключом) — для повтора при неизвестном исходе.
+    private var lastBook: (slug: String, body: LodgingBookReq)?
 
     /// Имя и телефон берём из профиля: заставлять человека вводить свой же
     /// телефон на экране бронирования — лишний шаг.
@@ -43,6 +82,12 @@ final class LodgingUnitVM: ObservableObject {
 
     func load(slug: String) async {
         loading = true
+        // AT-7: бронь этого объекта ушла раньше и ответа не было (ушли с экрана,
+        // выгрузка) — показываем «бронь могла пройти» и повтор тем же телом.
+        if lastBook == nil, !sending, let b = LodgingPendingStore.get(slug: slug) {
+            lastBook = (slug, b)
+            bookUnknown = true
+        }
         // .task срабатывает и при возврате с «Моих поездок» / заведения: раньше
         // сбой повторной загрузки стирал уже открытый объект, а сбой первой
         // писал «Объект не найден» без повтора.
@@ -115,22 +160,42 @@ final class LodgingUnitVM: ObservableObject {
     func book(slug: String, from: String, to: String, adults: Int, children: Int,
               planId: Int?, name: String, phone: String, comment: String) async -> LodgingBookResp? {
         guard !sending else { return nil }   // двойной тап не создаёт вторую бронь
+        let body = LodgingBookReq(dateFrom: from, dateTo: to, adults: adults,
+                                  children: children, rooms: 1, ratePlanId: planId,
+                                  guestName: name.isEmpty ? nil : name,
+                                  guestPhone: phone.isEmpty ? nil : phone,
+                                  guestComment: comment.isEmpty ? nil : comment,
+                                  // Сумма из расчёта: сервер не оформит бронь
+                                  // дороже той, что гость видел на экране.
+                                  expectedTotal: quote.map { "\($0.totalValue)" },
+                                  idempotencyKey: bookIdemKey(for: "\(slug)|\(from)|\(to)|\(adults)|\(children)|\(planId ?? 0)|\(quote?.totalValue ?? 0)"))
+        return await sendBook(slug: slug, body: body, retry: false)
+    }
+
+    /// AT-7: повтор брони с неизвестным исходом — тот же ключ и то же тело.
+    func retryBook() async -> LodgingBookResp? {
+        guard !sending, let lb = lastBook else { return nil }
+        return await sendBook(slug: lb.slug, body: lb.body, retry: true)
+    }
+
+    /// AT-7: человек решил бронировать заново (предупреждён, что прежняя могла пройти).
+    func forgetUnknownBook() {
+        if let s = lastBook?.slug { LodgingPendingStore.clear(slug: s) }
+        bookUnknown = false; bookUnknownErr = nil
+        lastBook = nil; bookKey = nil
+    }
+
+    private func sendBook(slug: String, body: LodgingBookReq, retry: Bool) async -> LodgingBookResp? {
         sending = true
         defer { sending = false }
+        lastBook = (slug, body)
+        LodgingPendingStore.put(slug: slug, body: body)
         do {
-            let resp = try await API.shared.lodgingBook(
-                slug: slug,
-                body: LodgingBookReq(dateFrom: from, dateTo: to, adults: adults,
-                                     children: children, rooms: 1, ratePlanId: planId,
-                                     guestName: name.isEmpty ? nil : name,
-                                     guestPhone: phone.isEmpty ? nil : phone,
-                                     guestComment: comment.isEmpty ? nil : comment,
-                                     // Сумма из расчёта: сервер не оформит бронь
-                                     // дороже той, что гость видел на экране.
-                                     expectedTotal: quote.map { "\($0.totalValue)" },
-                                     idempotencyKey: bookIdemKey(for: "\(slug)|\(from)|\(to)|\(adults)|\(children)|\(planId ?? 0)|\(quote?.totalValue ?? 0)"))
-            )
+            let resp = try await API.shared.lodgingBook(slug: slug, body: body)
+            LodgingPendingStore.clear(slug: slug)
             bookKey = nil
+            lastBook = nil
+            bookUnknown = false; bookUnknownErr = nil
             Haptics.success()
             // Даты после брони заняты — обновляем календарь, чтобы их нельзя
             // было выбрать повторно, не выходя с экрана.
@@ -138,6 +203,29 @@ final class LodgingUnitVM: ObservableObject {
             return resp
         } catch {
             Haptics.error()
+            // AT-7: исход неизвестен — НЕ пересчитываем (ответили бы «занято» нашей же
+            // бронью) и ключ не меняем: повтор вернёт уже оформленную бронь.
+            // Повтор упёрся во вход, лимит запросов или вовсе не ушёл (нет сети) —
+            // сервер прошлую бронь не искал: исход по-прежнему неизвестен.
+            let api = error as? APIError
+            var beforeDup = false
+            if retry, let a = api {
+                switch a {
+                case .unauthorized, .guestNeedsLogin, .notConnected: beforeDup = true
+                case .rejected(let status, _, _): beforeDup = status == 429
+                default: break
+                }
+            }
+            if api?.isUnknownOutcome ?? true || beforeDup {
+                bookUnknown = true
+                bookUnknownErr = error.localizedDescription
+                return nil
+            }
+            // Окончательный отказ (4xx): брони нет — состояние «могла пройти» снимаем,
+            // иначе после отказа на «Повторить бронь» экран оставался тупиком.
+            LodgingPendingStore.clear(slug: slug)
+            bookUnknown = false; bookUnknownErr = nil
+            lastBook = nil
             // APIError — LocalizedError, поэтому тут уже текст сервера
             // («Минимальный срок…»), а не «Ошибка 422».
             message = error.localizedDescription
@@ -145,7 +233,8 @@ final class LodgingUnitVM: ObservableObject {
             // суммой, и без пересчёта повторное нажатие отправляло прежнюю
             // ожидаемую сумму и получало тот же отказ — экран становился
             // тупиком. Так же поступает сайт.
-            await recalc(slug: slug, from: from, to: to, adults: adults, children: children, planId: planId)
+            await recalc(slug: slug, from: body.dateFrom, to: body.dateTo, adults: body.adults,
+                         children: body.children, planId: body.ratePlanId)
             return nil
         }
     }
@@ -255,6 +344,8 @@ struct LodgingUnitView: View {
         var id: Int { rawValue }
     }
     @State private var sheet: Sheet?
+    /// AT-7: «Забронировать заново» при неизвестном исходе — только после предупреждения.
+    @State private var askRebook = false
 
     /// ОДНО состояние навигации на экран (см. шапку файла).
     private enum Route: Hashable {
@@ -495,6 +586,9 @@ struct LodgingUnitView: View {
                 }
             }
 
+            if vm.bookUnknown {
+                unknownBookBlock
+            } else {
             quoteBlock
 
             // Бронь требует аккаунта (сервер: ['auth']). Гостя ведём на вход,
@@ -512,6 +606,7 @@ struct LodgingUnitView: View {
             .buttonStyle(YMPrimaryButtonStyle())
             .disabled(!(canBook || needDates) || vm.sending)
             .opacity(canBook || needDates ? 1 : 0.5)
+            }
 
             Text(LodgingText.bookingNote(unit))
                 .font(YMFont.caption).foregroundStyle(YMColor.muted)
@@ -519,6 +614,58 @@ struct LodgingUnitView: View {
         .padding(YMSpace.md)
         .ymCard()
         .padding(.horizontal, YMSpace.xl)
+    }
+
+    /// AT-7: исход брони неизвестен — вместо «занято» честная подсказка, «Мои поездки»,
+    /// повтор тем же ключом и телом и «Забронировать заново» с предупреждением.
+    private var unknownBookBlock: some View {
+        VStack(alignment: .leading, spacing: YMSpace.sm) {
+            Text("Бронь могла пройти").font(YMFont.headline).foregroundStyle(YMColor.text)
+            Text("Связь прервалась до ответа сервера. Проверьте «Мои поездки» — бронь могла оформиться. «Повторить» отправит ту же бронь: если она уже есть, второй не будет.")
+                .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            if let e = vm.bookUnknownErr, !vm.sending {
+                Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Мои поездки") {
+                Haptics.light()
+                go(.trips)
+            }
+            .buttonStyle(YMPrimaryButtonStyle())
+            .disabled(vm.sending)
+            Button {
+                Haptics.medium()
+                if !session.isLoggedIn { go(.auth); return }
+                Task {
+                    if let resp = await vm.retryBook() {
+                        booked = resp
+                        bookDraft = nil
+                        sheet = .booked
+                        from = nil
+                        to = nil
+                    }
+                }
+            } label: {
+                Text(vm.sending ? "Бронируем…" : "Повторить бронь")
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(YMColor.text)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(vm.sending)
+            Button("Забронировать заново") { askRebook = true }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(YMColor.statusCancel)
+                .disabled(vm.sending)
+        }
+        .alert("Забронировать заново?", isPresented: $askRebook) {
+            Button("Всё равно заново", role: .destructive) { vm.forgetUnknownBook() }
+            Button("Мои поездки") { go(.trips) }
+            Button("Отмена", role: .cancel) { }
+        } message: {
+            Text("Прежняя бронь могла уже оформиться — сначала проверьте «Мои поездки». Если забронировать заново, может получиться вторая бронь.")
+        }
     }
 
     private func planRow(title: String, subtitle: String?, selected: Bool,

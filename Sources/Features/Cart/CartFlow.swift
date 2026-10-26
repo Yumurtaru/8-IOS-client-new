@@ -54,7 +54,16 @@ struct CartFlow: View {
                             result = r
                             path.append(.success)
                         },
-                        onBack: { if !path.isEmpty { path.removeLast() } }
+                        onBack: { if !path.isEmpty { path.removeLast() } },
+                        // AT-3: исход оформления неизвестен — к списку заказов. Корзина
+                        // остаётся заблокированной: вернувшись, человек решит, повторять ли.
+                        onOpenOrders: {
+                            path.removeAll()
+                            onClose()
+                            NavCoordinator.shared.revealForPush(closeAll: true) {
+                                DeepLinkRouter.shared.requestedTab = 3
+                            }
+                        }
                     )
                 case .success:
                     successScreen

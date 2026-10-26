@@ -324,7 +324,9 @@ struct LodgingQuoteResp: Codable {
     var nightsValue: Int { max(0, nights ?? 0) }
 }
 
-struct LodgingBookReq: Encodable {
+// AT-7: Codable — неотвеченная бронь хранится на диске (LodgingPendingStore) и
+// при неизвестном исходе уходит повторно тем же телом и ключом.
+struct LodgingBookReq: Codable {
     let dateFrom: String
     let dateTo: String
     let adults: Int

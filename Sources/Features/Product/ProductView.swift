@@ -1079,14 +1079,21 @@ struct ProductView: View {
         let allOptions = (d.modifierGroups ?? []).flatMap { $0.options ?? [] }
         // Весовой товар кладём с qty = выбранный вес-пресет; штучный — целым qty.
         // Cart.add сам сохранит unit/qtyFractional/qtyPresets из ProductDetail.
-        Cart.shared.add(
+        // AT-3: корзина заблокирована неотвеченным оформлением — не добавлено;
+        // говорим об этом тостом здесь же (ниже).
+        guard Cart.shared.add(
             product: d,
             modifierIds: selectedModifierIds,
             options: allOptions,
             shopId: d.shopId ?? 0,
             shopName: d.shopName,
             qty: effectiveQty
-        )
+        ) else {
+            // Говорим здесь же, тостом (общих алертов на корне нет).
+            Haptics.warning()
+            favError = "Прошлое оформление не завершилось — заказ мог создаться. Откройте корзину → «Оформить» и узнайте исход, потом добавляйте товары."
+            return
+        }
         added = true
         Haptics.success()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { dismiss() }

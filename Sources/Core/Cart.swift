@@ -57,6 +57,24 @@ func snapCartQty(_ line: CartLine, _ q: Double) -> Double {
 }
 
 
+/// AT-1/AT-3: заказ отправлен, окончательного ответа нет. Хранит ТО ЖЕ тело
+/// запроса (JSON, с ключом повтора), что ушло на сервер, и состав, который видел
+/// человек. unknown — ответ не пришёл (обрыв связи, таймаут, 5xx, выгрузка
+/// приложения): заказ мог создаться. Пока запись есть, корзина и форма
+/// оформления не меняются, повтор идёт тем же ключом и тем же телом.
+struct PendingOrder: Codable {
+    let body: Data
+    let key: String
+    let lines: [CartLine]
+    let shopName: String?
+    /// Строки «что отправлено»: способ, адрес, время, оплата, промокод…
+    let summary: [String]
+    /// Итог, который человек видел на кнопке.
+    let shownTotal: String
+    var unknown: Bool
+    let at: TimeInterval
+}
+
 final class Cart: ObservableObject {
     static let shared = Cart()
     @Published private(set) var lines: [CartLine] = []
@@ -86,6 +104,14 @@ final class Cart: ObservableObject {
     /// раньше он жил только в памяти, и после таймаута + выгрузки приложения
     /// повторное «Оформить» шло с новым ключом — второй заказ (как Android Cart.kt).
     private(set) var checkoutKey = Cart.makeKey()
+    /// AT-3: неотвеченное оформление (см. PendingOrder).
+    @Published private(set) var pendingOrder: PendingOrder?
+    /// AT-3: неотвеченное оформление старше суток снято при открытии — корзина
+    /// показывает «проверьте „Мои заказы“» (CartView), пока человек не закроет.
+    @Published var pendingExpired = false
+    private static let pendingStore = "cart_pending_order"
+    /// Срок записи — как у ключа корзины.
+    static let pendingTTL: TimeInterval = 24 * 60 * 60
     private static func makeKey() -> String { UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased() }
     private static let checkoutKeyStore = "cart_checkout_key"
     /// Когда ключ выдан (секунды с 1970). Сервер ищет дубль по shop_id + ключ
@@ -96,14 +122,92 @@ final class Cart: ObservableObject {
 
     private init() { load() }
 
+    /// true — менять корзину сейчас нельзя (экран сам говорит почему: плашка
+    /// корзины, тост карточки товара, текст «Повторить заказ»).
+    func checkLocked() -> Bool {
+        expireStalePending()
+        return pendingOrder != nil
+    }
+
+    /// Неотвеченное оформление старше суток: сервер его давно обработал или нет —
+    /// держать корзину запертой дальше нельзя. Снимаем и просим проверить заказы.
+    func expireStalePending() {
+        guard let p = pendingOrder, abs(Date().timeIntervalSince1970 - p.at) > Cart.pendingTTL else { return }
+        pendingOrder = nil
+        storePending()
+        pendingExpired = true
+    }
+
+    /// Перед отправкой заказа: тело и ключ — на диск до запроса.
+    func beginOrder(_ p: PendingOrder) { pendingOrder = p; pendingExpired = false; storePending() }
+    /// Ответа нет — исход неизвестен. Только для СВОЕГО запроса (ключ совпал):
+    /// поздний ответ старого запроса чужую запись не трогает.
+    func markOrderUnknown(key: String) {
+        guard pendingOrder?.key == key else { return }
+        pendingOrder?.unknown = true
+        storePending()
+    }
+    /// Окончательный отказ сервера (4xx): заказа нет, форма и корзина снова правятся.
+    func dropPendingOrder(key: String) {
+        guard pendingOrder?.key == key else { return }
+        pendingOrder = nil
+        storePending()
+    }
+    /// Человек сам отказался от повтора (предупреждён, что прежний заказ мог
+    /// создаться). Новый ключ: изменённый заказ не вернёт прежний как «дубль».
+    func abandonPendingOrder() {
+        pendingOrder = nil
+        storePending()
+        checkoutKey = Cart.makeKey()
+        if !lines.isEmpty { storeKey(at: Date().timeIntervalSince1970) }
+    }
+    private func storePending() {
+        if let p = pendingOrder, let d = try? JSONEncoder().encode(p) {
+            UserDefaults.standard.set(d, forKey: Cart.pendingStore)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Cart.pendingStore)
+        }
+    }
+
+    /// AT-2: цены строк по ответу сервера (ключ строки → цена за единицу с добавками).
+    /// true — что-то поменялось. При неотвеченном оформлении не трогаем.
+    @discardableResult
+    func applyPrices(_ prices: [String: Double]) -> Bool {
+        guard pendingOrder == nil, !prices.isEmpty else { return false }
+        var changed = false
+        let fresh: [CartLine] = lines.map { old in
+            guard let p = prices[old.key], abs(p - old.unitPrice) >= 0.005 else { return old }
+            changed = true
+            var line = CartLine(key: old.key, productId: old.productId, name: old.name,
+                                unitPrice: p, qty: old.qty, modifierIds: old.modifierIds,
+                                modsLabel: old.modsLabel, photo: old.photo)
+            line.unit = old.unit
+            line.qtyFractional = old.qtyFractional
+            line.qtyPresets = old.qtyPresets
+            line.qtyStep = old.qtyStep
+            return line
+        }
+        guard changed else { return false }
+        lines = fresh
+        save()
+        return true
+    }
+
     /// Заменить корзину набором позиций (для «Заказать снова»).
-    func setLines(_ newLines: [CartLine], shopId: Int, shopName: String?, shopSlug: String?) {
+    /// false — корзина заблокирована неотвеченным оформлением.
+    @discardableResult
+    func setLines(_ newLines: [CartLine], shopId: Int, shopName: String?, shopSlug: String?) -> Bool {
+        if checkLocked() { return false }
         lines = newLines
         self.shopId = shopId; self.shopName = shopName; self.shopSlug = shopSlug
         save()
+        return true
     }
 
-    func add(product: ProductDetail, modifierIds: [Int], options: [ModifierOption], shopId: Int, shopName: String?, qty: Double = 1) {
+    /// false — не добавлено: корзина заблокирована неотвеченным оформлением.
+    @discardableResult
+    func add(product: ProductDetail, modifierIds: [Int], options: [ModifierOption], shopId: Int, shopName: String?, qty: Double = 1) -> Bool {
+        if checkLocked() { return false }
         if self.shopId != nil && self.shopId != shopId { lines = [] } // корзина из одного заведения
         self.shopId = shopId; self.shopName = shopName; self.shopSlug = product.shopSlug
         let chosen = options.filter { modifierIds.contains($0.id) }
@@ -136,11 +240,14 @@ final class Cart: ObservableObject {
         }
         Track.addToCart(id: product.id, name: product.name, price: product.price, qty: 1)
         save()
+        return true
     }
     func inc(_ key: String) {
+        if checkLocked() { return }
         if let i = lines.firstIndex(where: { $0.key == key }) { lines[i].qty = snapCartQty(lines[i], lines[i].qty + lines[i].step); save() }
     }
     func dec(_ key: String) {
+        if checkLocked() { return }
         if let i = lines.firstIndex(where: { $0.key == key }) {
             let raw = lines[i].qty - lines[i].step
             if raw <= 0 { lines.remove(at: i) } else { lines[i].qty = snapCartQty(lines[i], raw) }
@@ -148,7 +255,11 @@ final class Cart: ObservableObject {
             save()
         }
     }
-    func clear() { lines = []; shopId = nil; shopName = nil; shopSlug = nil; save() }
+    /// Заказ создан или смена/выход из аккаунта: неотвеченное оформление больше не нужно.
+    func clear() {
+        pendingOrder = nil; storePending()
+        lines = []; shopId = nil; shopName = nil; shopSlug = nil; save()
+    }
 
     private func save() {
         checkoutKey = Cart.makeKey()
@@ -182,6 +293,13 @@ final class Cart: ObservableObject {
         let s = UserDefaults.standard.integer(forKey: "cart_shop"); shopId = s == 0 ? nil : s
         shopName = UserDefaults.standard.string(forKey: "cart_shop_name")
         shopSlug = UserDefaults.standard.string(forKey: "cart_shop_slug")
+        // AT-3: после перезапуска ответа на прошлую отправку уже не будет — исход неизвестен.
+        if let d = UserDefaults.standard.data(forKey: Cart.pendingStore),
+           var p = try? JSONDecoder().decode(PendingOrder.self, from: d), !p.key.isEmpty {
+            p.unknown = true
+            pendingOrder = p
+            expireStalePending()
+        }
         // Ключ повтора переживает выгрузку: таймаут → выгрузили → снова
         // «Оформить» вернёт уже созданный заказ, а не создаст второй.
         // Ключ старше суток не берём: выдаём новый и сразу пишем на диск, иначе

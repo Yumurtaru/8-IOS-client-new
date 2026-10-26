@@ -74,7 +74,9 @@ enum AuthLastUser {
         guard let uid, uid > 0 else { return }
         let prev = UserDefaults.standard.integer(forKey: key)
         if prev != 0 && prev != uid {
+            // Cart.clear() снимает и неотвеченное оформление прежнего (AT-3).
             Cart.shared.clear()
+            LodgingPendingStore.clearAll()
             SearchHistoryStore.clear()
             RecentStore.clear()
             // Черновик оформления (комментарий, стол, промокод) прежнего
