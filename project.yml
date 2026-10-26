@@ -1,0 +1,68 @@
+name: YumurtaPremium
+options:
+  bundleIdPrefix: ru.marketplace.client.premium
+  createIntermediateGroups: true
+targets:
+  YumurtaPremium:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources: [Sources]
+    info:
+      path: Generated/Info.plist
+      properties:
+        CFBundleDisplayName: Yumurta
+        # ВАЖНО. XcodeGen при генерации Info.plist подставляет СВОИ значения
+        # по умолчанию — CFBundleShortVersionString = "1.0" литералом, — и
+        # настройку MARKETING_VERSION ниже он для этого НЕ использует
+        # (см. generateDefaultInfoPlist в исходниках XcodeGen).
+        # Поэтому версия оставалась 1.0 в любой сборке, сколько её ни правь
+        # в settings, и публикация падала с 90062/90186.
+        # Ключ обязан быть здесь: значения из info.properties перекрывают
+        # умолчания XcodeGen.
+        #
+        # ВЕРСИЮ ПОДНИМАТЬ НА КАЖДУЮ ПОДАЧУ. Apple не принимает сборку с
+        # номером уже одобренной версии: «1.1» была одобрена, и повторная
+        # загрузка 1.1 отбивается сразу двумя ошибками —
+        #   90062 «версия должна быть выше уже одобренной 1.1»
+        #   90186 «ветка 1.1 закрыта для новых сборок».
+        # Поднимать нужно ИМЕННО этот ключ (и MARKETING_VERSION ниже, чтобы
+        # локальная сборка в Xcode не расходилась).
+        CFBundleShortVersionString: "1.3"
+        NSLocationWhenInUseUsageDescription: "Нужно, чтобы определить ваш город и показать курьера на карте во время доставки"
+        # А97 «Стать курьером»: фото лица и водительских прав для заявки курьера (камера
+        # открывается только по кнопке «Сфотографировать»; галерея — системный выбор без разрешения).
+        NSCameraUsageDescription: "Камера нужна, чтобы сфотографировать ваше лицо и водительские права для заявки курьера"
+        UILaunchScreen:
+          UIColorName: LaunchBG
+          UIImageRespectsSafeAreaInsets: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+        UIBackgroundModes: [remote-notification]
+        CFBundleURLTypes:
+          - CFBundleURLName: ru.marketplace.client.premium
+            CFBundleURLSchemes: [yumurta]
+    entitlements:
+      path: Generated/YumurtaPremium.entitlements
+      properties:
+        aps-environment: production
+        # П-28.16: universal links https://yumurta.ru/shop/… и /r/… (сервер
+        # отдаёт apple-app-site-association для ru.marketplace.client.premium).
+        # ВНИМАНИЕ: до сборки включить Associated Domains у App ID
+        # ru.marketplace.client.premium (developer.apple.com) и перевыпустить
+        # профиль yumurta_appstore в Codemagic — иначе подпись .ipa не пройдёт.
+        com.apple.developer.associated-domains:
+          - applinks:yumurta.ru
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.marketplace.client.premium
+        # Держим в том же значении, что CFBundleShortVersionString выше —
+        # для локальной сборки в Xcode. На публикацию влияет именно ключ
+        # в info.properties, а не эта настройка.
+        MARKETING_VERSION: "1.3"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: 1
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_VERSION: "5.0"
+        CODE_SIGN_STYLE: Manual

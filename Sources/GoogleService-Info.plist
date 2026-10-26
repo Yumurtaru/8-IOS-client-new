@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+    ПЛЕЙСХОЛДЕР. Нужен только чтобы прошла проверка CI (шаг XcodeGen требует наличие
+    этого файла). Firebase в приложении сейчас ОТКЛЮЧЁН, поэтому этот файл не читается
+    и ни на что не влияет — просто разблокирует сборку.
+
+    Когда захочешь включить реальные push через Firebase:
+      1) Firebase Console → добавить iOS-приложение с bundle id ru.marketplace.client.premium
+      2) скачать настоящий GoogleService-Info.plist и заменить им этот файл
+      3) сказать мне «добавил» — верну FirebaseMessaging в project.yml и код в AppDelegate.
+-->
+<plist version="1.0">
+<dict>
+    <key>API_KEY</key>
+    <string>PLACEHOLDER_REPLACE_WITH_REAL_FIREBASE_CONFIG</string>
+    <key>GCM_SENDER_ID</key>
+    <string>000000000000</string>
+    <key>PLIST_VERSION</key>
+    <string>1</string>
+    <key>BUNDLE_ID</key>
+    <string>ru.marketplace.client.premium</string>
+    <key>PROJECT_ID</key>
+    <string>yumurta-placeholder</string>
+    <key>STORAGE_BUCKET</key>
+    <string>yumurta-placeholder.appspot.com</string>
+    <key>IS_ADS_ENABLED</key>
+    <false/>
+    <key>IS_ANALYTICS_ENABLED</key>
+    <false/>
+    <key>IS_APPINVITE_ENABLED</key>
+    <true/>
+    <key>IS_GCM_ENABLED</key>
+    <true/>
+    <key>IS_SIGNIN_ENABLED</key>
+    <true/>
+    <key>GOOGLE_APP_ID</key>
+    <string>1:000000000000:ios:0000000000000000000000</string>
+</dict>
+</plist>

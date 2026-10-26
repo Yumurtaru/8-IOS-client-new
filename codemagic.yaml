@@ -1,0 +1,533 @@
+# =============================================================================
+#  codemagic.yaml — Yumurta (клиент, ru.marketplace.client.premium, App Store ID 6794675250)
+# -----------------------------------------------------------------------------
+#    ios-testflight  Прежний процесс (до 21.10.2026 назывался ios-release):
+#                    собрать, загрузить, отправить в TestFlight. В App Store
+#                    заявку НЕ подаёт.
+#    ios-release     Автопубликация (разрешена владельцем 21.10.2026, как у
+#                    7 IOS-seller): те же шаги + «Что нового» из
+#                    release-notes/ru.txt + подача на проверку в App Store,
+#                    выпуск сразу после одобрения. Перед сборкой — карточка
+#                    версии и проверка готовности (ci/asc_store.py, store/app.json).
+#    ios-submit-draft  Руками и только после неудачной подачи: довести
+#                    зависший черновик заявки до проверки.
+#
+#  Каждый выпуск: поднять CFBundleShortVersionString и MARKETING_VERSION в
+#  project.yml, переписать release-notes/ru.txt, залить в GitHub, запустить
+#  «Yumurta iOS — релиз в App Store».
+#
+#  Правила правки (грабли): в script: | нет строк с нулевым отступом,
+#  многострочный python — только однострочниками; двоеточие в name: шага —
+#  только в кавычках; publishing: scripts: — 6 пробелов.
+# =============================================================================
+
+workflows:
+  ios-testflight:
+    name: Yumurta iOS (TestFlight)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: yumurta_asc
+    environment:
+      xcode: latest
+      ios_signing:
+        provisioning_profiles:
+          - yumurta_appstore
+        certificates:
+          - yumurta_dist
+    scripts:
+      - &xcodegen
+        name: XcodeGen
+        script: |
+          which xcodegen || brew install xcodegen
+          cd "$CM_BUILD_DIR" && xcodegen generate
+
+      # Версию пишем ПОСЛЕ XcodeGen и прямо в готовый Info.plist.
+      #
+      # Почему не через настройки проекта: XcodeGen при генерации Info.plist
+      # подставляет собственное умолчание CFBundleShortVersionString = "1.0"
+      # литералом и MARKETING_VERSION для этого не использует. Из-за этого
+      # версия оставалась 1.0 в каждой сборке, а Apple отклоняла публикацию:
+      #   90062 — версия должна быть выше уже одобренной 1.0
+      #   90186 — ветка TestFlight 1.0 закрыта для новых сборок
+      # PlistBuddy правит собранный файл — это не зависит ни от XcodeGen,
+      # ни от порядка применения настроек.
+      #
+      # Версию можно задать переменной APP_VERSION в настройках workflow;
+      # без неё берётся значение из project.yml.
+      - &version
+        name: Версия и номер сборки
+        script: |
+          cd "$CM_BUILD_DIR"
+          PLIST="Generated/Info.plist"
+          VERSION="${APP_VERSION:-$(grep -m1 'CFBundleShortVersionString:' project.yml | sed 's/.*: *"\(.*\)"/\1/')}"
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST" \
+            || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$PLIST"
+          agvtool new-version -all "$BUILD_NUMBER"
+
+          FINAL_V=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
+          FINAL_B=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")
+          echo "─────────────────────────────────────────"
+          echo "  Уйдёт в App Store: версия $FINAL_V, сборка $FINAL_B"
+          echo "─────────────────────────────────────────"
+
+          # Ранняя проверка формата: лучше упасть здесь за секунду, чем
+          # собирать четыре минуты и получить отказ на публикации.
+          case "$FINAL_V" in
+            ''|*[!0-9.]*) echo "ОШИБКА: версия '$FINAL_V' не похожа на номер (нужно вида 1.2 или 1.2.3)."; exit 1;;
+          esac
+
+      # ПРОВЕРКА, ЧТО ВЕРСИЯ ЕЩЁ СВОБОДНА — до сборки, а не после.
+      #
+      # Apple отбивает загрузку с номером уже одобренной версии:
+      #   90062 «версия должна быть выше уже одобренной»
+      #   90186 «ветка <версия> закрыта для новых сборок»
+      # Узнать об этом на публикации — значит потерять четыре минуты сборки и
+      # разбираться в чужих кодах ошибок. Спрашиваем App Store Connect заранее
+      # и называем свободный номер.
+      #
+      # Шаг НЕ роняет сборку, если сам не смог разобраться (нет ключей, API не
+      # ответил, неожиданный JSON): падаем только когда точно знаем, что номер
+      # занят. Иначе обслуживающая проверка блокировала бы выпуск на пустом месте.
+      #
+      # 21.10.2026: состояние «заменена новой версией» у Apple называется
+      # REPLACED_WITH_NEW_VERSION (было с опечаткой REPLACED_BY_NEW_VERSION и не
+      # срабатывало); добавлены новые имена состояний Apple (READY_FOR_DISTRIBUTION,
+      # PROCESSING_FOR_DISTRIBUTION, ACCEPTED) и поле appVersionState.
+      - &version_free
+        name: Версия свободна в App Store Connect
+        script: |
+          cd "$CM_BUILD_DIR"
+          APP_ID="6794675250"
+          V=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "Generated/Info.plist" 2>/dev/null || true)
+          if [ -z "$V" ]; then echo "Не смог прочитать версию из Info.plist — проверку пропускаю."; exit 0; fi
+          if ! OUT=$(app-store-connect apps app-store-versions "$APP_ID" --platform IOS --json 2>/tmp/asc_err.txt); then
+            echo "App Store Connect не ответил — проверку пропускаю. Начало ответа:"
+            head -c 500 /tmp/asc_err.txt || true
+            exit 0
+          fi
+          printf '%s' "$OUT" > /tmp/asc_versions.json
+          # Разбор устойчив к трём формам ответа: массив, {"data": [...]}, один объект.
+          RES=$(V="$V" python3 -c "import json,os,sys;d=json.load(open('/tmp/asc_versions.json'));d=d.get('data',d) if isinstance(d,dict) else d;d=[d] if isinstance(d,dict) else (d or []);a=[i.get('attributes') or {} for i in d if isinstance(i,dict)];closed={'READY_FOR_SALE','READY_FOR_DISTRIBUTION','APPROVED','ACCEPTED','PENDING_DEVELOPER_RELEASE','PENDING_APPLE_RELEASE','PROCESSING_FOR_APP_STORE','PROCESSING_FOR_DISTRIBUTION','REPLACED_WITH_NEW_VERSION'};mine=os.environ['V'];busy=any(x.get('versionString')==mine and ({x.get('appStoreState'),x.get('appVersionState'),x.get('state')} & closed) for x in a);nums=[tuple(int(p) for p in (x.get('versionString') or '0').split('.')) for x in a if (x.get('versionString') or '').replace('.','').isdigit()];top=max(nums) if nums else (0,0);nxt='%d.%d' % (top[0], top[1]+1) if len(top)>1 else '%d.1' % top[0];print(('busy' if busy else 'free')+' '+nxt)" 2>/tmp/asc_parse_err.txt || true)
+          if [ -z "$RES" ]; then
+            echo "Не разобрал ответ App Store Connect — проверку пропускаю. Начало ответа:"
+            head -c 300 /tmp/asc_versions.json || true
+            head -c 200 /tmp/asc_parse_err.txt || true
+            exit 0
+          fi
+          STATE=$(printf '%s' "$RES" | awk '{print $1}')
+          NEXTV=$(printf '%s' "$RES" | awk '{print $2}')
+          if [ "$STATE" = "busy" ]; then
+            echo "─────────────────────────────────────────"
+            echo "  ОШИБКА: версия $V в App Store уже закрыта для новых сборок."
+            echo "  Apple ответит 90062/90186 на публикации."
+            echo "  Поставьте свободный номер: $NEXTV"
+            echo "  Где: project.yml → CFBundleShortVersionString и MARKETING_VERSION"
+            echo "  (или переменная APP_VERSION в настройках workflow)."
+            echo "─────────────────────────────────────────"
+            exit 1
+          fi
+          echo "Версия $V в App Store Connect свободна — продолжаем."
+
+      - &use_profiles
+        name: Применить профиль
+        script: |
+          xcode-project use-profiles --project "$CM_BUILD_DIR/YumurtaPremium.xcodeproj"
+      - &build_ipa
+        name: Сборка .ipa
+        script: |
+          cd "$CM_BUILD_DIR"
+          xcode-project build-ipa --project "YumurtaPremium.xcodeproj" --scheme "YumurtaPremium"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
+
+  # ===========================================================================
+  #  Релиз в App Store — автопубликация (как у 7 IOS-seller)
+  # ===========================================================================
+  ios-release:
+    name: Yumurta iOS — релиз в App Store
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: yumurta_asc
+    environment:
+      xcode: latest
+      ios_signing:
+        # Подпись та же, что у ios-testflight (не менялась).
+        provisioning_profiles:
+          - yumurta_appstore
+        certificates:
+          - yumurta_dist
+    scripts:
+      - *xcodegen
+      - *version
+      - *version_free
+      # Карточка версии ДО сборки (ci/asc_store.py version): у живого приложения
+      # после выпуска редактируемой карточки нет, а Codemagic создаёт её уже
+      # после сборки — пустой, и Apple отвечает 409 whatsNew. Находим
+      # редактируемую, переименовываем в номер из project.yml или создаём.
+      # Шаг никогда не роняет сборку.
+      - name: Карточка версии в App Store Connect
+        script: |
+          cd "$CM_BUILD_DIR"
+          CLI=$(command -v app-store-connect || true)
+          PYI=""
+          if [ -n "$CLI" ]; then PYI=$(head -1 "$CLI" | sed 's/^#! *//'); fi
+          if [ -z "$PYI" ] || ! $PYI -c "import jwt, requests" 2>/dev/null; then
+            PYI=python3
+            python3 -c "import jwt, requests, cryptography" 2>/dev/null || python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography requests 2>/dev/null || python3 -m pip install --quiet --user pyjwt cryptography requests 2>/dev/null || true
+          fi
+          $PYI ci/asc_store.py version || echo "Скрипт карточки завершился с ошибкой — смотрите строки выше."
+          exit 0
+      # «Что нового» (из 14 IOS-courier / 7 IOS-seller): release-notes/ru.txt в
+      # пустое поле версии; 409 whatsNew. Никогда не роняет сборку.
+      - &whats_new
+        name: «Что нового» для заявки в App Store
+        script: |
+          cd "$CM_BUILD_DIR"
+          BUNDLE="ru.marketplace.client.premium"
+
+          NOTES="${APP_STORE_WHATS_NEW:-}"
+          NOTES_FILE="${APP_STORE_WHATS_NEW_FILE:-release-notes/ru.txt}"
+          if [ -n "$NOTES" ]; then
+            echo "Текст «Что нового» взят из переменной APP_STORE_WHATS_NEW."
+          elif [ -f "$NOTES_FILE" ]; then
+            NOTES=$(cat "$NOTES_FILE")
+            echo "Текст «Что нового» взят из файла $NOTES_FILE."
+          fi
+          if [ -z "$NOTES" ]; then
+            echo "Текста «Что нового» нет: ни переменной APP_STORE_WHATS_NEW, ни файла $NOTES_FILE."
+            echo "Заявка на ОБНОВЛЕНИЕ без него не создастся — Apple вернёт 409 whatsNew."
+            echo "Впишите текст в $NOTES_FILE и запустите сборку заново."
+            exit 0
+          fi
+
+          # Apple принимает не больше 4000 символов. Длинный текст обрезаем по
+          # границе строки, чтобы не оборвать предложение на середине.
+          LEN=$(printf '%s' "$NOTES" | python3 -c "import sys; print(len(sys.stdin.read()))" 2>/dev/null)
+          echo "Длина текста: ${LEN:-?} символов (предел Apple — 4000)."
+          if [ -n "$LEN" ] && [ "$LEN" -gt 4000 ]; then
+            echo "Текст длиннее предела — обрезаю по последней целой строке."
+            NOTES=$(printf '%s' "$NOTES" | python3 -c "import sys; t=sys.stdin.read(); u=t[:4000]; i=u.rfind(chr(10)); sys.stdout.write(t if len(t)<=4000 else (u[:i] if i>3000 else u).rstrip())")
+          fi
+
+          if [ -z "${APP_STORE_CONNECT_ISSUER_ID:-}" ] || [ -z "${APP_STORE_CONNECT_KEY_IDENTIFIER:-}" ]; then
+            echo "Нет переменных доступа к App Store Connect API — пропускаю."
+            echo "Их даёт интеграция app_store_connect: yumurta_asc из блока integrations."
+            exit 0
+          fi
+
+          # Разбор ответа устойчив к форме: массив, {"data": [...]} или один объект.
+          NORM="d=json.load(sys.stdin); d=d.get('data',d) if isinstance(d,dict) else d; d=[d] if isinstance(d,dict) else (d or [])"
+
+          APP_ID="${APP_STORE_APP_ID:-6794675250}"
+          if [ -z "$APP_ID" ]; then
+            if ! AJ=$(app-store-connect apps list --bundle-id-identifier "$BUNDLE" --strict-match-identifier --json 2>/tmp/asc_wn_err.txt); then
+              echo "App Store Connect не ответил — пропускаю. Начало ответа:"
+              head -c 500 /tmp/asc_wn_err.txt || true
+              echo ""
+              exit 0
+            fi
+            APP_ID=$(printf '%s' "$AJ" | python3 -c "import json,sys; $NORM; print(d[0]['id'] if d else 'NONE')" 2>/dev/null)
+          fi
+          if [ "$APP_ID" = "NONE" ]; then
+            echo "Карточки приложения $BUNDLE в App Store Connect нет — пропускаю."
+            exit 0
+          fi
+          if [ -z "$APP_ID" ]; then
+            echo "Ответ App Store Connect не разобрался — пропускаю. Начало ответа:"
+            printf '%s' "$AJ" | head -c 300
+            echo ""
+            exit 0
+          fi
+          VERSION="${APP_VERSION:-$(grep -m1 'CFBundleShortVersionString:' project.yml | sed 's/.*: *"\(.*\)"/\1/')}"
+          echo "Приложение $APP_ID, версия $VERSION."
+
+          # Первый выпуск: ни одна версия ещё не была в продаже — «Что нового» не бывает.
+          # Смотрим оба поля состояния: appStoreState (старое) и appVersionState (новое у Apple).
+          ALL=$(app-store-connect apps app-store-versions "$APP_ID" --platform IOS --json 2>/dev/null)
+          SOLD=$(printf '%s' "$ALL" | python3 -c "import json,sys; $NORM; a=[(x.get('attributes') or {}) for x in d if isinstance(x,dict)]; sold={'READY_FOR_SALE','READY_FOR_DISTRIBUTION','REPLACED_WITH_NEW_VERSION','REMOVED_FROM_SALE','DEVELOPER_REMOVED_FROM_SALE'}; print('yes' if any({y.get('appStoreState'),y.get('appVersionState')} & sold for y in a) else ('no' if a else ''))" 2>/dev/null)
+          if [ "$SOLD" = "no" ]; then
+            echo "Это ПЕРВЫЙ выпуск приложения: у первой версии поля «Что нового» нет,"
+            echo "Apple его не требует — пропускаю. "
+            exit 0
+          fi
+
+          VER_ID=""
+          VER_JSON=$(app-store-connect apps app-store-versions "$APP_ID" --version-string "$VERSION" --platform IOS --json 2>/dev/null)
+          if [ -n "$VER_JSON" ]; then
+            VER_ID=$(printf '%s' "$VER_JSON" | python3 -c "import json,sys; $NORM; print(d[0]['id'] if d else '')" 2>/dev/null)
+          fi
+
+          if [ -n "$VER_ID" ]; then
+            echo "Карточка версии $VERSION найдена: $VER_ID"
+          else
+            # Карточки с таким номером нет — публикация переименует ту, которая
+            # сейчас редактируется. Ищем её по состоянию.
+            for ST in PREPARE_FOR_SUBMISSION DEVELOPER_REJECTED REJECTED METADATA_REJECTED; do
+              J=$(app-store-connect apps app-store-versions "$APP_ID" --state "$ST" --platform IOS --json 2>/dev/null) || continue
+              [ -n "$J" ] || continue
+              VER_ID=$(printf '%s' "$J" | python3 -c "import json,sys; $NORM; print(d[0]['id'] if d else '')" 2>/dev/null)
+              if [ -n "$VER_ID" ]; then
+                echo "Карточки с номером $VERSION нет; беру редактируемую карточку в состоянии $ST ($VER_ID)."
+                echo "В ios-release её заранее переименовывает шаг «Карточка версии»."
+                break
+              fi
+            done
+          fi
+          if [ -z "$VER_ID" ]; then
+            echo "Редактируемой карточки версии в App Store Connect нет — пропускаю."
+            echo "Создайте версию $VERSION в App Store Connect руками («+ Версия») и запустите сборку снова"
+            echo "или впишите «Что нового» в карточке сами."
+            exit 0
+          fi
+
+          LOC_JSON=$(app-store-connect app-store-versions localizations "$VER_ID" --json 2>/dev/null)
+          if [ -z "$LOC_JSON" ]; then
+            echo "Не удалось получить локализации версии — пропускаю."
+            exit 0
+          fi
+          # id|локаль|заполнено-ли-уже. Пустое «Что нового» — то, из-за чего падает
+          # подача; заполненное руками не перетираем без APP_STORE_WHATS_NEW_FORCE.
+          PAIRS=$(printf '%s' "$LOC_JSON" | python3 -c "import json,sys; $NORM; print(' '.join('%s|%s|%d' % (x['id'], (x.get('attributes') or {}).get('locale') or '?', 1 if ((x.get('attributes') or {}).get('whatsNew') or '').strip() else 0) for x in d))" 2>/dev/null)
+          if [ -z "$PAIRS" ]; then
+            echo "Список локализаций не разобрался — пропускаю. Ответ API начинался так:"
+            printf '%s' "$LOC_JSON" | head -c 300
+            echo ""
+            exit 0
+          fi
+
+          FORCE="${APP_STORE_WHATS_NEW_FORCE:-}"
+          READY=0
+          FAILED=0
+          for P in $PAIRS; do
+            LID=$(printf '%s' "$P" | cut -d'|' -f1)
+            LOC=$(printf '%s' "$P" | cut -d'|' -f2)
+            HAS=$(printf '%s' "$P" | cut -d'|' -f3)
+            if [ "$HAS" = "1" ] && [ -z "$FORCE" ]; then
+              echo "  $LOC — уже заполнено в App Store Connect, не трогаю"
+              echo "           (перезаписать: APP_STORE_WHATS_NEW_FORCE=1)"
+              READY=$((READY + 1))
+              continue
+            fi
+            if app-store-connect app-store-version-localizations modify "$LID" --whats-new "$NOTES" > /dev/null 2>&1; then
+              echo "  $LOC — записано"
+              READY=$((READY + 1))
+            else
+              echo "  $LOC — записать не удалось"
+              FAILED=$((FAILED + 1))
+            fi
+          done
+
+          if [ "$READY" -gt 0 ] && [ "$FAILED" -eq 0 ]; then
+            echo "«Что нового» на месте ($READY лок.) — заявку на проверку можно создавать."
+          elif [ "$READY" -gt 0 ]; then
+            echo "«Что нового» есть в $READY лок., в $FAILED не записалось."
+            echo "Если среди неудачных язык по умолчанию — подача упадёт на 409 whatsNew."
+          else
+            echo "Ни в одну локализацию записать не удалось. Впишите текст в App Store Connect"
+            echo "руками, иначе подача заявки упадёт на 409 whatsNew."
+          fi
+          exit 0
+      # Шлагбаум ДО сборки (ci/asc_store.py check, режим update): нет карточки
+      # версии, пустое «Что нового», описание или скриншоты, вопрос анкеты
+      # возраста без ответа — Apple заявку не примет, а неудачная подача
+      # заняла бы одну из пяти заявок. Не смог проверить — пропускает.
+      - name: Готова ли версия к подаче
+        script: |
+          cd "$CM_BUILD_DIR"
+          CLI=$(command -v app-store-connect || true)
+          PYI=""
+          if [ -n "$CLI" ]; then PYI=$(head -1 "$CLI" | sed 's/^#! *//'); fi
+          if [ -z "$PYI" ] || ! $PYI -c "import jwt, requests" 2>/dev/null; then
+            PYI=python3
+            python3 -c "import jwt, requests, cryptography" 2>/dev/null || python3 -m pip install --quiet --user --break-system-packages pyjwt cryptography requests 2>/dev/null || python3 -m pip install --quiet --user pyjwt cryptography requests 2>/dev/null || true
+          fi
+          RC=0
+          $PYI ci/asc_store.py check || RC=$?
+          if [ "$RC" = "2" ]; then
+            echo "Сборка остановлена ДО подачи: заявка Apple не потрачена."
+            exit 1
+          fi
+          exit 0
+      # Сколько заявок занимает лимит Apple — только отчёт.
+      - &submissions_report
+        name: Сколько заявок занимает лимит Apple
+        script: |
+          if [ -z "${APP_STORE_CONNECT_ISSUER_ID:-}" ] || [ -z "${APP_STORE_CONNECT_KEY_IDENTIFIER:-}" ]; then
+            echo "Нет переменных доступа к App Store Connect API — пропускаю."
+            exit 0
+          fi
+          NORM="d=json.load(sys.stdin); d=d.get('data',d) if isinstance(d,dict) else d; d=[d] if isinstance(d,dict) else (d or [])"
+          APP_ID="${APP_STORE_APP_ID:-6794675250}"
+          if [ -z "$APP_ID" ]; then
+            if ! AJ=$(app-store-connect apps list --bundle-id-identifier "ru.marketplace.client.premium" --strict-match-identifier --json 2>/tmp/asc_sr_err.txt); then
+              echo "App Store Connect не ответил — пропускаю. Начало ответа:"
+              head -c 500 /tmp/asc_sr_err.txt || true
+              echo ""
+              exit 0
+            fi
+            APP_ID=$(printf '%s' "$AJ" | python3 -c "import json,sys; $NORM; print(d[0]['id'] if d else 'NONE')" 2>/dev/null)
+          fi
+          if [ "$APP_ID" = "NONE" ] || [ -z "$APP_ID" ]; then
+            echo "Карточка приложения в App Store Connect не найдена или ответ не разобрался — пропускаю."
+            printf '%s' "${AJ:-}" | head -c 300
+            echo ""
+            exit 0
+          fi
+          BUSY=0
+          UNKNOWN=0
+          for ST in READY_FOR_REVIEW WAITING_FOR_REVIEW IN_REVIEW UNRESOLVED_ISSUES; do
+            R=$(app-store-connect apps list-review-submissions "$APP_ID" --platform IOS --review-submission-state "$ST" --json 2>/tmp/asc_sr_st.txt)
+            K=$(printf '%s' "$R" | python3 -c "import json,sys; $NORM; print(len(d))" 2>/dev/null)
+            if [ -z "$K" ]; then
+              echo "  $ST: не удалось узнать. Начало ответа API:"
+              { printf '%s' "$R"; cat /tmp/asc_sr_st.txt 2>/dev/null; } | head -c 300
+              echo ""
+              UNKNOWN=1
+              continue
+            fi
+            echo "  $ST: $K"
+            BUSY=$((BUSY + K))
+          done
+          if [ "$UNKNOWN" = "1" ]; then
+            echo "Занято из лимита Apple: не удалось узнать (по ответившим состояниям — $BUSY из 5)."
+          else
+            echo "Занято из лимита Apple: $BUSY из 5."
+          fi
+          if [ "$BUSY" -ge 5 ]; then
+            echo "Лимит выбран — новая заявка не создастся (409). Снимите лишние черновики:"
+            echo "App Store Connect → Приложения → App Review → Отправки."
+          fi
+          exit 0
+      - *use_profiles
+      - *build_ipa
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        # Бета-заявка здесь не нужна и мешала бы: Apple держит на бета-проверке
+        # одну сборку и отвечает 422 «Another build is in review» — процесс
+        # падал бы ДО подачи в магазин. Внутренним тестировщикам сборка видна
+        # и без неё. Бета для внешних — процесс ios-testflight.
+        submit_to_testflight: false
+
+        # Автопубликация: Codemagic создаёт заявку на проверку в App Store.
+        submit_to_app_store: true
+
+        # Выпустить сразу после одобрения. MANUAL — ждать кнопки в App Store Connect.
+        release_type: AFTER_APPROVAL
+
+        # Висит прошлая заявка на проверке — снять её и подать новую.
+        cancel_previous_submissions: true
+
+        copyright: 2026 ИП Мамедов Анар Юсиф оглы
+
+  # ===========================================================================
+  #  Довести зависшую заявку до проверки — запускать РУКАМИ
+  # ===========================================================================
+  #  Подача (submit_to_app_store) идёт у Codemagic в пост-обработке — ПОСЛЕ всех
+  #  шагов процесса, поэтому внутри ios-release этот шаг бесполезен. Запускайте,
+  #  только если подача ios-release упала (вкладка Publishing у сборки) и в
+  #  App Store Connect остался черновик заявки. Чужую версию не трогает.
+  #  Сначала проверьте в App Store Connect, что в версии стоит нужная сборка.
+  ios-submit-draft:
+    name: Yumurta iOS — довести зависшую заявку
+    max_build_duration: 15
+    instance_type: mac_mini_m2
+    integrations:
+      app_store_connect: yumurta_asc
+    scripts:
+      - name: Довести заявку до проверки
+        script: |
+        script: |
+          cd "$CM_BUILD_DIR"
+          if [ -z "${APP_STORE_CONNECT_ISSUER_ID:-}" ] || [ -z "${APP_STORE_CONNECT_KEY_IDENTIFIER:-}" ]; then
+            echo "Нет переменных доступа к App Store Connect API — пропускаю."
+            exit 0
+          fi
+          NORM="d=json.load(sys.stdin); d=d.get('data',d) if isinstance(d,dict) else d; d=[d] if isinstance(d,dict) else (d or [])"
+          APP_ID="${APP_STORE_APP_ID:-6794675250}"
+          if [ -z "$APP_ID" ]; then
+            AJ=$(app-store-connect apps list --bundle-id-identifier "ru.marketplace.client.premium" --strict-match-identifier --json 2>/dev/null)
+            APP_ID=$(printf '%s' "$AJ" | python3 -c "import json,sys; $NORM; print(d[0]['id'] if d else '')" 2>/dev/null)
+          fi
+          if [ -z "$APP_ID" ]; then
+            echo "Карточка приложения не найдена или ответ не разобрался — пропускаю."
+            exit 0
+          fi
+          VERSION="${APP_VERSION:-$(grep -m1 'CFBundleShortVersionString:' project.yml | sed 's/.*: *"\(.*\)"/\1/')}"
+
+          VJ=$(app-store-connect apps app-store-versions "$APP_ID" --version-string "$VERSION" --platform IOS --json 2>/dev/null)
+          VER_ID=$(printf '%s' "$VJ" | python3 -c "import json,sys; $NORM; print(d[0]['id'] if d else '')" 2>/dev/null)
+          STATE=$(printf '%s' "$VJ" | python3 -c "import json,sys; $NORM; a=(d[0].get('attributes') or {}) if d else {}; print(a.get('appStoreState') or a.get('appVersionState') or '')" 2>/dev/null)
+          if [ -z "$VER_ID" ]; then
+            echo "Карточки версии $VERSION нет — ничего не подаю."
+            exit 0
+          fi
+          echo "Версия $VERSION ($VER_ID), состояние: ${STATE:-неизвестно}"
+          case "$STATE" in
+            PREPARE_FOR_SUBMISSION|DEVELOPER_REJECTED|REJECTED|METADATA_REJECTED|"") : ;;
+            *) echo "Версия уже не в подготовке — заявка подана, делать нечего."; exit 0 ;;
+          esac
+
+          SJ=$(app-store-connect apps list-review-submissions "$APP_ID" --platform IOS --review-submission-state READY_FOR_REVIEW --json 2>/dev/null)
+          SUBS=$(printf '%s' "$SJ" | python3 -c "import json,sys; $NORM; print(' '.join(str(x['id']) for x in d))" 2>/dev/null)
+          if [ -z "$SUBS" ]; then
+            echo "Черновиков заявок нет. Значит публикация прошла штатно либо упала по другой причине."
+            exit 0
+          fi
+
+          PICK=""
+          for S in $SUBS; do
+            IT=$(app-store-connect review-submissions items "$S" --json 2>/dev/null)
+            OWN=$(printf '%s' "$IT" | python3 -c "import json,sys; $NORM; print(len(d))" 2>/dev/null)
+            if [ "${OWN:-0}" = "0" ]; then
+              PICK="$S"
+              echo "Беру пустой черновик $S."
+              break
+            fi
+            MINE=$(printf '%s' "$IT" | python3 -c "import json,sys; $NORM; print('1' if '$VER_ID' in json.dumps(d) else '0')" 2>/dev/null)
+            if [ "$MINE" = "1" ]; then
+              PICK="$S"
+              echo "В черновике $S уже лежит наша версия."
+              break
+            fi
+            echo "Черновик $S занят чужой версией — не трогаю."
+          done
+          if [ -z "$PICK" ]; then
+            echo "Свободного черновика нет — подать заявку не могу."
+            echo "Снимите лишние заявки в App Store Connect (Приложения → App Review → Отправки)."
+            exit 0
+          fi
+
+          IT=$(app-store-connect review-submissions items "$PICK" --json 2>/dev/null)
+          HAS=$(printf '%s' "$IT" | python3 -c "import json,sys; $NORM; print(len(d))" 2>/dev/null)
+          if [ "${HAS:-0}" = "0" ]; then
+            if app-store-connect review-submission-items create "$PICK" --version-id "$VER_ID" > /dev/null 2>&1; then
+              echo "Версия $VERSION добавлена в заявку $PICK."
+            else
+              echo "Добавить версию в заявку не удалось — подайте её в App Store Connect руками."
+              exit 0
+            fi
+          fi
+
+          if app-store-connect review-submissions confirm "$PICK"; then
+            echo "════════════════════════════════════════════════"
+            echo "  Заявка $PICK отправлена на проверку."
+            echo "  Версия $VERSION, выпуск сразу после одобрения."
+            echo "════════════════════════════════════════════════"
+          else
+            echo "Подтвердить заявку не удалось — нажмите «Отправить на проверку»"
+            echo "в App Store Connect: версия и сборка там уже готовы."
+          fi
+          exit 0
