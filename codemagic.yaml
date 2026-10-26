@@ -64,7 +64,35 @@ workflows:
 
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$PLIST" \
             || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$PLIST"
-          agvtool new-version -all "$BUILD_NUMBER"
+          # Номер сборки (CFBundleVersion) должен быть больше уже загруженного в
+          # App Store Connect. Счётчик Codemagic ($BUILD_NUMBER) свой у каждого
+          # приложения Codemagic: 26.10.2026 после переноса в репозиторий
+          # 8-IOS-client-new счётчик начался с 1, а у Apple уже была сборка 87 —
+          # публикация упала с 409 ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE
+          # «bundle version must be higher». Берём наибольшее из счётчика и
+          # последней сборки у Apple + 1. Не получилось спросить Apple — остаётся
+          # счётчик (как было), сборку не роняем.
+          APP_ID_BN="6794675250"
+          NUM="${BUILD_NUMBER:-1}"
+          case "$NUM" in ''|*[!0-9]*) NUM=1;; esac
+          LAST=0
+          for ARGS in "--all-versions" "" ; do
+            if OUT=$(app-store-connect get-latest-testflight-build-number "$APP_ID_BN" $ARGS 2>/tmp/asc_bn_err.txt); then
+              N=$(printf '%s' "$OUT" | grep -Eo '[0-9]+' | tail -1 || true)
+              if [ -n "$N" ] && [ "$N" -gt "$LAST" ]; then LAST=$N; fi
+              break
+            fi
+            echo "TestFlight: номер не получил ($ARGS) — $(head -c 200 /tmp/asc_bn_err.txt | tr '\n' ' ')"
+          done
+          if OUT=$(app-store-connect get-latest-app-store-build-number "$APP_ID_BN" 2>/tmp/asc_bn_err.txt); then
+            N=$(printf '%s' "$OUT" | grep -Eo '[0-9]+' | tail -1 || true)
+            if [ -n "$N" ] && [ "$N" -gt "$LAST" ]; then LAST=$N; fi
+          else
+            echo "App Store: номер не получил — $(head -c 200 /tmp/asc_bn_err.txt | tr '\n' ' ')"
+          fi
+          if [ "$LAST" -ge "$NUM" ]; then NUM=$((LAST + 1)); fi
+          echo "Счётчик Codemagic: ${BUILD_NUMBER:-нет}; последняя сборка у Apple: $LAST; номер сборки: $NUM"
+          agvtool new-version -all "$NUM"
 
           FINAL_V=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
           FINAL_B=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")
