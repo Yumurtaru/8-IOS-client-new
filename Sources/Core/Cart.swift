@@ -161,6 +161,14 @@ final class Cart: ObservableObject {
         checkoutKey = Cart.makeKey()
         if !lines.isEmpty { storeKey(at: Date().timeIntervalSince1970) }
     }
+    /// А113: 422 idempotency_key_reused — этим ключом уже оформлен заказ с другим
+    /// составом. Следующее оформление — с новым ключом (только если ключ ещё тот же:
+    /// корзину могли поменять, и ключ уже новый). Неотвеченное оформление не трогаем.
+    func renewCheckoutKey(ifCurrent key: String) {
+        guard checkoutKey == key, pendingOrder == nil else { return }
+        checkoutKey = Cart.makeKey()
+        if !lines.isEmpty { storeKey(at: Date().timeIntervalSince1970) }
+    }
     private func storePending() {
         if let p = pendingOrder, let d = try? JSONEncoder().encode(p) {
             UserDefaults.standard.set(d, forKey: Cart.pendingStore)

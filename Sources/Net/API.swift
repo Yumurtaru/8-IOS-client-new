@@ -85,6 +85,23 @@ enum APIError: LocalizedError {
     /// П-27.14: код отказа ключа повтора (idempotency_in_progress,
     /// idempotency_key_reused…). perform кладёт его в details отказа.
     var idempotencyCode: String? { rejectDetails?["idempotency_code"] }
+    /// А113/А114: машинный код отказа v1 (`error.code`: price_changed,
+    /// email_invalid, idempotency_key_reused…). Старый сервер — nil.
+    var errorCode: String? { rejectDetails?["error_code"] }
+    /// А114: `error.need` («password», «new_email») или details.need («email_code»).
+    var need: String? { rejectDetails?["need"] }
+    /// А114: 422 email_invalid — исправленный адрес («ivan@gmail.com»); nil — подсказки нет.
+    var emailSuggestion: String? {
+        guard errorCode == "email_invalid", let s = rejectDetails?["suggestion"], s.contains("@") else { return nil }
+        return s
+    }
+    /// А114: 422 email_invalid — почта с опечаткой или неживая (текст — у поля почты).
+    var isEmailInvalid: Bool { rejectStatus == 422 && errorCode == "email_invalid" }
+    /// А113: 409 price_changed при создании заказа — цены изменились, заказ не создан.
+    var isOrderPriceChanged: Bool {
+        guard rejectStatus == 409 else { return false }
+        return errorCode == "price_changed" || rejectDetails?["reason"] == "price_changed"
+    }
     /// AT-3/AT-7: исход создания неизвестен — сервер мог записать заказ/бронь, но
     /// ответ не дошёл (нет связи, таймаут, 5xx, ответ не разобрался, «запрос ещё
     /// выполняется»). Повторять тогда можно только тем же ключом и тем же телом.
@@ -325,6 +342,14 @@ final class API {
                     if let code = env.error?.code, code.hasPrefix("idempotency_") {
                         det = (det ?? [:]).merging(["idempotency_code": code]) { old, _ in old }
                     }
+                    // А113/А114: машинный код (price_changed, email_invalid…),
+                    // подсказка адреса и need уровня error — тоже в details
+                    // (служебными ключами; поля формы с теми же именами не затираем).
+                    var extra: [String: String] = [:]
+                    if let c = env.error?.code, !c.isEmpty { extra["error_code"] = c }
+                    if let s = env.error?.suggestion?.trimmingCharacters(in: .whitespaces), !s.isEmpty { extra["suggestion"] = s }
+                    if let n = env.error?.need, !n.isEmpty { extra["need"] = n }
+                    if !extra.isEmpty { det = (det ?? [:]).merging(extra) { old, _ in old } }
                     throw APIError.rejected(status: status, message: msg, details: det)
                 }
                 throw APIError.server(APIError.serverText(msg, status: status))
@@ -484,6 +509,11 @@ final class API {
         req.httpBody = bodyStr.data(using: .utf8)
         if retryKey { return try await sendKeyed(req, as: T.self) }
         return try await send(req, as: T.self)
+    }
+    /// Забыть ключ повтора для POST path с этим телом (то же кодирование, что у post).
+    func forgetRetryKey(_ path: String, body: Encodable) {
+        guard let req = try? makeRequest("POST", path, body: body) else { return }
+        RetryKeys.shared.forget(path: req.url?.path ?? "", body: req.httpBody)
     }
     func postFormVoid(_ path: String, form: [String: String], retryKey: Bool = false) async throws {
         _ = try await postForm(path, form: form, retryKey: retryKey) as EmptyResp
@@ -690,6 +720,13 @@ final class RetryKeys {
         let key = UUID().uuidString.lowercased()
         entries[id] = Entry(key: key, body: body, at: now)
         return Slot(id: id, key: key, body: body)
+    }
+
+    /// Забыть ключ этого запроса (человек закрыл форму с неизвестным исходом).
+    func forget(path: String, body: Data?) {
+        let id = path + "\n" + Self.fingerprint(body)
+        lock.lock(); defer { lock.unlock() }
+        entries[id] = nil
     }
 
     func finish(_ slot: Slot) {

@@ -25,9 +25,13 @@ private struct EditProfileBody: Encodable {
 }
 
 /// Подтверждаемая смена данных. changes — только изменённые поля; method: "email" (звонков и SMS нет).
+/// password — А114: ТЕКУЩИЙ пароль верхнего уровня, только при неживой почте
+/// (email_problem): код на неё не дойдёт, и смену почты сервер подтверждает
+/// паролем и кодом на НОВЫЙ адрес. nil — в JSON не попадает.
 private struct ChangeRequestBody: Encodable {
     let changes: [String: String]
     let method: String
+    var password: String? = nil
 }
 /// Ответ на запрос подтверждения (data-нагрузка). debug_code → debugCode (convertFromSnakeCase).
 private struct ChangeRequestResult: Decodable {
@@ -37,6 +41,15 @@ private struct ChangeRequestResult: Decodable {
     let debugCode: String?
 }
 private struct ChangeConfirmBody: Encodable { let code: String }
+/// А114: ответ POST api/v1/profile/email/verify — {sent, ttl, email, debug_code}
+/// или {already: true, email_verified: true}; verify/confirm — {email_verified: true}.
+private struct EmailVerifyResult: Decodable {
+    @LenientBool var sent: Bool?
+    @LenientBool var already: Bool?
+    @LenientBool var emailVerified: Bool?
+    let email: String?
+    let debugCode: String?
+}
 
 struct EditProfileView: View {
     @Environment(\.dismiss) private var dismiss
@@ -69,8 +82,31 @@ struct EditProfileView: View {
     @State private var didLoad = false
     /// Обращение в поддержку из листа кода ушло — говорим об этом на экране.
     @State private var supportNotice: String?
+    // А114: состояние почты из профиля (nil — старый сервер или почты нет).
+    @State private var emailVerified: Bool?
+    @State private var emailProblem: String?
+    /// 422 email_invalid / need new_email — текст у поля почты и «Исправить на …».
+    @State private var emailError: String?
+    @State private var emailFix: String?
+    /// 403 need password (неживая почта): поле текущего пароля и повтор.
+    @State private var needCurrentPassword = false
+    @State private var currentPassword = ""
+    @State private var currentPasswordError: String?
+    /// Лист кода: подтверждение смены данных или подтверждение почты.
+    private enum CodeMode { case change, verify }
+    @State private var codeMode: CodeMode = .change
+    @State private var verifying = false
+    @State private var verifyNotice: String?
 
     private var trimmedName: String { name.trimmingCharacters(in: .whitespaces) }
+    /// А114: письма на почту не доходят, а человек меняет почту — сервер подтвердит
+    /// смену паролем (если он задан). Поле пароля — сразу: попытка без пароля
+    /// тоже считается в лимит сервера (5 за 15 минут). Или сервер уже попросил (403).
+    private var askCurrentPassword: Bool {
+        if needCurrentPassword { return true }
+        let e = email.trimmingCharacters(in: .whitespaces)
+        return emailProblem != nil && !e.isEmpty && e != origEmail
+    }
     private var emailValid: Bool {
         let e = email.trimmingCharacters(in: .whitespaces)
         if e.isEmpty { return true }  // email опционален
@@ -116,7 +152,13 @@ struct EditProfileView: View {
                         Text("Проверьте адрес электронной почты")
                             .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
                             .padding(.top, -8).padding(.leading, 4)
+                    } else if let m = emailError {
+                        EmailFixHint(message: m, suggestion: emailFix) { fixed in email = fixed }
+                            .padding(.top, -8).padding(.leading, 4)
+                    } else {
+                        emailStatus
                     }
+                    if askCurrentPassword { currentPasswordField }
 
                     field(title: "Телефон", placeholder: "+7 900 000-00-00", text: $phone,
                           contentType: .telephoneNumber, keyboard: .phonePad, autocap: .never)
@@ -170,6 +212,64 @@ struct EditProfileView: View {
             }
         }) { codeSheet }
         .sheet(isPresented: $showSupportSheet) { supportSheet }
+        // Адрес поправили — прежний отказ сервера к нему не относится.
+        .onChange(of: email) { _ in emailError = nil; emailFix = nil }
+        .onChange(of: currentPassword) { _ in currentPasswordError = nil }
+    }
+
+    // ── А114: состояние почты (только для сохранённого адреса) ──
+    @ViewBuilder
+    private var emailStatus: some View {
+        let e = email.trimmingCharacters(in: .whitespaces)
+        if !e.isEmpty && e == origEmail {
+            if emailProblem != nil {
+                Text("Письма на эту почту не доходят — укажите другую")
+                    .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, -8).padding(.leading, 4)
+            } else if emailVerified == false {
+                HStack(spacing: YMSpace.sm) {
+                    Text("Не подтверждена")
+                        .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                    Button(action: requestVerify) {
+                        if verifying { ProgressView().controlSize(.small) }
+                        else { Text("Подтвердить").font(YMFont.subhead).foregroundStyle(YMColor.accent) }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(verifying || saving)
+                    Spacer(minLength: 0)
+                }
+                .padding(.top, -8).padding(.leading, 4)
+            } else if let n = verifyNotice {
+                Text(n).font(YMFont.caption).foregroundStyle(YMColor.statusDone)
+                    .padding(.top, -8).padding(.leading, 4)
+            }
+        }
+    }
+
+    // ── А114: текущий пароль — смена неживой почты (сервер ответил need: password) ──
+    private var currentPasswordField: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Текущий пароль")
+                .font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.muted)
+            SecureField("Пароль от аккаунта", text: $currentPassword)
+                .textContentType(.password)
+                .font(.system(size: 15))
+                .foregroundStyle(YMColor.text)
+                .padding(.horizontal, 14).padding(.vertical, 14)
+                .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
+            // А116: у аккаунта без почты (вход через соцсеть) почту привязывают тем
+            // же путём: method = email_new, код — на новый адрес.
+            Text(currentPasswordError ?? (origEmail.isEmpty
+                 ? "Почта к аккаунту не привязана — подтвердите паролем, код придёт на новый адрес"
+                 : "Письма на прежнюю почту не доходят — подтвердите смену паролем, код придёт на новый адрес"))
+                .font(YMFont.caption)
+                .foregroundStyle(currentPasswordError == nil ? YMColor.muted : YMColor.statusCancel)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Если пароль не задан (входите по коду) — оставьте пустым")
+                .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     // ── Поле ввода ──
@@ -278,6 +378,8 @@ struct EditProfileView: View {
             await MainActor.run {
                 name = p.name ?? ""; email = p.email ?? ""; phone = p.phone ?? ""
                 origName = name; origEmail = email; origPhone = phone
+                emailVerified = p.emailVerified
+                emailProblem = p.emailProblem
                 loading = false
             }
         } catch is CancellationError {
@@ -339,13 +441,18 @@ struct EditProfileView: View {
     // Запросить подтверждение выбранным способом (call | email).
     private func requestConfirm(_ method: String) {
         saving = true; saveError = nil
+        // А114: при неживой почте сервер подтверждает смену текущим паролем.
+        let pw = currentPassword
+        let body = ChangeRequestBody(changes: pendingChanges, method: method,
+                                     password: askCurrentPassword && !pw.isEmpty ? pw : nil)
         Task {
             do {
                 let r: ChangeRequestResult = try await API.shared.post(
-                    "api/v1/profile/change/request",
-                    body: ChangeRequestBody(changes: pendingChanges, method: method))
+                    "api/v1/profile/change/request", body: body)
                 await MainActor.run {
                     saving = false
+                    currentPasswordError = nil
+                    codeMode = .change
                     confirmTarget = r.target
                     code = r.debugCode ?? ""
                     showCodeSheet = true
@@ -354,7 +461,76 @@ struct EditProfileView: View {
                 await MainActor.run {
                     Haptics.error()
                     saving = false
+                    let api = error as? APIError
+                    let msg = api?.errorDescription ?? "Не удалось отправить код"
+                    if api?.isEmailInvalid == true {
+                        // Опечатка в новой почте или неживой адрес — у поля почты.
+                        emailError = msg; emailFix = api?.emailSuggestion
+                    } else if api?.need == "password" {
+                        // Неживая почта: нужен текущий пароль (пустой или неверный).
+                        needCurrentPassword = true
+                        currentPasswordError = msg
+                    } else if api?.need == "new_email" {
+                        // Неживая почта: сначала только новая почта (и имя).
+                        emailError = msg; emailFix = nil
+                    } else {
+                        saveError = msg
+                    }
+                }
+            }
+        }
+    }
+
+    // А114: «Подтвердить» у неподтверждённой почты — код на текущий адрес.
+    private func requestVerify() {
+        guard !verifying, !saving else { return }
+        verifying = true; saveError = nil; verifyNotice = nil
+        Task {
+            do {
+                let r: EmailVerifyResult = try await API.shared.post(
+                    "api/v1/profile/email/verify", body: [String: String]())
+                await MainActor.run {
+                    verifying = false
+                    if r.already == true || r.emailVerified == true {
+                        emailVerified = true; emailProblem = nil
+                        verifyNotice = "Почта подтверждена"
+                        return
+                    }
+                    codeMode = .verify
+                    confirmTarget = r.email
+                    code = r.debugCode ?? ""
+                    showCodeSheet = true
+                }
+            } catch {
+                await MainActor.run {
+                    Haptics.error()
+                    verifying = false
                     saveError = (error as? APIError)?.errorDescription ?? "Не удалось отправить код"
+                }
+            }
+        }
+    }
+
+    // А114: код из письма → почта подтверждена (экран не закрываем).
+    private func confirmVerify(_ c: String) {
+        saving = true; saveError = nil
+        Task {
+            do {
+                let _: EmptyResp = try await API.shared.post(
+                    "api/v1/profile/email/verify/confirm", body: ChangeConfirmBody(code: c))
+                await MainActor.run {
+                    Haptics.success(); saving = false
+                    code = ""
+                    // Код дошёл — адрес живой (сервер снимает и пометку «не доходят»).
+                    emailVerified = true; emailProblem = nil
+                    verifyNotice = "Почта подтверждена"
+                    afterCodeSheet = .none
+                    showCodeSheet = false
+                }
+            } catch {
+                await MainActor.run {
+                    Haptics.error(); saving = false
+                    saveError = (error as? APIError)?.errorDescription ?? "Неверный код"
                 }
             }
         }
@@ -364,6 +540,7 @@ struct EditProfileView: View {
     private func confirmCode() {
         let c = code.trimmingCharacters(in: .whitespaces)
         guard !c.isEmpty, !saving else { return }
+        if codeMode == .verify { confirmVerify(c); return }
         saving = true; saveError = nil
         Task {
             do {

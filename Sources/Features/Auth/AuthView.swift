@@ -119,6 +119,10 @@ struct AuthView: View {
 
     @State private var busy = false
     @State private var error: String?
+    /// А114: 422 email_invalid на «Получить код» — текст у поля почты и
+    /// исправленный адрес для кнопки «Исправить на …» (nil — подсказки нет).
+    @State private var emailError: String?
+    @State private var emailFix: String?
 
     @FocusState private var focused: Field?
     private enum Field { case login, password, name, code }
@@ -342,6 +346,11 @@ struct AuthView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .textContentType(.emailAddress)
+                    // Адрес поправили (сами или кнопкой) — прежний отказ к нему не относится.
+                    .onChange(of: regEmail) { _ in emailError = nil; emailFix = nil }
+                if let m = emailError {
+                    EmailFixHint(message: m, suggestion: emailFix) { fixed in regEmail = fixed }
+                }
                 AuthField(placeholder: "Пароль (минимум 6 символов)", text: $password, secure: true)
                     .textContentType(.newPassword)
             }
@@ -471,6 +480,20 @@ struct AuthView: View {
                     startResendCooldown()
                 }
             } catch {
+                // А114: опечатка в почте / неживой адрес — текст у поля почты.
+                if let api = error as? APIError, api.isEmailInvalid {
+                    let msg = api.errorDescription ?? "Проверьте адрес почты"
+                    let fix = api.emailSuggestion
+                    await MainActor.run {
+                        busy = false
+                        if step == .registerCode { code = ""; back(to: .register) }
+                        self.error = nil
+                        emailError = msg
+                        emailFix = fix
+                        Haptics.error()
+                    }
+                    return
+                }
                 fail(error, fallback: "Не удалось отправить код")
             }
         }

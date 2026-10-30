@@ -236,6 +236,9 @@ enum LodgingText {
         return s
     }
 
+    /// А116: free_cancel = false в расчёте и брони — тариф невозвратный (как на Android и в письме гостю).
+    static let nonRefundable = "Бесплатной отмены нет — тариф невозвратный"
+
     /// Предупреждение перед отменой: человек должен понимать, что часть суммы
     /// удержат (ПП РФ 1853 — до одной ночи при незаезде).
     static func cancelWarning(_ t: LodgingTrip, today: String = LodgingDate.today) -> String {
@@ -251,7 +254,10 @@ enum LodgingText {
         } else {
             s += " Удержания не будет."
         }
-        if let dl = t.cancelDeadline, !dl.isEmpty {
+        if t.freeCancel == false {
+            // Невозвратный тариф — только когда объект и правда вправе удержать.
+            if t.penaltyNowValue > 0 { s += " " + nonRefundable + "." }
+        } else if let dl = t.cancelDeadline, !dl.isEmpty {
             s += today > dl
                 ? " Срок бесплатной отмены прошёл."
                 : " Бесплатная отмена до " + LodgingDate.human(dl) + "."

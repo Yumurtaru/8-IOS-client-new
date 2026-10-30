@@ -723,7 +723,11 @@ struct LodgingUnitView: View {
                         Text("Залог " + Money.format(q.depositValue) + " — возвращается при выезде")
                             .font(YMFont.caption).foregroundStyle(YMColor.muted)
                     }
-                    if let dl = q.cancelDeadline, !dl.isEmpty {
+                    // А116: free_cancel = false — тариф невозвратный (срок тогда nil).
+                    if q.freeCancel == false {
+                        Text(LodgingText.nonRefundable)
+                            .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                    } else if let dl = q.cancelDeadline, !dl.isEmpty {
                         Text("Бесплатная отмена до " + LodgingDate.human(dl))
                             .font(YMFont.caption).foregroundStyle(YMColor.muted)
                     }
@@ -928,7 +932,11 @@ struct LodgingBookedSheet: View {
                     Text("Предоплата " + Money.format(resp.prepayValue) + " — объект свяжется с вами")
                         .font(YMFont.caption).foregroundStyle(YMColor.muted)
                 }
-                if let dl = resp.cancelDeadline, !dl.isEmpty {
+                // А116: free_cancel = false — тариф невозвратный (срок тогда nil).
+                if resp.freeCancel == false {
+                    Text(LodgingText.nonRefundable)
+                        .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                } else if let dl = resp.cancelDeadline, !dl.isEmpty {
                     Text("Бесплатная отмена до " + LodgingDate.human(dl))
                         .font(YMFont.caption).foregroundStyle(YMColor.muted)
                 }

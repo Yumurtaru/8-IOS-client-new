@@ -54,6 +54,22 @@ enum InstallInfo {
         return id
     }
 
+    /// А108: аккаунт удалён — сервер стёр строки установок человека, и прежний id
+    /// больше не присылаем (иначе следующий запуск без входа завёл бы строку с тем
+    /// же id, моделью и ОС). Новый UUID — сразу в файл; записать не вышло — файл
+    /// удаляем, и новый id создаст следующее чтение. Звать только после успешного
+    /// DELETE /api/v1/account.
+    @discardableResult
+    static func renewDeviceId(file: URL? = InstallInfo.fileURL) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        cached = nil
+        guard let f = file else { return nil }
+        let id = UUID().uuidString.lowercased()
+        if save(id, to: f) { cached = id; return id }
+        try? FileManager.default.removeItem(at: f)
+        return nil
+    }
+
     /// Записать id в файл и пометить «не в резервную копию». true — записано.
     private static func save(_ id: String, to file: URL) -> Bool {
         do {

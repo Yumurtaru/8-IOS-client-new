@@ -117,6 +117,7 @@ struct ProfileView: View {
                             .padding(.horizontal, YMSpace.xl)
                             .padding(.top, YMSpace.xs)
                         }
+                        if let note = emailNote { emailNoteRow(note) }
                         // Карта клиента: штрихкод для кассы магазина. Блок сам
                         // ничего не рисует, если код не пришёл или невалиден.
                         if let code = profile?.clientCode {
@@ -331,6 +332,42 @@ struct ProfileView: View {
         .padding(.horizontal, YMSpace.xl)
         .padding(.top, YMSpace.md)
         .padding(.bottom, YMSpace.xs)
+    }
+
+    // ── А114: почта не подтверждена / письма не доходят ──
+    /// Текст строки под шапкой; nil — с почтой всё в порядке (или старый сервер).
+    private var emailNote: (text: String, problem: Bool)? {
+        guard let p = profile, !(p.email ?? "").trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        if p.emailProblem != nil { return ("Письма на эту почту не доходят — укажите другую", true) }
+        if p.emailVerified == false { return ("Почта не подтверждена — подтвердить", false) }
+        return nil
+    }
+
+    private func emailNoteRow(_ note: (text: String, problem: Bool)) -> some View {
+        Button {
+            Haptics.light()
+            path.append(ProfileRoute.editProfile)
+        } label: {
+            HStack(spacing: YMSpace.sm) {
+                Image(systemName: note.problem ? "exclamationmark.triangle.fill" : "envelope.badge")
+                    .foregroundStyle(note.problem ? YMColor.statusCancel : YMColor.accent)
+                Text(note.text)
+                    .font(YMFont.caption)
+                    .foregroundStyle(note.problem ? YMColor.statusCancel : YMColor.text)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(YMColor.muted)
+            }
+            .padding(.horizontal, YMSpace.lg).padding(.vertical, YMSpace.md)
+            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, YMSpace.xl)
+        .padding(.top, YMSpace.sm)
     }
 
     // ── Быстрые статы ──
@@ -603,6 +640,8 @@ struct ProfileView: View {
             // и он считал аккаунт удалённым.
             do {
                 try await API.shared.deleteVoid("api/v1/account")
+                // А108: сервер удалил установки человека — дальше новый id установки.
+                InstallInfo.renewDeviceId()
                 await MainActor.run { deleting = false; session.signOut(clearLocalData: true); AuthLastUser.forget(); profile = nil }
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? "Не удалось удалить аккаунт"

@@ -11,11 +11,173 @@ import SwiftUI
 //                                     -> OrderCreateResult(.id) -> экран «Вы записаны»
 //
 //  Деньги — только Decimal через Money (никогда Double в UI).
-//  Дата — "yyyy-MM-dd", сегодня + ближайшие 6 дней.
+//  Дата — "yyyy-MM-dd", сегодня + ближайшие 13 дней (bookingDays). В ленте —
+//  только даты, где есть свободные окна (см. «обзор дат» ниже).
+//  А115: лента дат — одним запросом GET api/v1/services/{id}/dates?from=&days=14
+//  ([{date, free_slots}], только дни со свободным окном). Окна дня — как раньше,
+//  /slots?date= выбранной даты. Ручки нет (404), сеть, 5xx — прежний обход по дням.
 //  NULL-безопасность: списки ?? [], строки isEmpty.
 //
 
 // MARK: - Одна дата в ленте выбора
+
+/// Сколько дней вперёд смотрим окна записи. Даты с окнами — одним запросом
+/// GET api/v1/services/{id}/dates (А115). Старый сервер такой ручки не знает:
+/// тогда каждую дату ленты спрашиваем отдельно (/slots?date=) — не больше
+/// bookingScanParallel запросов одновременно. 1:1 с Android.
+private let bookingDays = 14
+private let bookingScanParallel = 4
+/// Сколько обзор дат считается свежим (с): свежий показываем без запросов.
+private let dayScanFreshSeconds: TimeInterval = 60
+
+/// Итог обзора дат одной услуги. slots — окна по датам (даты с упавшим запросом
+/// в нём отсутствуют), empty — даты, где окон точно нет. at — когда обзор начат.
+/// free — число свободных окон по датам (free_slots ручки /dates); nil — обзор
+/// шёл старым обходом по дням. Окон дат при обзоре одним запросом в slots нет:
+/// их грузит выбор даты.
+private struct DayScan {
+    let serviceId: Int
+    let dates: [String]
+    var slots: [String: [Slot]]
+    let empty: Set<String>
+    let at: Date
+    var free: [String: Int]? = nil
+}
+
+/// Число окон со свободным местом — как free_slots сервера.
+private func bookingFreeCount(_ list: [Slot]) -> Int {
+    list.filter { $0.freeValue >= 1 }.count
+}
+
+/// Строка ответа GET api/v1/services/{id}/dates: {date, free_slots}.
+private struct ServiceFreeDate: Decodable {
+    let date: String?
+    @LenientInt var freeSlots: Int?
+}
+
+/// data ручки /dates — строго массив: другой ответ (не та ручка, старый сервер)
+/// — ошибка разбора и прежний обход по дням, а не «свободных дат нет».
+private struct ServiceFreeDates: Decodable {
+    let days: [ServiceFreeDate]
+    init(from decoder: Decoder) throws {
+        let arr = try [LossyElement<ServiceFreeDate>](from: decoder)
+        days = arr.compactMap { $0.value }
+    }
+}
+
+/// Итог запроса дат одним запросом.
+private enum BookingDatesResult {
+    /// Дата → free_slots (только дни со свободным окном).
+    case dates([String: Int])
+    /// Ручки нет (404 старого сервера: «Эндпоинт не найден», code no_route), сеть,
+    /// 5xx, 429 (у /slots лимита нет, а 429 бывает за общим NAT), непонятный
+    /// ответ — прежний обход по дням.
+    case fallback
+    /// 404 «Услуга не найдена» нового сервера (услугу или заведение сняли):
+    /// обходить дни незачем — «запись недоступна» с повтором. 1:1 с Android.
+    case gone
+}
+
+private func bookingFreeDates(_ serviceId: Int, from: String, days: Int) async -> BookingDatesResult {
+    do {
+        let r: ServiceFreeDates = try await API.shared.get(
+            "api/v1/services/\(serviceId)/dates", query: ["from": from, "days": String(days)])
+        var out: [String: Int] = [:]
+        for d in r.days {
+            guard let day = d.date?.prefix(10), day.count == 10 else { continue }
+            out[String(day)] = max(0, d.freeSlots ?? 0)
+        }
+        return .dates(out)
+    } catch {
+        // Старый сервер на неизвестную ручку — 404 с code no_route (index.php),
+        // снятая услуга — 404 «Услуга не найдена» без кода (как Android).
+        if let e = error as? APIError, case .rejected(404, let msg, _) = e, e.errorCode != "no_route",
+           msg.trimmingCharacters(in: .whitespacesAndNewlines) == "Услуга не найдена" {
+            return .gone
+        }
+        // Отмена — тоже сюда: обзор проверит Task.isCancelled и ничего не запишет.
+        return .fallback
+    }
+}
+
+/// Окна даты, обновлённые на месте (запись, перечитывание): обзор, начатый
+/// раньше, их не перетирает.
+private struct LocalDaySlots {
+    let at: Date
+    let slots: [Slot]
+}
+
+/// Обзор дат живёт вне вью: при каждом возврате с карточки товара (.task)
+/// уходило 14 запросов. Ключ — заведение + услуга + первый день ленты. 1:1 с Android.
+@MainActor
+private final class DayScanCache {
+    static let shared = DayScanCache()
+    private var map: [String: DayScan] = [:]
+    private var order: [String] = []
+    /// Правки на месте: "заведение|услуга|дата" -> окна и когда. Обзор, начатый
+    /// раньше правки, при сохранении её не затирает — иначе занятое записью
+    /// окно всплывало бы из «свежего» обзора как свободное.
+    private var patches: [String: LocalDaySlots] = [:]
+    private var patchOrder: [String] = []
+
+    private func key(_ slug: String, _ serviceId: Int, _ firstDay: String) -> String {
+        "\(slug)|\(serviceId)|\(firstDay)"
+    }
+
+    func get(_ slug: String, _ serviceId: Int, _ firstDay: String) -> DayScan? {
+        map[key(slug, serviceId, firstDay)]
+    }
+
+    /// Сохраняет обзор с правками, сделанными после его начала; возвращает итог.
+    @discardableResult
+    func put(_ slug: String, _ scan: DayScan) -> DayScan {
+        guard let first = scan.dates.first else { return scan }
+        var slots = scan.slots
+        var empty = scan.empty
+        var free = scan.free
+        for d in scan.dates {
+            guard let pt = patches["\(slug)|\(scan.serviceId)|\(d)"], pt.at > scan.at else { continue }
+            slots[d] = pt.slots
+            if !pt.slots.isEmpty { empty.remove(d) }
+            if free != nil { free?[d] = bookingFreeCount(pt.slots) }
+        }
+        let merged = DayScan(serviceId: scan.serviceId, dates: scan.dates, slots: slots, empty: empty, at: scan.at,
+                             free: free)
+        let k = key(slug, scan.serviceId, first)
+        map[k] = merged
+        order.removeAll { $0 == k }
+        order.append(k)
+        while order.count > 24 { map[order.removeFirst()] = nil }
+        return merged
+    }
+
+    /// Окна даты изменились на месте (запись, перечитывание) — правим и обзор.
+    func patch(_ slug: String, _ serviceId: Int, _ date: String, _ list: [Slot]) {
+        let pk = "\(slug)|\(serviceId)|\(date)"
+        patches[pk] = LocalDaySlots(at: Date(), slots: list)
+        patchOrder.removeAll { $0 == pk }
+        patchOrder.append(pk)
+        while patchOrder.count > 64 { patches[patchOrder.removeFirst()] = nil }
+        let prefix = "\(slug)|\(serviceId)|"
+        for k in map.keys where k.hasPrefix(prefix) {
+            guard var e = map[k], e.dates.contains(date) else { continue }
+            e.slots[date] = list
+            if e.free != nil { e.free?[date] = bookingFreeCount(list) }
+            map[k] = e
+        }
+    }
+}
+
+/// Окна одной даты для обзора дат. nil — запрос не удался (сеть, сбой): такая
+/// дата из ленты не прячется.
+private func bookingDaySlots(_ serviceId: Int, _ date: String) async -> [Slot]? {
+    do {
+        let list: [Slot] = try await API.shared.list("api/v1/services/\(serviceId)/slots", query: ["date": date])
+        return list
+    } catch {
+        return nil
+    }
+}
 
 private struct DayOption: Identifiable, Equatable {
     let value: String    // "yyyy-MM-dd" — для API
@@ -41,7 +203,7 @@ struct OrgBookingSection: View {
     @State private var loading = true
     @State private var error: String?
 
-    @State private var days: [DayOption] = OrgBookingSection.nearestDays(7)
+    @State private var days: [DayOption] = OrgBookingSection.nearestDays(bookingDays)
     @State private var selectedDate: String = ""
     @Environment(\.scenePhase) private var scenePhase
     /// Приложение уходило в фон (а не просто шторка уведомлений сверху).
@@ -51,6 +213,33 @@ struct OrgBookingSection: View {
     @State private var slots: [Slot] = []
     @State private var loadingSlots = false
     @State private var slotsError: String?
+
+    // Обзор дат: в ленте только дни, где у выбранной услуги есть свободные окна.
+    // daySlots — окна по датам (кеш для переключения дат без запроса), dayEmpty —
+    // даты, где окон точно нет (их прячем). Дата, запрос которой не удался, в
+    // dayEmpty не попадает и остаётся в ленте: из-за сбоя связи не должны
+    // исчезнуть все дни. scanFor — для какой услуги эти данные.
+    @State private var daySlots: [String: [Slot]] = [:]
+    @State private var dayEmpty: Set<String> = []
+    /// А115: свободных окон по датам (free_slots) — мелко под датой. nil — обзор
+    /// старым обходом по дням: числа не показываем.
+    @State private var dayFree: [String: Int]?
+    /// "услуга|дата", чьи окна сейчас в slots: перечитывание той же даты (после
+    /// обзора дат, из фона) идёт без индикатора — список не мигает.
+    @State private var slotsKey: String?
+    /// А115: /dates ответил «Услуга не найдена» — вместо ленты «запись недоступна»
+    /// с повтором. Снимает удачный обзор.
+    @State private var datesGone: Int?
+    @State private var scanFor: Int?
+    @State private var scanning = false
+    /// Номер обзора: ответ устаревшего обзора (сменили услугу) ничего не пишет.
+    @State private var scanGen = 0
+    @State private var scanTask: Task<Void, Never>?
+    /// Итог обзора, который ещё не показан: пока открыто подтверждение, дату и
+    /// окна под ним не меняем — применяем после закрытия.
+    @State private var scanArrived: DayScan?
+    /// "услуга|дата" -> окна, обновлённые на месте.
+    @State private var localFresh: [String: LocalDaySlots] = [:]
 
     // Единый модальный поток: подтверждение → успех (один .sheet во избежание
     // конфликта двух одновременных .sheet на одной вью).
@@ -66,8 +255,21 @@ struct OrgBookingSection: View {
     }
     @State private var sheet: BookingSheet?
     @State private var confirming = false
-    /// Ключ повтора записи: один на окно и состав, новый — после успеха.
+    /// Ключ повтора записи: один на окно подтверждения — новый при каждом его
+    /// открытии (сервер А316+: новый ключ — новая запись, «склейки» 10 минут
+    /// больше нет). После окончательного ответа — забыт.
     @State private var apptKey: (params: String, key: String)?
+    /// Исход записи неизвестен (обрыв после отправки, таймаут, 5xx): форма заперта,
+    /// «Подтвердить» уйдёт тем же ключом и тем же телом.
+    @State private var apptUnsure = false
+    /// Окно закрыли с неизвестным исходом (или сессия умерла / 401 на повторе):
+    /// запоминаем окно с составом, ключ и тело. Снова то же окно с тем же составом —
+    /// тот же ключ и запертая форма (новый ключ создал бы вторую запись в окне на
+    /// несколько мест: сервер с ключом склейку не делает). Забывается только после
+    /// окончательного ответа по этому окну.
+    @State private var apptPending: (params: String, key: String, address: VisitAddress, comment: String)?
+    /// Ошибка связи прошлой попытки — в самом окне подтверждения (оно не закрывается).
+    @State private var confirmError: String?
     /// Адрес визита — только для выездной услуги (сантехник, уборка на дом).
     /// Заполняется в окне подтверждения: у записи, в отличие от доставки,
     /// другого места спросить адрес нет.
@@ -147,7 +349,11 @@ struct OrgBookingSection: View {
         // возврате с карточки товара, и раньше весь блок мигал скелетоном, а
         // меню под ним прыгало.
         .task {
-            refreshDaysIfStale(); if selectedDate.isEmpty { selectedDate = days.first?.value ?? "" }
+            let daysChanged = refreshDaysIfStale(); if selectedDate.isEmpty { selectedDate = days.first?.value ?? "" }
+            // Вернулись на экран с выбранной услугой (или сменился день) — даты
+            // перечитываем фоном, даже если обзор в памяти свежий: окна могли
+            // разобрать или добавить. Старая лента остаётся, индикатора нет.
+            if selected != nil, sheet == nil || daysChanged { startDayScan(force: true) }
             if services.isEmpty || error != nil { await loadServices() }
         }
         // Вернулись в приложение на следующий день — дни пересчитываем.
@@ -158,12 +364,18 @@ struct OrgBookingSection: View {
         .onChange(of: scenePhase) { phase in
             if phase == .background { wasInBackground = true }
             guard phase == .active else { return }
-            let before = selectedDate
-            refreshDaysIfStale()
-            if wasInBackground, before == selectedDate, selected != nil, sheet == nil {
-                Task { await loadSlots() }
+            let daysChanged = refreshDaysIfStale()
+            // Даты и окна перечитываем обзором дат (он же обновит выбранную дату).
+            if selected != nil, (wasInBackground && sheet == nil) || daysChanged {
+                startDayScan(force: true)
             }
             wasInBackground = false
+        }
+        // Уход с экрана — обзор дат больше не нужен.
+        .onDisappear { stopDayScan() }
+        // Подтверждение закрыто — показываем обзор, пришедший, пока оно было открыто.
+        .onChange(of: sheet?.id) { _ in
+            if !confirmOpen, let r = scanArrived { scanArrived = nil; applyScan(r) }
         }
         .sheet(item: $sheet) { s in
             switch s {
@@ -180,55 +392,79 @@ struct OrgBookingSection: View {
 
     private func serviceBlock(_ sv: ServiceItem) -> some View {
         let isSel = selected?.id == sv.id
+        let gone = datesGone == sv.id
+        let daysReady = scanFor == sv.id && !gone
+        let shownDays = daysReady ? days.filter { !dayEmpty.contains($0.value) } : []
         return VStack(spacing: 0) {
             ServiceRow(service: sv, selected: isSel, fee: clientFee(Money.dec(sv.price))) {
                 Haptics.selection()
                 withAnimation(.easeInOut(duration: 0.2)) {
                     selected = isSel ? nil : sv
                 }
+                if selected == nil { stopDayScan() }
             }
             if isSel {
                 VStack(alignment: .leading, spacing: 10) {
-                    DaySelector(days: days, selected: selectedDate) { d in
-                        Haptics.selection()
-                        selectedDate = d
-                    }
-                    // Сколько человек и на сколько часов. Показываем только там,
-                    // где это что-то значит: у обычной услуги блока нет.
-                    if sv.needsGuests {
-                        CountStepper(
-                            label: "Человек", value: $guests,
-                            min: sv.guestsMin, max: sv.guestsMax,
-                            hint: "Одновременно до \(sv.capacityValue)"
-                        )
-                    }
-                    if sv.needsHours {
-                        CountStepper(
-                            label: "Часов подряд", value: $hours,
-                            min: 1, max: sv.maxSlotsValue,
-                            hint: "По \(Self.stepHint(sv, slots)) мин"
-                        )
-                    }
-                    if sv.needsGuests || sv.needsHours {
-                        HStack {
-                            Text("Стоимость брони")
-                                .font(.system(size: 13, weight: .bold))
-                                .foregroundStyle(YMColor.muted)
-                            Spacer()
-                            // Длину берём у первого доступного времени: сетка
-                            // могла остаться от прежней длительности услуги, и
-                            // цена «по услуге» расходилась бы с шагом
-                            // подтверждения и с чеком.
-                            Text(Money.format(sv.quote(guests: guests, slots: hours,
-                                minutesTotal: Self.previewMinutes(sv, slots, guests: guests, hours: hours))))
-                                .font(.system(size: 15, weight: .heavy))
-                                .foregroundStyle(YMColor.text)
+                    // Лента — только даты с окнами (и те, что не удалось проверить).
+                    // Пока даты проверяются — индикатор, а не пустое состояние.
+                    if gone {
+                        // А115: услугу сняли — без ленты, с повтором обзора по нажатию.
+                        Button { startDayScan(force: true) } label: {
+                            Text("Запись на эту услугу сейчас недоступна\nНажмите, чтобы повторить")
+                                .font(.system(size: 14.5)).foregroundStyle(YMColor.muted)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
+                        .buttonStyle(.plain)
+                        .padding(.vertical, 8)
+                    } else if !daysReady {
+                        HStack { Spacer(); ProgressView().tint(YMColor.accent); Spacer() }
+                            .padding(.vertical, 14)
+                    } else if shownDays.isEmpty {
+                        Text("Свободных окон пока нет — загляните позже")
+                            .font(.system(size: 14.5)).foregroundStyle(YMColor.muted)
+                            .padding(.vertical, 8)
+                    } else {
+                        DaySelector(days: shownDays, selected: selectedDate, free: dayFree ?? [:]) { d in
+                            Haptics.selection()
+                            selectedDate = d
+                        }
+                        // Сколько человек и на сколько часов. Показываем только там,
+                        // где это что-то значит: у обычной услуги блока нет.
+                        if sv.needsGuests {
+                            CountStepper(
+                                label: "Человек", value: $guests,
+                                min: sv.guestsMin, max: sv.guestsMax,
+                                hint: "Одновременно до \(sv.capacityValue)"
+                            )
+                        }
+                        if sv.needsHours {
+                            CountStepper(
+                                label: "Часов подряд", value: $hours,
+                                min: 1, max: sv.maxSlotsValue,
+                                hint: "По \(Self.stepHint(sv, slots)) мин"
+                            )
+                        }
+                        if sv.needsGuests || sv.needsHours {
+                            HStack {
+                                Text("Стоимость брони")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(YMColor.muted)
+                                Spacer()
+                                // Длину берём у первого доступного времени: сетка
+                                // могла остаться от прежней длительности услуги, и
+                                // цена «по услуге» расходилась бы с шагом
+                                // подтверждения и с чеком.
+                                Text(Money.format(sv.quote(guests: guests, slots: hours,
+                                    minutesTotal: Self.previewMinutes(sv, slots, guests: guests, hours: hours))))
+                                    .font(.system(size: 15, weight: .heavy))
+                                    .foregroundStyle(YMColor.text)
+                            }
+                        }
+                        Text("Свободное время")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(YMColor.muted)
+                        slotsView
                     }
-                    Text("Свободное время")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(YMColor.muted)
-                    slotsView
                 }
                 .padding(.top, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -242,6 +478,8 @@ struct OrgBookingSection: View {
             // Пределы у новой услуги свои — сбрасываем выбор.
             guests = selected?.guestsMin ?? 1
             hours = 1
+            // Обзор дат новой услуги; окна выбранной даты придут с ним.
+            startDayScan()
             Task { await loadSlots() }
         }
         .onChange(of: selectedDate) { _ in if isSel { Task { await loadSlots() } } }
@@ -260,7 +498,7 @@ struct OrgBookingSection: View {
         } else if let e = slotsError, !e.isEmpty {
             // Повтор по нажатию: раньше после сбоя оставалось только переключать
             // день туда-обратно.
-            Button { Task { await loadSlots() } } label: {
+            Button { Task { await loadSlots(force: true) } } label: {
                 Text("\(e). Нажмите, чтобы повторить")
                     .font(.system(size: 14.5)).foregroundStyle(YMColor.statusCancel)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -280,7 +518,20 @@ struct OrgBookingSection: View {
                 SlotGrid(slots: startableSlots, showFree: (selected?.capacityValue ?? 1) > 1) { slot in
                     // Отказ прошлой попытки («окно занято») не висит над новой.
                     actionMessage = nil
-                    if Session.shared.isLoggedIn { sheet = .confirm(slot) } else { onNeedAuth() }
+                    if Session.shared.isLoggedIn {
+                        confirmError = nil
+                        let p = apptParams(slot.id)
+                        if let m = apptPending, m.params == p {
+                            // То же окно и состав после неизвестного исхода — тот же ключ
+                            // и то же тело, форма заперта.
+                            apptKey = (m.params, m.key); apptUnsure = true
+                            visitAddress = m.address; masterComment = m.comment
+                        } else {
+                            // Новое окно подтверждения — новый ключ повтора.
+                            apptKey = nil; apptUnsure = false
+                        }
+                        sheet = .confirm(slot)
+                    } else { onNeedAuth() }
                 }
             }
         }
@@ -312,8 +563,18 @@ struct OrgBookingSection: View {
             saved: savedAddresses,
             onPickSaved: { applyAddress($0) },
             confirming: confirming,
+            locked: apptUnsure,
+            error: confirmError,
             onConfirm: { book(slot: slot) },
-            onDismiss: { if !confirming { sheet = nil } }
+            onDismiss: {
+                guard !confirming else { return }
+                let reload = apptUnsure
+                if apptUnsure { rememberPending() }
+                apptKey = nil; apptUnsure = false; confirmError = nil
+                sheet = nil
+                // После неизвестного исхода запись могла создаться — перечитываем окна.
+                if reload { Task { await loadSlots(force: true) } }
+            }
         )
     }
 
@@ -357,10 +618,164 @@ struct OrgBookingSection: View {
         visitAddress.lng       = a.lng
     }
 
-    private func loadSlots() async {
+    /// Обзор дат выбранной услуги: окна всех дат ленты, не больше
+    /// bookingScanParallel запросов сразу. Новый обзор отменяет прежний, а ответ
+    /// прежнего (сменили услугу) отбрасывается по номеру обзора.
+    /// force — перечитать, даже если обзор в памяти свежий (возврат на экран, из фона).
+    private func startDayScan(force: Bool = false) {
+        scanTask?.cancel()
+        scanGen &+= 1
+        guard let sel = selected else { scanning = false; return }
+        let gen = scanGen
+        let sid = sel.id
+        let dates = days.map(\.value)
+        // Обзор в памяти: свежий — показываем и не спрашиваем; устаревший —
+        // показываем сразу (без индикатора) и обновляем фоном.
+        if let mem = DayScanCache.shared.get(slug, sid, dates.first ?? "") {
+            offerScan(mem)
+            if !force, Date().timeIntervalSince(mem.at) < dayScanFreshSeconds { scanning = false; return }
+        }
+        scanning = true
+        scanTask = Task { await scanDays(serviceId: sid, dates: dates, gen: gen) }
+    }
+
+    private var confirmOpen: Bool {
+        if case .confirm = sheet { return true }
+        return false
+    }
+
+    /// Показать обзор сейчас или, если открыто подтверждение, после его закрытия.
+    private func offerScan(_ r: DayScan) {
+        if confirmOpen { scanArrived = r } else { applyScan(r) }
+    }
+
+    private func applyScan(_ r: DayScan) {
+        guard r.serviceId == selected?.id else { return }
+        var merged = r.slots
+        var free = r.free
+        let prefix = "\(r.serviceId)|"
+        for (k, v) in localFresh where k.hasPrefix(prefix) && v.at > r.at {
+            let d = String(k.dropFirst(prefix.count))
+            if r.dates.contains(d) {
+                merged[d] = v.slots
+                if free != nil { free?[d] = bookingFreeCount(v.slots) }
+            }
+        }
+        daySlots = merged
+        dayEmpty = r.empty
+        dayFree = free
+        scanFor = r.serviceId
+        // По умолчанию — первая дата с окнами; выбранную оставляем, если она есть в ленте.
+        let shown = r.dates.filter { !r.empty.contains($0) }
+        if let first = shown.first, !shown.contains(selectedDate) {
+            selectedDate = first   // окна подставит onChange(selectedDate) — из кеша
+        } else {
+            Task { await loadSlots() }
+        }
+    }
+
+    /// Окна даты обновлены на месте — помним, чтобы старый обзор их не вернул.
+    private func noteLocal(_ serviceId: Int, _ date: String, _ list: [Slot]) {
+        localFresh["\(serviceId)|\(date)"] = LocalDaySlots(at: Date(), slots: list)
+        if scanFor == serviceId {
+            daySlots[date] = list
+            if dayFree != nil { dayFree?[date] = bookingFreeCount(list) }
+        }
+        DayScanCache.shared.patch(slug, serviceId, date, list)
+    }
+
+    private func stopDayScan() {
+        scanTask?.cancel()
+        scanTask = nil
+        scanGen &+= 1
+        scanning = false
+    }
+
+    private func scanDays(serviceId: Int, dates: [String], gen: Int) async {
+        let startedAt = Date()
+        var fresh: [String: [Slot]] = [:]
+        var empty: Set<String> = []
+        var free: [String: Int]?
+        // А115: даты с окнами — одним запросом. Не вышло (старый сервер, сеть,
+        // 5xx) — прежний обход по дням.
+        switch await bookingFreeDates(serviceId, from: dates.first ?? "", days: dates.count) {
+        case .dates(let map):
+            free = map
+            for d in dates where map[d] == nil { empty.insert(d) }
+        case .gone:
+            guard !Task.isCancelled, gen == scanGen, selected?.id == serviceId else { return }
+            scanning = false
+            datesGone = serviceId
+            return
+        case .fallback:
+            guard !Task.isCancelled else { return }
+            await scanEachDay(serviceId: serviceId, dates: dates, fresh: &fresh, empty: &empty)
+        }
+        // Отменённый обзор (ушли с экрана, сменили услугу) не пишет ничего: его
+        // «упавшие» даты — это отмена, а не сбой.
+        guard !Task.isCancelled else { return }
+        let raw = DayScan(serviceId: serviceId, dates: dates, slots: fresh, empty: empty, at: startedAt, free: free)
+        // Обзор без единых данных (все запросы упали) в кеш не кладём: иначе
+        // «нескрытая» лента без данных считалась бы свежей и прятала повтор.
+        let noData = free == nil && fresh.isEmpty && empty.isEmpty
+        let scan = noData ? raw : DayScanCache.shared.put(slug, raw)
+        guard gen == scanGen, selected?.id == serviceId else { return }
+        scanning = false
+        datesGone = nil
+        offerScan(scan)
+    }
+
+    /// Прежний обход: окна каждой даты ленты, не больше bookingScanParallel
+    /// запросов сразу. Дата с упавшим запросом не попадает ни в fresh, ни в empty.
+    private func scanEachDay(serviceId: Int, dates: [String],
+                             fresh: inout [String: [Slot]], empty: inout Set<String>) async {
+        var got: [String: [Slot]] = [:]
+        var none: Set<String> = []
+        await withTaskGroup(of: (String, [Slot]?).self) { group in
+            var rest = dates.makeIterator()
+            for _ in 0..<bookingScanParallel {
+                guard let d = rest.next() else { break }
+                group.addTask { (d, await bookingDaySlots(serviceId, d)) }
+            }
+            while let r = await group.next() {
+                if let list = r.1 {
+                    got[r.0] = list
+                    if list.isEmpty { none.insert(r.0) }
+                }
+                if let d = rest.next() {
+                    group.addTask { (d, await bookingDaySlots(serviceId, d)) }
+                }
+            }
+        }
+        fresh = got
+        empty = none
+    }
+
+    /// Окна выбранной даты: из обзора дат, без повторного запроса. Запрос — для
+    /// даты, которую обзор не смог загрузить, и после отказа/«повторить» (force).
+    private func loadSlots(force: Bool = false) async {
         guard let sel = selected, !selectedDate.isEmpty else { return }
         let date = selectedDate
-        loadingSlots = true; slotsError = nil; slots = []
+        // Первый обзор дат ещё идёт — весь блок под индикатором, окна придут с ним.
+        guard scanFor == sel.id, datesGone != sel.id else { return }
+        // Открыто подтверждение — окна под ним не трогаем: по ним считается цена.
+        if confirmOpen && !force { return }
+        let key = "\(sel.id)|\(date)"
+        if !force, let hit = daySlots[date] {
+            slots = hit; slotsError = nil; loadingSlots = false; slotsKey = key
+            return
+        }
+        // Окна этой даты уже на экране (перечитываем после обзора дат или из
+        // фона) — тихо: без индикатора, список остаётся до ответа.
+        let quiet = !force && slotsKey == key && slotsError == nil
+        if quiet {
+            if scanning { return }
+        } else {
+            loadingSlots = true; slotsError = nil; slots = []; slotsKey = nil
+            // Обновление дат уже идёт — эта дата придёт с ним (или её загрузит
+            // показ обзора: обзор одним запросом окон дат не приносит).
+            if scanning && !force { return }
+        }
         // Ответ применяем, только если услуга и день не сменились, пока он шёл.
         // Раньше «Сегодня» → «Завтра» (или услуга А → Б) и опоздавший ответ
         // подменял список: в подтверждении — завтра и услуга Б, а бронировалось
@@ -369,19 +784,44 @@ struct OrgBookingSection: View {
         do {
             let list: [Slot] = try await API.shared.list("api/v1/services/\(sel.id)/slots", query: ["date": date])
             guard still else { return }
+            // Пока шёл тихий запрос, открыли подтверждение — окна под ним не меняем.
+            if quiet && confirmOpen { return }
             slots = list
+            slotsKey = key
+            noteLocal(sel.id, date, list)
         } catch is CancellationError {
         } catch {
             guard still else { return }
+            // Тихое перечитывание не удалось — остаётся прежний список (запись
+            // сервер всё равно проверит, отказ перечитает окна заново).
+            if quiet { return }
             slotsError = error.localizedDescription
         }
-        if still { loadingSlots = false }
+        if still && !quiet { loadingSlots = false }
+    }
+
+    /// Окно и состав записи — то, к чему привязан ключ повтора.
+    private func apptParams(_ slotId: Int) -> String {
+        "\(slotId)|\((selected?.needsGuests ?? false) ? guests : 0)|\((selected?.needsHours ?? false) ? hours : 0)|\(selected?.isAtClient ?? false)"
+    }
+
+    /// Запомнить неотвеченную запись (ключ, тело) — см. apptPending.
+    private func rememberPending() {
+        guard let k = apptKey else { return }
+        apptPending = (k.params, k.key, visitAddress, masterComment)
+    }
+
+    /// Окончательный ответ по этому окну — запомненный ключ больше не нужен.
+    private func forgetPending(_ params: String) {
+        if apptPending?.params == params { apptPending = nil }
     }
 
     private func book(slot: Slot) {
         guard !confirming else { return }   // двойной тап не создаёт вторую запись
         confirming = true
-        let params = "\(slot.id)|\((selected?.needsGuests ?? false) ? guests : 0)|\((selected?.needsHours ?? false) ? hours : 0)|\(selected?.isAtClient ?? false)"
+        confirmError = nil
+        let wasUnsure = apptUnsure
+        let params = apptParams(slot.id)
         if apptKey?.params != params {
             apptKey = (params, UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())
         }
@@ -407,6 +847,8 @@ struct OrgBookingSection: View {
                 let taken = guests
                 await MainActor.run {
                     apptKey = nil
+                    apptUnsure = false
+                    forgetPending(params)
                     confirming = false
                     masterComment = ""
                     // Окно убираем из списка только если мест больше не осталось:
@@ -422,19 +864,69 @@ struct OrgBookingSection: View {
                     } else {
                         slots.removeAll { $0.id == slot.id }
                     }
+                    // Кеш дат — тоже, чтобы при возврате на эту дату не всплыло уже
+                    // занятое окно. Дату из ленты не убираем — как раньше.
+                    if let s = sel { noteLocal(s.id, selectedDate, slots) }
                     lastBooking = r
                     sheet = .success(r.orderId ?? 0)   // подтверждение → успех в том же .sheet
                     Haptics.success()
                 }
             } catch {
-                await MainActor.run {
+                let api = error as? APIError
+                let notSent: Bool = { if case .notConnected? = api { return true }; return false }()
+                // Не APIError (обрыв без разбора) — как Android: исход неизвестен.
+                let unknown = api?.isUnknownOutcome ?? !(error is CancellationError)
+                let keepOpen: Bool = await MainActor.run {
                     confirming = false
+                    let logged = Session.shared.isLoggedIn
+                    if logged && (unknown || (notSent && wasUnsure)) {
+                        // Исход неизвестен — сервер мог записать. Окно остаётся, форма
+                        // заперта: «Подтвердить» уйдёт с тем же ключом и тем же телом,
+                        // запись не задвоится. Повтор, который не ушёл (нет сети), о первой
+                        // отправке ничего не говорит — блокировка остаётся.
+                        apptUnsure = true
+                        confirmError = error.localizedDescription
+                        return true
+                    }
+                    // Повтор после неизвестного исхода получил 429 — исход первой отправки
+                    // всё ещё неизвестен: ключ держим, форма заперта, окно можно закрыть.
+                    if wasUnsure && logged && api?.rejectStatus == 429 {
+                        confirmError = error.localizedDescription
+                        return true
+                    }
+                    // Сессия умерла посреди повтора (401) — окно закрываем, но ключ и тело
+                    // запоминаем: после входа то же окно уйдёт тем же ключом.
+                    let authDead: Bool = { if case .unauthorized? = api { return true }; return !logged }()
+                    if wasUnsure && authDead {
+                        rememberPending()
+                        apptKey = nil
+                        apptUnsure = false
+                        confirmError = nil
+                        sheet = nil
+                        actionMessage = error.localizedDescription
+                        return false
+                    }
+                    if logged && notSent {
+                        // Точно не ушло (нет сети) — окно остаётся, правка разрешена;
+                        // следующее нажатие — с новым ключом.
+                        apptKey = nil
+                        confirmError = error.localizedDescription
+                        return true
+                    }
+                    // Окончательный ответ: отказ сервера (окно занято, 422, 409 too_many —
+                    // текст сервера как есть), 429 или конец сессии на первой отправке —
+                    // блокировку снимаем, ключ забываем, окно закрываем.
+                    forgetPending(params)
+                    apptKey = nil
+                    apptUnsure = false
+                    confirmError = nil
                     sheet = nil
                     actionMessage = error.localizedDescription
+                    return false
                 }
                 // Окно могли занять, пока человек подтверждал: перечитываем свободное
                 // время, иначе занятое окно оставалось в списке и отказ повторялся.
-                await loadSlots()
+                if !keepOpen { await loadSlots(force: true) }
             }
         }
     }
@@ -461,11 +953,14 @@ struct OrgBookingSection: View {
     /// Дни строились один раз при открытии экрана. Организация, оставленная
     /// открытой до утра (или в фоне), показывала «Сегодня» на вчерашнюю дату:
     /// окна грузились за прошедший день, записаться было нельзя.
-    private func refreshDaysIfStale() {
-        let fresh = OrgBookingSection.nearestDays(7)
-        guard fresh.first?.value != days.first?.value else { return }
+    /// true — список дней сменился (наступил новый день).
+    @discardableResult
+    private func refreshDaysIfStale() -> Bool {
+        let fresh = OrgBookingSection.nearestDays(bookingDays)
+        guard fresh.first?.value != days.first?.value else { return false }
         days = fresh
         if !fresh.contains(where: { $0.value == selectedDate }) { selectedDate = fresh.first?.value ?? "" }
+        return true
     }
 
     fileprivate static func nearestDays(_ count: Int) -> [DayOption] {
@@ -754,7 +1249,19 @@ private struct ServiceRow: View {
 private struct DaySelector: View {
     let days: [DayOption]
     let selected: String
+    /// А115: свободных окон по датам (free_slots); пусто — подписи нет.
+    var free: [String: Int] = [:]
     var onSelect: (String) -> Void = { _ in }
+
+    private func freeLabel(_ n: Int) -> String {
+        let m100 = n % 100, m10 = n % 10
+        let word: String
+        if (11...14).contains(m100) { word = "окон" }
+        else if m10 == 1 { word = "окно" }
+        else if (2...4).contains(m10) { word = "окна" }
+        else { word = "окон" }
+        return "\(n) \(word)"
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -769,6 +1276,13 @@ private struct DaySelector: View {
                             Text(d.dayNum)
                                 .font(.system(size: 16, weight: .heavy))
                                 .foregroundStyle(active ? YMColor.onAccent : YMColor.text)
+                            if !free.isEmpty {
+                                // Пустая строка у даты без числа — чипы одной высоты.
+                                Text((free[d.value] ?? 0) > 0 ? freeLabel(free[d.value] ?? 0) : " ")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(active ? YMColor.onAccent.opacity(0.85) : YMColor.muted)
+                                    .lineLimit(1)
+                            }
                         }
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .background(active ? YMColor.accent : YMColor.surface,
@@ -855,12 +1369,17 @@ private struct ConfirmBookingSheet: View {
     var saved: [Address] = []
     var onPickSaved: (Address) -> Void = { _ in }
     let confirming: Bool
+    /// Исход прошлой попытки неизвестен: правка заперта, повтор — тем же телом.
+    var locked: Bool = false
+    /// Ошибка связи при прошлой попытке — показываем над кнопкой.
+    var error: String? = nil
     var onConfirm: () -> Void = {}
     var onDismiss: () -> Void = {}
 
     /// Кнопку блокируем, пока выездной адрес неполный: сервер всё равно вернёт
     /// 422 «нужен адрес», и лучше показать это до нажатия, а не после.
-    private var canConfirm: Bool { !confirming && (!atClient || address.isComplete) }
+    private var canConfirm: Bool { !confirming && (locked || !atClient || address.isComplete) }
+    private var editable: Bool { !confirming && !locked }
 
     var body: some View {
         ScrollView {
@@ -909,14 +1428,21 @@ private struct ConfirmBookingSheet: View {
                 if fee > 0 { priceRow("Сервисный сбор", fee, bold: false) }
                 priceRow("Итого", total, bold: true).padding(.top, 4)
 
+                if let e = error, !e.isEmpty {
+                    Text(e)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(YMColor.statusCancel)
+                        .padding(.top, 18)
+                }
+
                 Button(action: onConfirm) {
-                    Text(confirming ? "Записываем…" : "Подтвердить запись")
+                    Text(confirming ? "Записываем…" : (locked ? "Повторить запись" : "Подтвердить запись"))
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(YMPrimaryButtonStyle())
                 .disabled(!canConfirm)
                 .opacity(canConfirm ? 1 : 0.5)
-                .padding(.top, 18)
+                .padding(.top, (error ?? "").isEmpty ? 18 : 8)
 
                 if atClient && !address.isComplete {
                     Text("Укажите улицу и номер дома — мастер приедет по этому адресу")
@@ -925,7 +1451,15 @@ private struct ConfirmBookingSheet: View {
                         .padding(.top, 8)
                 }
 
-                Button("Отмена", action: onDismiss)
+                if locked && !confirming {
+                    Text("Запись могла уйти — проверьте «Мои записи»")
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(YMColor.muted)
+                        .padding(.top, 8)
+                }
+
+                // Пока запрос идёт — закрыть нельзя; исход неизвестен — «Закрыть».
+                Button(locked ? "Закрыть" : "Отмена", action: onDismiss)
                     .buttonStyle(YMSecondaryButtonStyle())
                     .disabled(confirming)
                     .padding(.top, 10)
@@ -942,7 +1476,9 @@ private struct ConfirmBookingSheet: View {
         // Пока запись отправляется, шторку не смахнуть: «Отмена» уже выключена,
         // а жестом окно закрывалось, человек выбирал другое время, и пришедший
         // ответ первой записи подменял новое окно экраном «Вы записаны».
-        .interactiveDismissDisabled(confirming)
+        // После неизвестного исхода — тоже: закрывает только «Закрыть» (ключ забыт,
+        // окна перечитаны).
+        .interactiveDismissDisabled(confirming || locked)
     }
 
     // MARK: Куда приехать
@@ -976,6 +1512,7 @@ private struct ConfirmBookingSheet: View {
                                     .foregroundStyle(YMColor.text)
                             }
                             .buttonStyle(.plain)
+                            .disabled(!editable)
                         }
                     }
                     .padding(.vertical, 1)
@@ -1014,7 +1551,7 @@ private struct ConfirmBookingSheet: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .disabled(confirming)
+                .disabled(!editable)
                 .ymMaxLength($comment, 300)
             Text("Необязательно · до 300 знаков")
                 .font(.system(size: 11.5))
@@ -1034,7 +1571,7 @@ private struct ConfirmBookingSheet: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .disabled(confirming)
+            .disabled(!editable)
     }
 
     private func priceRow(_ label: String, _ value: Decimal, bold: Bool) -> some View {

@@ -21,6 +21,9 @@ final class AdFormViewModel: ObservableObject {
     @Published var title = ""
     @Published var desc = ""
     @Published var price = ""
+    /// А481: отказ по цене (422 details.price — «Цена — числом…», «Слишком большая цена»)
+    /// и своя проверка формата — под полем цены, а не общим тостом.
+    @Published var priceError: String?
     @Published var negotiable = false
     @Published var condition = -1          // -1 не указано, 1 новое, 0 б/у
     @Published var phone = ""
@@ -216,7 +219,9 @@ final class AdFormViewModel: ObservableObject {
             // ключа он поле не трогает, и очищенный город не сохранялся. Только у открытого
             // на правку или если человек сам выбрал «Не указан» (cityTouched). Создание — как
             // раньше (nil, ключ не уходит, сервер подставит город из профиля).
-            cityId: cityId ?? ((adId > 0 && (openedForEdit || cityTouched)) ? 0 : nil)
+            cityId: cityId ?? ((adId > 0 && (openedForEdit || cityTouched)) ? 0 : nil),
+            // А485: «Не указан» при создании — city_none: 1, сервер не подставит город профиля.
+            cityNone: (adId == 0 && cityTouched && cityId == nil) ? 1 : nil
         )
     }
 
@@ -253,8 +258,10 @@ final class AdFormViewModel: ObservableObject {
             return 0
         }
         if loadFailed { toast = "Объявление не загрузилось — откройте форму заново"; return 0 }
+        priceError = nil
         if priceAllowed, !price.trimmingCharacters(in: .whitespaces).isEmpty, parsedPrice == nil {
-            toast = "Проверьте цену: только цифры, например 1500"
+            let m = "Проверьте цену: только цифры, например 1500"
+            if chosen?.priceAllowed != false { priceError = m } else { toast = m }
             return 0
         }
         // Те же пределы, что проверяет сервер (adsValidate в routes/ads.php):
@@ -273,6 +280,8 @@ final class AdFormViewModel: ObservableObject {
                 }
                 adId = newId
                 if cityTouched && cityId == nil {
+                    // Старый сервер city_none не знает и ставит город профиля — правка на
+                    // city_id 0 остаётся (новому она ничего не меняет: город уже пустой).
                     // Город явно «Не указан» уже при создании: сервер всё равно ставит город
                     // профиля (ads.php:724-726) — сразу правим черновик на city_id 0 (PUT это
                     // принимает: adsValidate пишет NULL), чтобы объявление совпало с формой
@@ -291,6 +300,18 @@ final class AdFormViewModel: ObservableObject {
             savedText = snap   // сохранено — шторку снова можно смахнуть
             return adId
         } catch {
+            // 422 с ошибкой по полю price — текст сервера под полем цены.
+            if let api = error as? APIError, api.rejectStatus == 422,
+               let pe = api.rejectDetails?["price"], !pe.isEmpty, chosen?.priceAllowed != false {
+                priceError = pe
+                // Другие поля тоже с ошибкой — общий текст сервера тоже показываем
+                // (служебные ключи details — не поля формы).
+                let service: Set<String> = ["price", "error_code", "idempotency_code", "need", "suggestion", "reason"]
+                if api.rejectDetails?.keys.contains(where: { !service.contains($0) }) == true {
+                    toast = api.errorDescription ?? "Проверьте поля объявления"
+                }
+                return 0
+            }
             toast = (error as? LocalizedError)?.errorDescription ?? "Проверьте поля объявления"
             return 0
         }
@@ -541,6 +562,13 @@ struct AdFormView: View {
             if vm.chosen?.priceAllowed != false {
                 Section("Цена") {
                     TextField("Цена, ₽ (можно не указывать)", text: $vm.price).keyboardType(.decimalPad)
+                        .onChange(of: vm.price) { _ in vm.priceError = nil }
+                    if let pe = vm.priceError {
+                        Text(pe)
+                            .font(YMFont.caption)
+                            .foregroundStyle(YMColor.statusCancel)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Toggle("Возможен торг", isOn: $vm.negotiable)
                 }
             }

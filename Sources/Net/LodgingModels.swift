@@ -312,6 +312,9 @@ struct LodgingQuoteResp: Codable {
     @LenientDecimal var prepay: Decimal?
     @LenientDecimal var deposit: Decimal?
     let cancelDeadline: String?
+    /// А116: true — бесплатная отмена до cancelDeadline; false — тариф невозвратный
+    /// (cancelDeadline = nil); nil — неизвестно (или старый сервер) — как раньше.
+    @LenientBool var freeCancel: Bool?
     let cancelPenalty: String?
     let checkInFrom: String?
     let checkOutUntil: String?
@@ -361,6 +364,9 @@ struct LodgingBookResp: Codable {
     let checkInFrom: String?
     let checkOutUntil: String?
     let cancelDeadline: String?
+    /// А116: true — бесплатная отмена до cancelDeadline; false — тариф невозвратный
+    /// (cancelDeadline = nil); nil — неизвестно (или старый сервер) — как раньше.
+    @LenientBool var freeCancel: Bool?
 
     var bookingIdValue: Int { bookingId ?? 0 }
     var totalValue: Decimal { total ?? 0 }
@@ -419,6 +425,9 @@ struct LodgingTrip: Codable, Hashable, Identifiable {
     let status: String?
     let statusLabel: String?
     let cancelDeadline: String?
+    /// А116: true — бесплатная отмена до cancelDeadline; false — тариф невозвратный
+    /// (cancelDeadline = nil); nil — неизвестно (или старый сервер) — как раньше.
+    @LenientBool var freeCancel: Bool?
     @LenientBool var canCancel: Bool?
     /// Правило отмены — снимок на момент брони: none | first_night | full.
     let cancelPenalty: String?

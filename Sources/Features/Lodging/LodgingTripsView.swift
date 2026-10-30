@@ -240,6 +240,12 @@ private struct LodgingTripCard: View {
             Text(LodgingText.tripStay(trip))
                 .font(YMFont.caption).foregroundStyle(YMColor.muted)
 
+            // А116: невозвратный тариф — у подтверждённой брони (true/nil — как раньше, без строки).
+            if trip.freeCancel == false && trip.status == "confirmed" {
+                Text(LodgingText.nonRefundable)
+                    .font(YMFont.caption).foregroundStyle(YMColor.muted)
+            }
+
             if let ph = trip.shop?.phone, !ph.isEmpty {
                 // Номер был простым текстом: ни позвонить, ни скопировать —
                 // перед заездом гость перепечатывал его вручную.

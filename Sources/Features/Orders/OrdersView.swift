@@ -34,7 +34,8 @@ enum OrderFlow {
         switch key {
         case "new":
             return shopType == "service" ? "Запись создана" : "Заказ оформлен"
-        case "accepted":    return "Заведение приняло заказ"
+        // А109: у записи на услугу — «Подтверждена», как подпись сервера.
+        case "accepted":    return shopType == "service" ? "Подтверждена" : "Заведение приняло заказ"
         case "preparing":
             switch shopType {
             case "cafe":    return "Готовится"

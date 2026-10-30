@@ -264,7 +264,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 }
             }
         }
-        if type.isEmpty, let pid = productId, pid > 0 {
+        // А516: сервер добавил type: «цена снизилась» (price_alert) и «снова в наличии»
+        // (waitlist) — с тем же product_id; без type (старый сервер) — как раньше.
+        if type.isEmpty || type == "price_alert" || type == "waitlist", let pid = productId, pid > 0 {
             // П-21.1: товар подешевел / снова в наличии — карточка товара на Главной.
             return {
                 nav.revealForPush(closeAll: true) {
@@ -299,6 +301,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                     ProfilePushIntent.open(part)
                 }
             }
+        }
+        // А516: «Мы скучали» / «Вас давно не было» (type=retention, и для шаблона
+        // retention_30; в data только type) — главная. review_request несёт order_id —
+        // его выше уже ведёт карточка заказа (форма отзыва).
+        if type == "retention" || type == "retention_30" {
+            return { nav.revealForPush(closeAll: true) { DeepLinkRouter.shared.requestedTab = 0 } }
         }
         // Волна 4313: «вы кое-что забыли в корзине» (abandoned_cart, только type) —
         // вкладка «Корзина»; раньше тап просто открывал приложение.

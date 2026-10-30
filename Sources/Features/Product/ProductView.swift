@@ -823,7 +823,9 @@ struct ProductView: View {
                 addToCart()
             } label: {
                 HStack(spacing: 8) {
-                    if isStopped {
+                    if isOutOfStock {
+                        Text("Закончился")
+                    } else if isStopped {
                         Text("Нет в наличии")
                     } else {
                         Text(added ? "Добавлено ✓" : "В корзину")
@@ -983,7 +985,11 @@ struct ProductView: View {
     /// Позиция закончилась: сервер отдаёт stopped в карточке товара.
     /// А65: категория выключена продавцом (category_off) — тоже «нет в наличии»,
     /// заказ сервер отклонит (409).
-    private var isStopped: Bool { vm.detail?.stopped == true || vm.detail?.categoryOff == true }
+    private var isStopped: Bool {
+        vm.detail?.stopped == true || vm.detail?.categoryOff == true || isOutOfStock
+    }
+    /// А428: закончился у магазина (out_of_stock) — подпись «Закончился», добавить нельзя.
+    private var isOutOfStock: Bool { vm.detail?.outOfStock == true }
 
     /// Количество задаётся чипами-пресетами, а не степпером. Чипы уместны
     /// только когда пресетов хотя бы два: дробный товар без пресетов

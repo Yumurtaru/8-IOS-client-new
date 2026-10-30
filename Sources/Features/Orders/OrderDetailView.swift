@@ -516,10 +516,50 @@ struct OrderDetailView: View {
     }
 
     /// Бронь жилья ещё можно отменить, но не отсюда — подсказка, куда идти.
+    /// А115: гость уже заехал/выехал или бронь закрыта (stay.status) — подсказки нет.
     private func lodgingCancelHint(_ o: OrderDetail) -> Bool {
         guard o.shopType == "lodging" else { return false }
+        if let sc = o.stay?.statusCode, ["checked_in", "checked_out", "cancelled", "canceled", "no_show"].contains(sc) {
+            return false
+        }
         let st = (o.status ?? "").lowercased()
         return st == "new" || st == "accepted"
+    }
+
+    /// А115 (П-60 №8): статус самой брони жилья (stay.status); nil — не бронь,
+    /// старый сервер или статус без своей подписи (pending).
+    private func stayCode(_ o: OrderDetail) -> String? {
+        guard let sc = o.stay?.statusCode, OrderStatus.stayLabel(sc) != nil else { return nil }
+        return sc
+    }
+
+    /// А115: статус брони поверх статуса заказа — какой шаг показать текущим и
+    /// его подпись. 1:1 с Android (OrderStatus.lodgingStay): мгновенная бронь уже
+    /// confirmed, а заказ ещё new — «Подтверждена»; заселение — «Заселены»;
+    /// выезд — шаг «завершена» («Выехали»); отмена и незаезд — отменённый заказ,
+    /// а при удержании (заказ закрыт выполненным) — последний шаг. nil — как раньше.
+    private func stayOverride(_ o: OrderDetail) -> (status: String, title: String)? {
+        guard let sc = stayCode(o), let label = OrderStatus.stayLabel(sc) else { return nil }
+        let st = OrderFlow.normalize(o.status)
+        switch sc {
+        case "confirmed":   return st == "new" ? ("accepted", label) : nil
+        case "checked_in":  return (st == "new" || st == "accepted") ? ("accepted", label) : nil
+        case "checked_out": return st != "cancelled" ? ("done", label) : nil
+        case "cancelled", "canceled", "no_show":
+            return (st == "done" ? "done" : "cancelled", label)
+        default:            return nil
+        }
+    }
+
+    /// Статус для ленты и таймлайна (с учётом брони, см. stayOverride).
+    private func shownStatus(_ o: OrderDetail) -> String? {
+        stayOverride(o)?.status ?? o.status
+    }
+
+    /// А115: подпись текущего шага по статусу брони; nil — как раньше.
+    private func stayStepTitle(_ key: String, o: OrderDetail) -> String? {
+        guard let ov = stayOverride(o), ov.status == key else { return nil }
+        return ov.title
     }
 
     /// А63: текст клиента к записи (без пробелов по краям); пусто — nil.
@@ -683,9 +723,9 @@ struct OrderDetailView: View {
                 .padding(.bottom, YMSpace.md)
 
             // Золотая живая лента-резюме над таймлайном (единый язык со списком).
-            GoldStatusRibbon(progress: OrderFlow.progress(o.status, shopType: o.shopType),
+            GoldStatusRibbon(progress: OrderFlow.progress(shownStatus(o), shopType: o.shopType),
                              pulsing: OrderFlow.isEnRoute(o.status),
-                             cancelled: OrderFlow.isCancelled(o.status))
+                             cancelled: OrderFlow.isCancelled(shownStatus(o)))
                 .padding(.bottom, YMSpace.lg)
 
             // Предзаказ (П-24 №7): время, к которому готовить/доставить. ETA у
@@ -698,14 +738,16 @@ struct OrderDetailView: View {
                     .padding(.bottom, YMSpace.md)
             }
 
-            if OrderFlow.isCancelled(o.status) {
+            if OrderFlow.isCancelled(shownStatus(o)) {
                 HStack(spacing: YMSpace.sm) {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(YMColor.statusCancel)
-                    Text(o.shopType == "lodging" ? "Бронь отменена" : "Заказ отменён")
+                    // А115: бронь, отмеченная «Незаезд», — так и пишем.
+                    Text(stayCode(o) == "no_show" ? "Незаезд"
+                         : (o.shopType == "lodging" ? "Бронь отменена" : (o.shopType == "service" ? "Запись отменена" : "Заказ отменён")))
                         .font(YMFont.headline).foregroundStyle(YMColor.statusCancel)
                 }
             } else {
-                let current = OrderFlow.stepIndex(o.status)
+                let current = OrderFlow.stepIndex(shownStatus(o))
                 // П-25 №4: незнакомый код статуса — подпись сервера (status_title),
                 // иначе все шаги серые и непонятно, что с заказом.
                 if current < 0, let t = o.statusTitle?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
@@ -746,6 +788,8 @@ struct OrderDetailView: View {
     /// Подпись шага: серверная из status_timeline (словами типа организации),
     /// иначе свой словарь. Самовывоз — «Выполнен», а не «Доставлен».
     private func stepTitle(_ key: String, o: OrderDetail, noCourier: Bool) -> String {
+        // А115: статус самой брони важнее подписи статуса заказа.
+        if let t = stayStepTitle(key, o: o) { return t }
         if let t = o.statusTimeline?.step(key)?.title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
         // А64: бронь жилья — свои слова («Завершена», а не «Выполнен»).
         if o.shopType == "lodging" { return OrderFlow.stepTitle(key, shopType: "lodging") }

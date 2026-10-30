@@ -118,7 +118,8 @@ enum OrderStatus {
         if isHandover(shopType: shopType, deliveryType: deliveryType), let h = handoverLabel(s) { return h }
         switch s {
         case "new", "pending": return "Новый"
-        case "accepted": return "Принят"
+        // А109: запись на услугу «подтверждена», а не «принят» (как status_title сервера).
+        case "accepted": return shopType == "service" ? "Подтверждена" : "Принят"
         case "preparing", "cooking":
             switch shopType {
             case "cafe":    return "Готовится"
@@ -138,7 +139,7 @@ enum OrderStatus {
         case "in_delivery", "delivering": return "В пути"
         case "done", "delivered", "completed":
             return shopType == "service" ? "Завершена" : "Выполнен"
-        case "cancelled", "canceled": return "Отменён"
+        case "cancelled", "canceled": return shopType == "service" ? "Отменена" : "Отменён"
         default:
             if let t = title?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
             return s ?? "—"
@@ -173,6 +174,20 @@ enum OrderStatus {
         case "done":      return "Завершена"
         case "cancelled": return "Отменена"
         default:          return nil
+        }
+    }
+
+    /// А115 (П-60 №8): подпись по статусу самой брони (`stay.status` карточки
+    /// заказа). Мгновенная бронь уже confirmed, хотя заказ ещё new. pending и
+    /// незнакомые коды — nil: тогда подпись по статусу заказа, как раньше.
+    static func stayLabel(_ s: String?) -> String? {
+        switch (s ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "confirmed":            return "Подтверждена"
+        case "checked_in":           return "Заселены"
+        case "checked_out":          return "Выехали"
+        case "cancelled", "canceled": return "Отменена"
+        case "no_show":              return "Незаезд"
+        default:                     return nil
         }
     }
 }

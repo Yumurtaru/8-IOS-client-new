@@ -90,27 +90,42 @@ struct APIErr: Decodable {
     /// П-27.14: машинный код ошибки v1 (`idempotency_in_progress`,
     /// `idempotency_key_reused`…). Нет — nil, всё как раньше.
     let code: String?
-    init(message: String?, details: [String: String]? = nil, code: String? = nil) {
+    /// А114: что нужно прислать («password», «new_email») — рядом с message,
+    /// а не в details (v1NeedErr). Нет — nil.
+    let need: String?
+    /// А114: исправленный адрес при 422 email_invalid («ivan@gmail.com»);
+    /// null у неживого адреса — nil.
+    let suggestion: String?
+    init(message: String?, details: [String: String]? = nil, code: String? = nil,
+         need: String? = nil, suggestion: String? = nil) {
         self.message = message
         self.details = details
         self.code = code
+        self.need = need
+        self.suggestion = suggestion
     }
     init(from decoder: Decoder) throws {
         if let s = try? decoder.singleValueContainer().decode(String.self) {
             self.message = s
             self.details = nil
             self.code = nil
+            self.need = nil
+            self.suggestion = nil
         } else if let c = try? decoder.container(keyedBy: CodingKeys.self) {
             self.message = try? c.decode(String.self, forKey: .message)
             self.details = try? c.decode([String: String].self, forKey: .details)
             self.code = try? c.decode(String.self, forKey: .code)
+            self.need = try? c.decode(String.self, forKey: .need)
+            self.suggestion = try? c.decode(String.self, forKey: .suggestion)
         } else {
             self.message = nil
             self.details = nil
             self.code = nil
+            self.need = nil
+            self.suggestion = nil
         }
     }
-    private enum CodingKeys: String, CodingKey { case message, details, code }
+    private enum CodingKeys: String, CodingKey { case message, details, code, need, suggestion }
 }
 
 /// Журнал ошибок разбора ответа: Console.app / Xcode, категория «decode».
@@ -405,6 +420,10 @@ struct ProductDetail: Codable, Identifiable {
     /// А65: категория товара выключена продавцом — товар недоступен (сервер
     /// ставит и stopped, флаг читаем на случай расхождения). Нет поля — nil.
     @LenientBool var categoryOff: Bool?
+    /// А428: закончился у магазина, который не продаёт в минус (или набор с
+    /// остановленным компонентом) — «Закончился»; сервер тогда ставит и stopped.
+    /// Нет поля (старый сервер) — nil, как раньше.
+    @LenientBool var outOfStock: Bool?
 }
 struct ModifierGroup: Codable, Identifiable {
     let id: Int; let name: String?; let type: String?; @LenientBool var isRequired: Bool?
@@ -417,7 +436,12 @@ struct MediaPhoto: Codable, Hashable { let pathWebp: String? }
 // сканирует в магазине. Сервер выдаёт его при первом открытии профиля и больше
 // не меняет. Старый сервер поля не отдаёт — остаётся nil, блок не рисуется.
 // avatar — путь к фото профиля (api_v1.php:1652), паритет с Android; nil — нет фото.
-struct Profile: Codable { @LenientInt var id: Int?; let name: String?; let phone: String?; let email: String?; @LenientDouble var bonusBalance: Double?; let clientCode: String?; let avatar: String? }
+struct Profile: Codable { @LenientInt var id: Int?; let name: String?; let phone: String?; let email: String?; @LenientDouble var bonusBalance: Double?; let clientCode: String?; let avatar: String?
+    /// А114: почта подтверждена кодом (true / false; null — почты нет или старый сервер).
+    @LenientBool var emailVerified: Bool?
+    /// А114: письма на почту не доходят — null | "typo" | "undeliverable". Старый сервер — nil.
+    var emailProblem: String? = nil
+}
 struct Address: Codable, Identifiable {
     let id: Int; let label: String?; let city: String?; let street: String?; let house: String?
     let apartment: String?; let entrance: String?; let floor: String?; let intercom: String?
@@ -508,12 +532,20 @@ struct OrderItem: Codable, Identifiable {
     @LenientDouble var qtyOrdered: Double?
     @LenientDouble var price: Double?
     let unit: String?
+    /// А115 (П-60 №7), только GET api/v1/orders/{id}, строкой «0.000»:
+    /// return_qty — уже одобренный возврат, return_pending_qty — в заявке,
+    /// ждущей решения магазина, returnable_qty — сколько ещё можно вернуть
+    /// (максимум в форме возврата). nil — старый сервер, тогда как раньше.
+    @LenientDouble var returnQty: Double?
+    @LenientDouble var returnPendingQty: Double?
+    @LenientDouble var returnableQty: Double?
 
     // Ключи камелкейсом: декодер работает с .convertFromSnakeCase, он уже
     // превратил product_id → productId. Явно переименовываем только id → lineId.
     enum CodingKeys: String, CodingKey {
         case lineId = "id"
         case productId, name, qty, qtyOrdered, price, unit
+        case returnQty, returnPendingQty, returnableQty
     }
 
     var id: Int { lineId ?? ((productId ?? 0) &* 100000 &+ Int((qty ?? 0).rounded())) }
@@ -592,6 +624,51 @@ struct OrderDetail: Codable, Identifiable {
     /// «Сдача с …» — то, что клиент указал при оплате наличными (change_from).
     /// GET api/v1/orders/{id} отдаёт o.*, поле payment_note (api_v1.php). nil — не указано.
     let paymentNote: String?
+    /// А115 (П-60 №8): бронь жилья (orderStayInfo). null у обычного заказа и у
+    /// старого сервера — тогда как раньше. Битое поле карточку не роняет.
+    let stay: OrderStay?
+}
+/// `stay` карточки заказа: {date_from, date_to, nights, adults, children, unit,
+/// check_in_from, check_out_until, status}. status — статус самой брони:
+/// pending / confirmed / checked_in / checked_out / cancelled / no_show
+/// (мгновенная бронь уже confirmed, хотя заказ ещё new). Разбор терпимый:
+/// любое поле может отсутствовать, не тот тип — nil, а не ошибка карточки.
+struct OrderStay: Codable {
+    var dateFrom: String?
+    var dateTo: String?
+    var nights: Int?
+    var adults: Int?
+    var children: Int?
+    var unit: String?
+    var checkInFrom: String?
+    var checkOutUntil: String?
+    var status: String?
+
+    private enum CodingKeys: String, CodingKey {
+        case dateFrom, dateTo, nights, adults, children, unit, checkInFrom, checkOutUntil, status
+    }
+    init(from decoder: Decoder) throws {
+        guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
+        func str(_ k: CodingKeys) -> String? { (try? c.decodeIfPresent(String.self, forKey: k)) ?? nil }
+        func int(_ k: CodingKeys) -> Int? { ((try? c.decodeIfPresent(LenientInt.self, forKey: k)) ?? nil)?.wrappedValue }
+        dateFrom = str(.dateFrom); dateTo = str(.dateTo)
+        nights = int(.nights); adults = int(.adults); children = int(.children)
+        unit = str(.unit); checkInFrom = str(.checkInFrom); checkOutUntil = str(.checkOutUntil)
+        status = str(.status)
+    }
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(dateFrom, forKey: .dateFrom); try c.encodeIfPresent(dateTo, forKey: .dateTo)
+        try c.encodeIfPresent(nights, forKey: .nights); try c.encodeIfPresent(adults, forKey: .adults)
+        try c.encodeIfPresent(children, forKey: .children); try c.encodeIfPresent(unit, forKey: .unit)
+        try c.encodeIfPresent(checkInFrom, forKey: .checkInFrom); try c.encodeIfPresent(checkOutUntil, forKey: .checkOutUntil)
+        try c.encodeIfPresent(status, forKey: .status)
+    }
+    /// Код статуса брони в нижнем регистре; пусто — nil.
+    var statusCode: String? {
+        let s = (status ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return s.isEmpty ? nil : s
+    }
 }
 /// Шаг `status_timeline`: {code, title, at}.
 struct OrderTimelineStep: Codable {
@@ -898,12 +975,16 @@ struct AdSaveBody: Encodable {
     // профиля, и объявление о гараже в соседнем городе туда положить было
     // нельзя — при том что фильтр по городу в ленте есть.
     let cityId: Int?
+    /// А485: 1 — создание с явным «Не указан» (cityId пустой): сервер не подставит
+    /// город профиля. nil — ключ не уходит (как раньше). Старый сервер флаг не читает.
+    var cityNone: Int? = nil
 
     // Явная запись полей: синтезированный Encodable выкидывает nil, а сервер
     // меняет поле, только если ключ пришёл. Очищенный адрес и «состояние не
     // указано» при правке раньше не сохранялись, хотя экран писал «Сохранено».
     enum CodingKeys: String, CodingKey {
         case categoryId, title, description, price, isNegotiable, conditionNew, address, contactPhone, hidePhone, cityId
+        case cityNone
     }
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
@@ -919,6 +1000,7 @@ struct AdSaveBody: Encodable {
         // Город: при правке «Не указан» приходит сюда как 0 (сервер пишет NULL),
         // при создании nil — ключ не уходит, сервер подставит город из профиля.
         try c.encodeIfPresent(cityId, forKey: .cityId)
+        try c.encodeIfPresent(cityNone, forKey: .cityNone)
     }
 }
 struct AdCreatedResponse: Codable {
@@ -1201,7 +1283,25 @@ struct Review: Codable, Identifiable {
 
 // ---- Тела запросов (camelCase -> snake_case автоматически) ----
 struct NotifReadBody: Encodable { let ids: [Int] }
-struct ReturnCreateBody: Encodable { let orderId: Int; let type: String; let reasonCode: String; let reasonText: String? }
+/// items — А111: частичный возврат по количеству (type = "partial"): [{item_id, qty}],
+/// qty дробное у весовых (core/helpers.php returnBuild). nil — возврат всего заказа.
+struct ReturnCreateBody: Encodable { let orderId: Int; let type: String; let reasonCode: String; let reasonText: String?
+    var items: [ReturnLineBody]? = nil }
+/// А111: строка частичного возврата — order_items.id и сколько вернуть.
+struct ReturnLineBody: Encodable { let itemId: Int; let qty: Double }
+/// А111: GET api/profile/returns/{id} (маршрут сайта, конверт {ok, data}, Bearer).
+/// order_number — номер заказа как в «Моих заказах»; items — что возвращают
+/// (name, qty, price строкой). Старый сервер полей не шлёт — nil.
+struct ReturnDetail: Decodable {
+    @LenientInt var orderNumber: Int?
+    let type: String?
+    let items: [ReturnDetailLine]?
+}
+struct ReturnDetailLine: Decodable {
+    let name: String?
+    @LenientDouble var qty: Double?
+    @LenientDecimal var price: Decimal?
+}
 /// Адрес визита для выездной услуги — тело POST api/v1/appointments.
 ///
 /// Форма ровно та, которую ждёт сервер (core/helpers.php: normalizeVisitAddress):

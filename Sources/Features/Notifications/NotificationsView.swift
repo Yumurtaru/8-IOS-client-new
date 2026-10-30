@@ -224,7 +224,9 @@ private struct NotifTarget {
         if type == "pool_parcel", let id = positiveInt(d["call_id"]) { return .parcel(id) }
         if type == "order_chat", let id = positiveInt(d["order_id"]) { return .chat(id) }
         if let id = positiveInt(d["order_id"]) { return .order(id) }
-        if type.isEmpty, let pid = positiveInt(d["product_id"]) { return .product(pid) }
+        // А516: у «цена снизилась» / «снова в наличии» теперь есть type — product_id тот же.
+        if type.isEmpty || type == "price_alert" || type == "waitlist",
+           let pid = positiveInt(d["product_id"]) { return .product(pid) }
         // wallet_topup без data — строки ленты до появления screen=wallet.
         if screen == "wallet" || feedType == "wallet_topup" { return .wallet }
         if type == "support", let id = positiveInt(d["ticket_id"]) { return .ticket(id) }

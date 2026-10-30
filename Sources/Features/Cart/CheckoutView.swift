@@ -73,12 +73,19 @@ private struct OrderBody: Codable {
     /// change_from). Сервер принимает поле (api_v1.php, payment_note), а
     /// приложение его не слало. nil — в JSON не попадает.
     var changeFrom: String? = nil
+    /// А113: сумма товаров, которую видел человек («1234.00»): до скидок, с
+    /// добавками, без доставки и чаевых — то же число, что subtotal пересчёта
+    /// корзины на сервере. Разошлась с ценами магазина — 409 price_changed, заказ
+    /// не создан. nil (сумма не сверена с сервером) — в JSON не попадает, как раньше.
+    /// В отпечаток повтора сервер её не включает: старое тело в PendingOrder
+    /// без поля читается, повтор тем же ключом допустим.
+    var expectedSubtotal: String? = nil
     enum CodingKeys: String, CodingKey {
         case shopId = "shop_id", items, deliveryType = "delivery_type", paymentType = "payment_type",
              address, comment, deliveryPrice = "delivery_price", lat, lng,
              spendPointsAll = "spend_points_all", idempotencyKey = "idempotency_key",
              tableNumber = "table_number", promoCode = "promo_code", preorderAt = "preorder_at",
-             changeFrom = "change_from"
+             changeFrom = "change_from", expectedSubtotal = "expected_subtotal"
     }
 }
 /// Ответ POST api/v1/promo/check.
@@ -227,6 +234,9 @@ struct CheckoutView: View {
     /// прежнего состояния: сняли «Оплатить баллами» — кнопка ещё показывала сумму
     /// со списанием, а сервер брал полную. Кнопку держим до ответа.
     @State private var promoPending = false
+    /// А113: состав корзины («ключ×кол-во»), по которому посчитан promo. Сумма
+    /// товаров уходит в заказ как expected_subtotal, только если совпадает с текущим.
+    @State private var promoFor: String?
     @State private var showAddAddress = false
     // «За столик»: номер стола уходит в заказ (раньше не отправлялся вовсе).
     @State private var tableNumber = ""
@@ -258,6 +268,20 @@ struct CheckoutView: View {
         return nil
     }
     private var subtotal: Decimal { Money.parse(serverGoods ?? cart.total) }
+
+    /// Состав корзины без цен: «ключ строки × количество».
+    private var cartSig: String { cart.lines.map { "\($0.key)x\($0.qty)" }.joined(separator: ";") }
+
+    /// А113: expected_subtotal для POST /api/v1/orders — сумма товаров по серверу
+    /// (cartRecompute: (цена + добавки) × кол-во, округление по строке, до скидок,
+    /// без доставки и чаевых — так же считает создание заказа). Только свежий
+    /// пересчёт ровно этого состава; пересчёта нет, он идёт или в корзине есть
+    /// недоступные строки (их сумма не учитывает) — поле не шлём.
+    private var expectedSubtotalWire: String? {
+        guard !promoPending, let p = promo, promoFor == cartSig, p.cartHasIssues != true,
+              let s = p.subtotal, s > 0 else { return nil }
+        return Money.wire(Money.parse(s))
+    }
 
     // Стоимость доставки — ТОЛЬКО из серверного расчёта по адресу. До адреса / при
     // недоступности / для самовывоза-и-стола → 0.
@@ -339,6 +363,7 @@ struct CheckoutView: View {
         promoTask?.cancel()
         guard let sid = cart.shopId, !cart.isEmpty else { promo = nil; promoPending = false; return }
         promoPending = true
+        let sig = cartSig
         let body = PromoPreviewRequest(
             shopId: sid,
             items: cart.lines.map { PromoCartItem(productId: $0.productId, qty: $0.qty, modifiers: $0.modifierIds) },
@@ -357,6 +382,7 @@ struct CheckoutView: View {
             if Task.isCancelled { return }
             await MainActor.run {
                 promo = r
+                promoFor = r == nil ? nil : sig
                 promoPending = false
                 reconcilePrices(r)
                 // Списывать нечего — тумблер сам гаснет.
@@ -1403,7 +1429,8 @@ struct CheckoutView: View {
             promoCode: appliedCode,
             preorderAt: needTime ? preorderAt : nil,
             // Только для наличных и только непустое — как сайт (change_from || null).
-            changeFrom: payment == .cash && !changeDigits.isEmpty ? changeDigits : nil
+            changeFrom: payment == .cash && !changeDigits.isEmpty ? changeDigits : nil,
+            expectedSubtotal: expectedSubtotalWire
         )
 
         // AT-3: тело и ключ — в корзину (на диск) ДО запроса; что ушло — для
@@ -1466,6 +1493,21 @@ struct CheckoutView: View {
                     if keep { cart.markOrderUnknown(key: key) } else { cart.dropPendingOrder(key: key) }
                     errorText = error.localizedDescription
                     placing = false
+                    let api = error as? APIError
+                    if api?.isOrderPriceChanged == true {
+                        // А113: цены в магазине изменились — заказ НЕ создан (сервер
+                        // проверяет сумму до записи). Текст сервера уже на экране;
+                        // перечитываем пересчёт и цены строк заново, корзина
+                        // обновится, итог и новая сумма уйдут при следующем нажатии.
+                        // Ключ не трогаем: сервер его не занял.
+                        pricesCheckedFor = nil
+                        refreshPromo()
+                    } else if api?.idempotencyCode == "idempotency_key_reused" {
+                        // А113: тем же ключом уже оформлен заказ с другим составом.
+                        // Текст сервера показан; следующий «Оформить» — с новым ключом,
+                        // иначе каждое нажатие получало бы тот же отказ.
+                        cart.renewCheckoutKey(ifCurrent: key)
+                    }
                 }
             }
         }
