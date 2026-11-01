@@ -223,6 +223,12 @@ struct Shop: Codable, Identifiable, Hashable {
     @LenientBool var freeDelivery: Bool?
     @LenientDouble var avgCheck: Double?
     @LenientDouble var distanceKm: Double?
+    /// Пауза приёма (сервер А719, аддитивно; в избранном): paused — приём сейчас
+    /// остановлен, pauseUntil — "ГГГГ-ММ-ДД ЧЧ:ММ:СС" по Москве или nil (бессрочно),
+    /// pauseReason — текст продавца. Нет ключей (старый сервер) — nil = не на паузе.
+    @LenientBool var paused: Bool?
+    var pauseUntil: String?
+    var pauseReason: String?
 }
 // Категория организации (магазин/услуга). Ключи snake_case декодируются авто-конвертером — CodingKeys НЕ добавляем.
 struct OrgCategory: Codable, Identifiable, Hashable {
@@ -328,6 +334,12 @@ struct ShopDetail: Codable, Identifiable {
     /// Адрес и пояснение самовывоза; адрес null — забирать по адресу заведения.
     let pickupAddress: String?
     let pickupComment: String?
+    /// Пауза приёма (сервер А719, аддитивно): на паузе is_open = false, а statusText =
+    /// «Заведение временно не принимает заказы до 18:30». Заказ в это время сервер
+    /// отклоняет (409, error.code = "paused"). Нет ключей (старый сервер) — nil.
+    @LenientBool var paused: Bool?
+    var pauseUntil: String?
+    var pauseReason: String?
 }
 /// День графика заведения: open/close — "HH:MM[:SS]" или nil (часы не заданы).
 struct ScheduleDay: Codable, Hashable {

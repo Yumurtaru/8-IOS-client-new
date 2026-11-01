@@ -293,7 +293,10 @@ struct CheckoutView: View {
 
     // Итоги: если сервер посчитал акции — используем ЕГО числа, иначе прежний
     // локальный расчёт (старый сервер, обрыв связи — оформление не блокируем).
-    private var freeDelivery: Bool { promo?.freeDelivery == true || (appliedCode != nil && codeFree) }
+    // А719: сервер обнуляет доставку при Plus и промокоде на бесплатную доставку (delivery_free_by) —
+    // как заказ; итог на экране считаем так же.
+    private var freeBy: String? { DeliveryFree.by(promo?.deliveryFreeBy) }
+    private var freeDelivery: Bool { promo?.freeDelivery == true || (appliedCode != nil && codeFree) || freeBy != nil }
     private var effectiveDelivery: Decimal { freeDelivery ? 0 : deliveryCost }
     private var promoDiscount: Decimal { Money.parse(promo?.discount ?? 0) }
     private var pointsSpent: Decimal { Money.parse(promo?.pointsSpent ?? 0) }
@@ -465,7 +468,11 @@ struct CheckoutView: View {
 
     /// Заведение закрыто прямо сейчас (считает сервер — часы работы заданы его
     /// временем, а не временем телефона).
-    private var shopClosed: Bool { shop?.isOpen == false }
+    private var shopClosed: Bool { shop?.isOpen == false && !shopPaused }
+
+    /// Пауза приёма (сервер А719): заведение видно, но заказ — в т.ч. предзаказ — сервер
+    /// отклоняет (409 paused). is_open при этом false, но предзаказ не предлагаем.
+    private var shopPaused: Bool { ShopPause.isPaused(shop?.paused) }
 
     /// Нужно ли время: закрыто (предзаказ) или выбрано «Ко времени».
     private var needTime: Bool { shopClosed || byTime }
@@ -493,7 +500,7 @@ struct CheckoutView: View {
     private var ctaEnabled: Bool {
         // Заведение закрыто — заказ уходит предзаказом (preorder_at); без
         // выбранного времени сервер откажет, поэтому кнопка ждёт выбора.
-        !placing && !cart.isEmpty && !outOfZone && !noAddress && !belowMin && !quoteMissing
+        !placing && !cart.isEmpty && !shopPaused && !outOfZone && !noAddress && !belowMin && !quoteMissing
             && (!needTime || preorderValid)
             && (cart.shopSlug == nil || shop != nil) && !promoPending
             && !fulfillmentNone && !paymentNone && !tableMissing
@@ -510,6 +517,7 @@ struct CheckoutView: View {
         if cart.shopSlug != nil && shop == nil {
             return shopLoadError == nil ? nil : "Не удалось загрузить условия заведения — нажмите на сообщение вверху"
         }
+        if shopPaused { return ShopPause.title(statusText: shop?.statusText, until: shop?.pauseUntil) }
         // П-27.1: причины из настроек заведения (сервер отказал бы на последнем
         // шаге) — первыми: иначе под кнопкой стояла бы подсказка про адрес.
         if fulfillmentNone { return "Заведение сейчас не принимает заказы через приложение" }
@@ -683,7 +691,11 @@ struct CheckoutView: View {
                 }
                 // «Когда» — как на сайте: как можно скорее или ко времени (день и
                 // время в часы работы). Закрыто — только ко времени (предзаказ).
-                if shop != nil {
+                if shopPaused {
+                    ShopPauseBanner(title: ShopPause.title(statusText: shop?.statusText, until: shop?.pauseUntil),
+                                    reason: ShopPause.reason(shop?.pauseReason))
+                        .padding(.top, YMSpace.md)
+                } else if shop != nil {
                     whenSection.padding(.top, YMSpace.md)
                 }
                 if fulfillment == .delivery {
@@ -1110,7 +1122,8 @@ struct CheckoutView: View {
     }
 
     private var deliveryLabel: String {
-        if freeDelivery { return "бесплатно" }
+        // А719: «Бесплатно — Plus» / «Бесплатно по промокоду» — если сервер сказал, чем.
+        if freeDelivery { return DeliveryFree.label(freeBy) ?? "бесплатно" }
         guard let q = quote else { return "уточняется" }
         if !q.available { return "недоступна" }
         return deliveryCost <= 0 ? "бесплатно" : Money.format(deliveryCost)
@@ -1502,6 +1515,12 @@ struct CheckoutView: View {
                         // Ключ не трогаем: сервер его не занял.
                         pricesCheckedFor = nil
                         refreshPromo()
+                    } else if api?.rejectStatus == 409 && api?.errorCode == ShopPause.errCode {
+                        // 409 paused (сервер А719): заведение поставило приём на паузу, пока
+                        // человек оформлял. Текст сервера («…не принимает заказы до 18:30») уже
+                        // на экране, корзину не трогаем; карточка перечитывается — плашка
+                        // и блок «Оформить».
+                        if let slug = cart.shopSlug { Task { await loadShop(slug) } }
                     } else if api?.idempotencyCode == "idempotency_key_reused" {
                         // А113: тем же ключом уже оформлен заказ с другим составом.
                         // Текст сервера показан; следующий «Оформить» — с новым ключом,
@@ -1527,7 +1546,8 @@ struct CheckoutView: View {
         switch a {
         case .unauthorized, .guestNeedsLogin, .notConnected: return true
         case .rejected(let status, let message, _):
-            return status == 429 || (status == 422 && message == "Магазин недоступен")
+            // А719: машинный код shop_unavailable; текст — запасной путь для старого сервера.
+            return status == 429 || (status == 422 && (a.errorCode == "shop_unavailable" || message == "Магазин недоступен"))
         default: return false
         }
     }

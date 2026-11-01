@@ -143,6 +143,9 @@ final class OrderDetailViewModel: ObservableObject {
     /// Отзыв: POST api/v1/reviews {order_id, rating, text}. Контракт 1:1 с Android createReview.
     func sendReview(rating: Int, text: String) async {
         guard !actionBusy else { return }
+        // Сервер (А719) отклоняет отзыв без оценки или с оценкой < 1 (422 «Поставьте оценку от 1 до 5»):
+        // 0 и «без оценки» в запрос не отправляем.
+        guard (1...5).contains(rating) else { Haptics.warning(); toast = "Поставьте оценку от 1 до 5"; return }
         actionBusy = true; defer { actionBusy = false }
         // Пробелы и пустые строки по краям не отправляем: «   » уходило отзывом-пустышкой.
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)

@@ -372,6 +372,9 @@ final class API {
             // (например {"message":"Server Error"}) не должна стать «успехом».
             if (200..<300).contains(status), env.data == nil, T.self == EmptyResp.self,
                let empty = EmptyResp() as? T { return empty }
+            // DELETE /account: data без тела — тоже успех (как у EmptyResp), остатка нет.
+            if (200..<300).contains(status), env.data == nil, T.self == AccountDeleteResult.self,
+               let empty = AccountDeleteResult() as? T { return empty }
             if !(200..<300).contains(status), env.data == nil {
                 if status >= 500 { throw APIError.http(status) }
                 // П-23: 4xx без текста — тоже с кодом (409 у отзыва на старом сервере).
@@ -612,6 +615,10 @@ final class API {
     }
 
     func deleteVoid(_ path: String) async throws { _ = try await send(try makeRequest("DELETE", path), as: EmptyResp.self) }
+    /// DELETE /api/v1/account → deleted + wallet_left (остаток кошелька, А719).
+    func deleteAccount() async throws -> AccountDeleteResult {
+        try await send(try makeRequest("DELETE", "api/v1/account"), as: AccountDeleteResult.self)
+    }
     func putVoid(_ path: String, body: Encodable? = nil) async throws { _ = try await send(try makeRequest("PUT", path, body: body), as: EmptyResp.self) }
 }
 

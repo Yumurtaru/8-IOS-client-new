@@ -90,6 +90,12 @@ struct ProfileView: View {
     @State private var showLogoutConfirm = false
     @State private var showDeleteConfirm = false
     @State private var deleteError: String?
+    /// Остаток на кошельке перед удалением (А719): предупреждение в окне подтверждения.
+    /// Баланс читаем до показа окна; ошибка/таймаут чтения удаление не блокирует.
+    @State private var deleteWalletNote: String?
+    @State private var checkingWallet = false
+    /// Сообщение после удаления (wallet_left): профиль уже показывает «Вы не вошли».
+    @State private var deleteDoneNote: String?
     /// Удаление аккаунта в полёте: повторное «Удалить» слало второй DELETE
     /// (уже без сессии — 401), а итог первого терялся.
     @State private var deleting = false
@@ -244,6 +250,8 @@ struct ProfileView: View {
                             isPresented: $showDeleteConfirm, titleVisibility: .visible) {
             Button("Удалить аккаунт", role: .destructive) { deleteAccount() }
             Button("Отмена", role: .cancel) {}
+        } message: {
+            if let n = deleteWalletNote { Text(n) }
         }
         .alert("Аккаунт не удалён", isPresented: Binding(
             get: { deleteError != nil }, set: { if !$0 { deleteError = nil } }
@@ -251,6 +259,14 @@ struct ProfileView: View {
             Button("Понятно", role: .cancel) { deleteError = nil }
         } message: {
             Text(deleteError ?? "")
+        }
+        // Остаток после удаления — окном, а не тостом: фраза длинная, тост гаснет за 2,5 с.
+        .alert("Аккаунт удалён", isPresented: Binding(
+            get: { deleteDoneNote != nil }, set: { if !$0 { deleteDoneNote = nil } }
+        )) {
+            Button("Понятно", role: .cancel) { deleteDoneNote = nil }
+        } message: {
+            Text(deleteDoneNote ?? "")
         }
     }
 
@@ -562,12 +578,13 @@ struct ProfileView: View {
 
     // ── Удаление аккаунта ──
     private var deleteAccountButton: some View {
-        Button { if !deleting { showDeleteConfirm = true } } label: {
-            Text(deleting ? "Удаляем аккаунт…" : "Удалить аккаунт")
+        Button { if !deleting { askDeleteAccount() } } label: {
+            // Пока читаем баланс (до 4 с) — «Проверяем…», чтобы не жали второй раз.
+            Text(deleting ? "Удаляем аккаунт…" : (checkingWallet ? "Проверяем…" : "Удалить аккаунт"))
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(YMColor.statusCancel)
         }
-        .disabled(deleting)
+        .disabled(deleting || checkingWallet)
         .padding(.top, YMSpace.xl)
     }
 
@@ -624,6 +641,34 @@ struct ProfileView: View {
         }
     }
 
+    /// Перед окном подтверждения читаем баланс кошелька (существующая ручка GET api/v1/wallet,
+    /// не дольше 4 с): остаток предупреждаем, но сбой чтения удалению не мешает
+    /// (App Store требует, чтобы удаление было доступно всегда).
+    private func askDeleteAccount() {
+        guard !deleting, !checkingWallet else { return }
+        checkingWallet = true
+        Task {
+            let balance: Decimal? = await withTaskGroup(of: Decimal?.self) { group -> Decimal? in
+                group.addTask {
+                    let w: WalletInfo? = try? await API.shared.get("api/v1/wallet")
+                    return w?.balance
+                }
+                group.addTask {
+                    try? await Task.sleep(nanoseconds: 4_000_000_000)
+                    return nil
+                }
+                let first: Decimal? = (await group.next()) ?? nil
+                group.cancelAll()
+                return first
+            }
+            await MainActor.run {
+                deleteWalletNote = AccountDelete.walletWarning(balance)
+                checkingWallet = false
+                showDeleteConfirm = true
+            }
+        }
+    }
+
     private func deleteAccount() {
         // TODO(API): эндпоинт удаления аккаунта (напр. DELETE api/v1/profile) в контракте
         // ещё не подтверждён. Пока — graceful: пытаемся вызвать, при отсутствии просто выходим.
@@ -639,10 +684,14 @@ struct ProfileView: View {
             // деньги на балансе) или нет сети, а человека молча разлогинивало,
             // и он считал аккаунт удалённым.
             do {
-                try await API.shared.deleteVoid("api/v1/account")
+                let res = try await API.shared.deleteAccount()
                 // А108: сервер удалил установки человека — дальше новый id установки.
                 InstallInfo.renewDeviceId()
-                await MainActor.run { deleting = false; session.signOut(clearLocalData: true); AuthLastUser.forget(); profile = nil }
+                await MainActor.run {
+                    deleting = false; session.signOut(clearLocalData: true); AuthLastUser.forget(); profile = nil
+                    // wallet_left (А719): остаток не пропал — вернут по заявке; говорим об этом после выхода.
+                    if let note = AccountDelete.walletLeftNote(res.walletLeft) { deleteDoneNote = note }
+                }
             } catch {
                 let msg = (error as? LocalizedError)?.errorDescription ?? "Не удалось удалить аккаунт"
                 await MainActor.run { deleting = false; deleteError = msg }

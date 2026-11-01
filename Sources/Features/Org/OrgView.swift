@@ -378,16 +378,25 @@ struct OrgView: View {
                         .font(.system(size: 25, weight: .heavy))
                         .foregroundStyle(YMColor.text)
                         .lineLimit(2)
-                    StatusPill(text: isOpen ? "Открыто" : "Закрыто",
-                               kind: isOpen ? .open : .cancel, solid: false)
+                    // Пауза приёма (сервер А719): is_open уже false, но «Закрыто» неверно —
+                    // заведение работает, просто не берёт заказы.
+                    StatusPill(text: isPaused ? "На паузе" : (isOpen ? "Открыто" : "Закрыто"),
+                               kind: (isOpen && !isPaused) ? .open : .cancel, solid: false)
                 }
                 Spacer(minLength: 0)
             }
             .padding(.top, 20)
 
+            // Пауза приёма: вместо «Сейчас закрыто» и предзаказа — плашка с текстом сервера
+            // и причиной; предзаказ при паузе сервер тоже отклонит (409 paused).
+            if isPaused, let d = vm.detail {
+                ShopPauseBanner(title: ShopPause.title(statusText: d.statusText, until: d.pauseUntil),
+                                reason: ShopPause.reason(d.pauseReason))
+                    .padding(.top, 12)
+            }
             // Баннер нерабочего времени: «Сейчас закрыто. Откроется <день> в <время>».
             // Корзину собрать можно, оформить — предзаказом ко времени работы.
-            if !isOpen {
+            else if !isOpen {
                 ClosedBanner(opensLabel: OrgHours.nextOpenLabel(vm.detail?.hours), preorder: !vm.isService)
                     .padding(.top, 12)
             }
@@ -811,6 +820,9 @@ struct OrgView: View {
     }
 
     // MARK: Derived
+
+    /// Пауза приёма заведения (поле карточки; нет ключа — не пауза).
+    private var isPaused: Bool { ShopPause.isPaused(vm.detail?.paused) }
 
     /// Открыто ли сейчас.
     ///

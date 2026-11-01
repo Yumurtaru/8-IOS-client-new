@@ -60,6 +60,8 @@ struct PromoPreview: Codable {
     /// А113: в корзине есть строки, которые нельзя заказать (нет в наличии,
     /// добавки недоступны) — subtotal тогда без них. Старый сервер — nil.
     let cartHasIssues: Bool?
+    /// А719: чем доставка стала бесплатной — "plus" | "code" | nil. Нет поля — старый сервер.
+    let deliveryFreeBy: String?
 }
 
 /* AT-2: POST /api/cart/validate (routes/cart.php → cartRecompute, конверт сайта

@@ -1001,7 +1001,10 @@ private struct FavOrgCard: View {
     @Binding var isFav: Bool
     var onTap: () -> Void = {}
 
-    private var isOpen: Bool { shop.isOpen ?? true }
+    /// Пауза приёма (сервер А719, поля paused / pause_until / pause_reason): заведение
+    /// остаётся в избранном; вместо «Закрыто» — «На паузе» и срок строкой ниже.
+    private var isPaused: Bool { ShopPause.isPaused(shop.paused) }
+    private var isOpen: Bool { (shop.isOpen ?? true) && !isPaused }
 
     private var favSubtitle: String? {
         if let c = shop.category, !c.isEmpty { return c }
@@ -1024,7 +1027,7 @@ private struct FavOrgCard: View {
                     .frame(height: 120).frame(maxWidth: .infinity).clipped()
                     .opacity(isOpen ? 1 : 0.55)   // закрытую приглушаем
                     .overlay(alignment: .topLeading) {
-                        StatusPill(text: isOpen ? "Открыто" : "Закрыто",
+                        StatusPill(text: isPaused ? "На паузе" : (isOpen ? "Открыто" : "Закрыто"),
                                    kind: isOpen ? .open : .cancel, solid: true).padding(11)
                     }
                 VStack(alignment: .leading, spacing: 4) {
@@ -1052,6 +1055,13 @@ private struct FavOrgCard: View {
                             Text(t).font(.system(size: 13)).foregroundStyle(YMColor.muted)
                         }
                     }
+                    if isPaused {
+                        Text(ShopPause.title(statusText: nil, until: shop.pauseUntil))
+                            .font(.system(size: 12.5)).foregroundStyle(YMColor.statusCancel).lineLimit(2)
+                        if let r = ShopPause.reason(shop.pauseReason) {
+                            Text(r).font(.system(size: 12.5)).foregroundStyle(YMColor.muted).lineLimit(2)
+                        }
+                    }
                 }
                 .padding(.horizontal, 15).padding(.top, 12).padding(.bottom, 14)
                 .opacity(isOpen ? 1 : 0.55)   // текст закрытой организации тоже тусклый
@@ -1061,7 +1071,7 @@ private struct FavOrgCard: View {
         }
         .buttonStyle(CardPressStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(shop.name ?? "Организация"), \(isOpen ? "открыто" : "закрыто")")
+        .accessibilityLabel("\(shop.name ?? "Организация"), \(isPaused ? "на паузе" : (isOpen ? "открыто" : "закрыто"))")
         .ymCard(radius: 20)
         // ♥ — СНАРУЖИ кнопки карточки. Внутри label это была кнопка в кнопке:
         // тап по сердечку срабатывал и на внешней кнопке, открывая карточку.
