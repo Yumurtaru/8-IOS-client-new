@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Ключи @AppStorage (единая точка правды для персистентных настроек UI).
 enum AppStorageKey {
-    static let theme     = "appearance"   // "system" | "light" | "dark"
+    static let theme     = "appearance"   // "system" | "light" | "dark"; нет значения — "light" (по умолчанию светлая)
     static let onboarded = "onboarded"
     static let cityId    = "cityId"
     static let cityName  = "cityName"
@@ -21,7 +21,7 @@ struct YumurtaApp: App {
     /// П-52: проверка «Вышла новая версия» — при запуске и каждом возврате на передний план.
     @Environment(\.scenePhase) private var scenePhase
 
-    @AppStorage(AppStorageKey.theme) private var theme = "system"
+    @AppStorage(AppStorageKey.theme) private var theme = "light"
     @AppStorage(AppStorageKey.onboarded) private var onboarded = false
 
     /// Анимация запуска. Показывается один раз за холодный старт.

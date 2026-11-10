@@ -17,6 +17,8 @@ import SwiftUI
 @MainActor
 final class AdFormViewModel: ObservableObject {
     @Published var cats: [(cat: AdCategory, label: String)] = []
+    /// Дерево рубрик целиком — для шторки выбора (разделы → подкатегории).
+    @Published var catsTree: [AdCategory] = []
     @Published var chosen: AdCategory?
     @Published var title = ""
     @Published var desc = ""
@@ -139,6 +141,7 @@ final class AdFormViewModel: ObservableObject {
         var catsFailed = false
         if let r = try? await API.shared.adCategories() {
             cats = leaves(r.categories ?? []).map { (cat: $0.0, label: $0.1) }
+            catsTree = r.categories ?? []
         } else {
             catsFailed = true
         }
@@ -449,6 +452,7 @@ final class AdFormViewModel: ObservableObject {
     func refreshPrices() async {
         if let r = try? await API.shared.adCategories() {
             cats = leaves(r.categories ?? []).map { (cat: $0.0, label: $0.1) }
+            catsTree = r.categories ?? []
             if let cid = chosen?.stableId, let fresh = cats.first(where: { $0.cat.stableId == cid })?.cat { chosen = fresh }
         }
         if adId > 0, let r = try? await API.shared.ad(adId), let a = r.ad {
@@ -467,6 +471,8 @@ struct AdFormView: View {
 
     @StateObject private var vm = AdFormViewModel()
     @State private var picked: [PhotosPickerItem] = []
+    /// Шторка выбора категории (AdCategoryPicker.swift).
+    @State private var showCatPicker = false
     /// Паритет с Android: «Не хватает денег» → «Пополнить кошелёк» открывает кошелёк.
     @State private var showWallet = false
     @Environment(\.dismiss) private var dismiss
@@ -489,6 +495,14 @@ struct AdFormView: View {
             // закрыть можно кнопкой «Закрыть».
             .interactiveDismissDisabled(vm.busy || vm.hasUnsavedText)
             .task { await vm.start(editAdId: editAdId, categoryOff: categoryOff) }
+            // Шторка — на всём экране формы, а не на строке Form: строку List может
+            // пересоздать прокрутка, и шторка на ней закрывалась бы сама.
+            .sheet(isPresented: $showCatPicker) {
+                AdCategoryPicker(cats: vm.catsTree, selectedId: vm.chosen?.stableId) { cat in
+                    // Тот же объект, что в плоском списке (цена, срок, лимит фото).
+                    vm.chosen = vm.cats.first { $0.cat.stableId == cat.stableId }?.cat ?? cat
+                }
+            }
             .navigationDestination(isPresented: $showWallet) { WalletView() }
             // Один параметр: двухпараметрический onChange — это iOS 17, а цель
             // развёртывания проекта 16.0 (project.yml), и сборка на нём падает.
@@ -525,28 +539,16 @@ struct AdFormView: View {
     private var form: some View {
         Form {
             Section("Категория") {
-                // П-26.6: рубрика закрыта — показываем её текстом, а не пустым
-                // выбором «— выберите —». Черновик (и только он) можно перенести
-                // в открытую рубрику — для него выбор ниже остаётся.
-                if vm.offCatId != nil && vm.chosen == nil {
-                    HStack {
-                        Text(vm.offCatName.isEmpty ? "Рубрика" : vm.offCatName).foregroundStyle(YMColor.text)
-                        Spacer()
-                        Text("раздел закрыт").font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
-                    }
-                }
-                if vm.offCatId == nil || vm.canChangeCategory {
-                Picker(vm.offCatId != nil ? "Перенести в рубрику" : "Категория", selection: Binding(
-                    get: { vm.chosen?.stableId ?? 0 },
-                    set: { id in vm.chosen = vm.cats.first { $0.cat.stableId == id }?.cat }
-                )) {
-                    Text("— выберите —").tag(0)
-                    ForEach(vm.cats, id: \.cat.stableId) { row in
-                        Text(row.label + " — " + (row.cat.priceValue > 0 ? Money.format(row.cat.priceValue) : "бесплатно"))
-                            .tag(row.cat.stableId)
-                    }
-                }
-                .disabled(!vm.canChangeCategory)
+                // Выбор категории — шторка на весь экран: плитки разделов с иконками →
+                // подкатегории, поиск по всем рубрикам. Раньше — системный Picker на ~50 строк.
+                // П-26.6: закрытая рубрика — её название в том же поле (как на Android).
+                AdCategoryFieldRow(
+                    cats: vm.catsTree, chosen: vm.chosen,
+                    overrideText: (vm.offCatId != nil && vm.chosen == nil)
+                        ? "\(vm.offCatName.isEmpty ? "Рубрика" : vm.offCatName) (раздел закрыт)" : nil,
+                    enabled: vm.canChangeCategory && !vm.catsTree.isEmpty
+                ) {
+                    showCatPicker = true
                 }
                 if !vm.canChangeCategory {
                     Text("Категорию можно выбрать только до публикации.")

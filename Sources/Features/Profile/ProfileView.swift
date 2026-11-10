@@ -51,7 +51,7 @@ struct ProfileView: View {
         self.onOpenSupport = onOpenSupport
     }
 
-    @AppStorage(AppStorageKey.theme) private var theme = "system"
+    @AppStorage(AppStorageKey.theme) private var theme = "light"
     /// Тема экрана из выбранного оформления (реактивно через @AppStorage).
     private var themeScheme: ColorScheme? {
         switch theme { case "light": return .light; case "dark": return .dark; default: return nil }

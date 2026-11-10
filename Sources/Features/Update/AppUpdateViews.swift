@@ -7,7 +7,7 @@ import UIKit
 /// Обязательное обновление: экран поверх всего, без закрытия (окно ForceUpdateWindow).
 struct ForceUpdateView: View {
     let info: AppVersionInfo
-    @AppStorage(AppStorageKey.theme) private var theme = "system"
+    @AppStorage(AppStorageKey.theme) private var theme = "light"
 
     var body: some View {
         ZStack {

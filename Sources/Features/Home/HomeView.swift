@@ -232,7 +232,10 @@ struct HomeView: View {
                     // Отступ сверху (6) перенесён внутрь StoriesView — только при баннерах.
                     StoriesView(cityId: session.cityId)
 
-                    ChipRow(selected: $vm.kind) { k in
+                    // Чип «Отправить посылку» — по тому же правилу, что карточка А97
+                    // (сервер прямо сказал parcels: true), тап — как «Профиль → Отправить посылку».
+                    ChipRow(selected: $vm.kind,
+                            extra: showParcelCard ? (label: "Отправить посылку", action: { openParcel() }) : nil) { k in
                         // «Жильё» — не фильтр, а отдельный раздел: у него свой
                         // поиск по датам и гостям. Открываем его поверх таба и
                         // возвращаем чип на прежний, чтобы список под ним

@@ -21,7 +21,7 @@ import UserNotifications
 
 struct SettingsView: View {
     @EnvironmentObject private var session: Session
-    @AppStorage(AppStorageKey.theme) private var theme = "system"
+    @AppStorage(AppStorageKey.theme) private var theme = "light"
     @Environment(\.scenePhase) private var scenePhase
     /// Разрешение iOS на уведомления (nil — ещё не узнали). Окно разрешения
     /// всплывает при первом запуске, и отказ там раньше был навсегда: в

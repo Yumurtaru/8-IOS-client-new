@@ -18,6 +18,9 @@ enum OrgKind: String, CaseIterable, Identifiable {
 /// Ряд чипов-фильтров (Все/Рестораны/Магазины/Услуги). Активный — золото.
 struct ChipRow: View {
     @Binding var selected: OrgKind
+    /// Чип-действие в конце ряда («Отправить посылку»): не фильтр, никогда не
+    /// становится активным — только вызывает action. nil — чипа нет.
+    var extra: (label: String, action: () -> Void)? = nil
     var onChange: ((OrgKind) -> Void)? = nil
 
     /// Раньше ряд был горизонтальным ScrollView без индикатора прокрутки, и на
@@ -30,7 +33,7 @@ struct ChipRow: View {
     /// системный шрифт) прежняя прокрутка, чтобы ничего не обрезалось.
     var body: some View {
         ViewThatFits(in: .horizontal) {
-            HStack(spacing: YMSpace.sm) { chips(Array(OrgKind.allCases)) }
+            HStack(spacing: YMSpace.sm) { chips(Array(OrgKind.allCases)); extraChip }
                 .padding(.horizontal, YMSpace.xl)
 
             VStack(alignment: .leading, spacing: YMSpace.sm) {
@@ -40,14 +43,44 @@ struct ChipRow: View {
                 }
                 HStack(spacing: YMSpace.sm) {
                     chips(Array(OrgKind.allCases.dropFirst(3)))
+                    extraChip
                     Spacer(minLength: 0)
                 }
             }
             .padding(.horizontal, YMSpace.xl)
 
+            // Узкий экран: чип-действие — отдельной третьей строкой, а не прокруткой.
+            VStack(alignment: .leading, spacing: YMSpace.sm) {
+                HStack(spacing: YMSpace.sm) {
+                    chips(Array(OrgKind.allCases.prefix(3)))
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: YMSpace.sm) {
+                    chips(Array(OrgKind.allCases.dropFirst(3)))
+                    Spacer(minLength: 0)
+                }
+                if extra != nil {
+                    HStack(spacing: YMSpace.sm) {
+                        extraChip
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(.horizontal, YMSpace.xl)
+
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: YMSpace.sm) { chips(Array(OrgKind.allCases)) }
+                HStack(spacing: YMSpace.sm) { chips(Array(OrgKind.allCases)); extraChip }
                     .padding(.horizontal, YMSpace.xl)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var extraChip: some View {
+        if let extra {
+            Chip(label: extra.label, active: false) {
+                Haptics.selection()
+                extra.action()
             }
         }
     }
