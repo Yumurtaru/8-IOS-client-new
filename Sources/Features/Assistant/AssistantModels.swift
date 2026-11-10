@@ -204,7 +204,7 @@ enum AssistantMd {
     private static let url = try? NSRegularExpression(pattern: "https?://[^\\s<>\"')«»]+[^\\s<>\"').,;:!?«»]", options: [.caseInsensitive])
     // [текст](/путь) с путём сайта вида /about, /programma-dlya-kafe, /help/slug или [текст](https://…).
     private static let mdLink = try? NSRegularExpression(pattern: #"\[([^\]\[]+)\]\((/[a-z0-9-]+(?:/[a-z0-9-]+)*|https?://[^\s()]+)\)"#, options: [.caseInsensitive])
-    private static let help =rx("(^|[ \\t(«])(/help/[a-z0-9\\-]+)")
+    private static let help = rx("(^|[ \\t(«])(/help/[a-z0-9\\-]+)")
 
     private static func matches(_ re: NSRegularExpression?, _ s: String) -> [NSTextCheckingResult] {
         guard let re else { return [] }
