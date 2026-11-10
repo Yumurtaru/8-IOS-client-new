@@ -280,8 +280,8 @@ private struct StoriesPlayer: View {
         timer?.invalidate(); progress = 0
         // Reduce Motion: не крутим авто-прогресс (полоска заполнена, листаем тапом).
         guard !reduceMotion else { progress = 1; return }
-        timer = Timer.scheduledTimer(withTimeInterval: 0.02, repeats: true) { _ in
-            progress += 0.02 / perStory
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
+            progress += 0.05 / perStory
             if progress >= 1 { advance() }
         }
     }

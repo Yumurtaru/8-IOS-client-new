@@ -36,7 +36,7 @@ private enum Tune {
     static let vh: CGFloat = 660
     /// Сколько идёт анимация, мс. Единственная ручка скорости: сцена внутри
     /// живёт в собственном времени длиной `sceneMs`, а сюда просто растягивается.
-    static let duration: Double = 5400
+    static let duration: Double = 2800
     /// Длительность сцены в её собственном времени — под неё считана вся физика.
     static let sceneMs: Double = 3400
     /// Во столько раз реальное время медленнее сценического.
@@ -416,6 +416,14 @@ struct SplashView: View {
     // выбрасывались) — как раз в первые секунды запуска. @StateObject создаёт
     // сцену один раз.
     @StateObject private var scene = SplashScene()
+    /// Защита от повторного onFinished (тап + конец анимации).
+    @State private var finished = false
+
+    private func finish() {
+        guard !finished else { return }
+        finished = true
+        onFinished()
+    }
 
     var body: some View {
         TimelineView(.animation) { timeline in
@@ -430,17 +438,17 @@ struct SplashView: View {
         .ignoresSafeArea()
         // Пока сплэш на экране, касания до приложения не доходят.
         .contentShape(Rectangle())
-        .onTapGesture {}
+        .onTapGesture { finish() }
         .task {
             if reduceMotion {
                 try? await Task.sleep(nanoseconds: 420_000_000)
-                onFinished()
+                finish()
                 return
             }
             // Толчки и отсчёт до конца анимации — одна и та же задача:
             // так они не могут разъехаться между собой.
             await SplashHaptics.run()
-            onFinished()
+            finish()
         }
     }
 

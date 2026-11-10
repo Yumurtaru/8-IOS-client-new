@@ -34,6 +34,8 @@ final class AdsBoardViewModel: ObservableObject {
     /// Грузим один раз, поиск фильтрует на месте; ошибка объявлениям не мешает.
     @Published var shopJobs: [Job]?
     @Published var jobsExpanded = false
+    /// Загружена только первая страница вакансий (превью на рубрике «Все»).
+    @Published private(set) var jobsPartial = false
     /// А97: идёт загрузка вакансий — «Все» не спешит с «Объявлений пока нет».
     @Published private(set) var jobsLoading = false
 
@@ -85,21 +87,62 @@ final class AdsBoardViewModel: ObservableObject {
     }
 
     /// Город из настроек → пусто — вся площадка (как в «Профиль → Вакансии»).
+    /// Нужен полный список вакансий: рубрика «Работа», поиск или «Показать все».
+    /// На «Все» без поиска хватает первой страницы — для превью из трёх карточек.
+    private var needFullJobs: Bool {
+        categoryId != 0 || jobsExpanded || !query.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    /// Полная загрузка запрошена, пока шла другая: повторяем её после неё.
+    private var jobsFullPending = false
+
     func loadJobsIfNeeded(force: Bool = false) async {
-        guard showJobs, !jobsLoading, shopJobs == nil || force else { return }
+        let full = needFullJobs
+        guard showJobs else { return }
+        if jobsLoading {
+            if full { jobsFullPending = true }
+            return
+        }
+        guard shopJobs == nil || force || (jobsPartial && full) else { return }
         jobsLoading = true
-        defer { jobsLoading = false }
+        defer {
+            jobsLoading = false
+            if jobsFullPending {
+                jobsFullPending = false
+                Task { await self.loadJobsIfNeeded() }
+            }
+        }
         let cityId = Session.shared.cityId
+        let cityQuery: [String: String] = cityId.map { ["city_id": String($0)] } ?? [:]
         do {
-            var list: [Job] = try await API.shared.allPages("api/v1/jobs",
-                query: cityId.map { ["city_id": String($0)] } ?? [:]) { (j: Job) in j.id }
-            if list.isEmpty, cityId != nil {
-                list = try await API.shared.allPages("api/v1/jobs") { (j: Job) in j.id }
+            var list: [Job]
+            var partial = false
+            if full {
+                list = try await API.shared.allPages("api/v1/jobs", query: cityQuery) { (j: Job) in j.id }
+                if list.isEmpty, cityId != nil {
+                    list = try await API.shared.allPages("api/v1/jobs") { (j: Job) in j.id }
+                }
+            } else {
+                var p: Page<Job> = try await API.shared.page("api/v1/jobs", query: cityQuery)
+                if p.items.isEmpty, cityId != nil {
+                    p = try await API.shared.page("api/v1/jobs")
+                }
+                list = p.items
+                partial = p.hasMore && !p.items.isEmpty
             }
             shopJobs = list
+            jobsPartial = partial
         } catch {
             // Нет сети — попробуем при следующем выборе рубрики или обновлении.
+            // Полная загрузка по «Показать все» упала — возвращаем кнопку.
+            if full && categoryId == 0 && jobsPartial { jobsExpanded = false }
         }
+    }
+
+    /// «Показать все вакансии»: если грузили только первую страницу — догружаем всё.
+    func expandJobs() async {
+        jobsExpanded = true
+        if jobsPartial { await loadJobsIfNeeded() }
     }
 
     func start() async {
@@ -183,6 +226,8 @@ final class AdsBoardViewModel: ObservableObject {
             try? await Task.sleep(nanoseconds: 450_000_000)
             if Task.isCancelled { return }
             await self?.load(reset: true)
+            // Поиск по вакансиям идёт по полному списку, не по превью.
+            await self?.loadJobsIfNeeded()
         }
     }
 
@@ -320,12 +365,14 @@ struct AdsBoardView: View {
 
     @ViewBuilder
     private var content: some View {
+        // Один пересчёт за body (раньше visibleJobs фильтровался 5–6 раз).
+        let jobs: [Job] = vm.visibleJobs
         if !vm.enabled {
             AdsEmptyView(title: "Доска объявлений пока не включена",
                          subtitle: "Заходите позже — раздел скоро откроется.")
         } else if vm.loading && !vm.hasFilter {
             AdsSkeletonView()
-        } else if let e = vm.error, vm.items.isEmpty, !vm.hasFilter, vm.visibleJobs.isEmpty, !vm.jobsPending {
+        } else if let e = vm.error, vm.items.isEmpty, !vm.hasFilter, jobs.isEmpty, !vm.jobsPending {
             ErrorRetryView(message: e) { Task { await vm.load(reset: true) } }
         } else {
             ScrollView {
@@ -347,14 +394,14 @@ struct AdsBoardView: View {
                             }
                         }
                     }
-                    if !vm.visibleJobs.isEmpty {
-                        shopJobsSection
+                    if !jobs.isEmpty {
+                        shopJobsSection(jobs)
                     }
                     if vm.items.isEmpty && (vm.loading || vm.jobsPending) {
                         ProgressView().frame(maxWidth: .infinity).padding(.top, YMSpace.xl)
                     } else if vm.items.isEmpty && vm.error != nil {
                         EmptyView()
-                    } else if vm.items.isEmpty && !vm.visibleJobs.isEmpty {
+                    } else if vm.items.isEmpty && !jobs.isEmpty {
                         EmptyView()
                     } else if vm.items.isEmpty {
                         // Без поиска и рубрики пустая лента — это «объявлений ещё нет»
@@ -370,7 +417,7 @@ struct AdsBoardView: View {
                         )
                             .frame(height: 260)
                     } else {
-                        if !vm.visibleJobs.isEmpty {
+                        if !jobs.isEmpty {
                             Text("Объявления")
                                 .font(YMFont.headline).foregroundStyle(YMColor.text)
                                 .padding(.top, YMSpace.sm)
@@ -411,21 +458,21 @@ struct AdsBoardView: View {
     }
 
     /// Вакансии магазинов: первые три, остальные — по кнопке.
-    private var shopJobsSection: some View {
+    private func shopJobsSection(_ jobs: [Job]) -> some View {
         VStack(alignment: .leading, spacing: YMSpace.md) {
-            Text("Вакансии магазинов · \(vm.visibleJobs.count)")
+            Text("Вакансии магазинов · \(jobs.count)\(vm.jobsPartial ? "+" : "")")
                 .font(YMFont.headline).foregroundStyle(YMColor.text)
-            ForEach(vm.jobsExpanded ? vm.visibleJobs : Array(vm.visibleJobs.prefix(3))) { job in
+            ForEach(vm.jobsExpanded ? jobs : Array(jobs.prefix(3))) { job in
                 NavigationLink(value: AdsRoute.job(job.id)) {
                     JobCard(job: job)
                 }
                 .buttonStyle(.plain)
             }
-            if vm.visibleJobs.count > 3 && !vm.jobsExpanded {
+            if (jobs.count > 3 || vm.jobsPartial) && !vm.jobsExpanded {
                 Button {
-                    vm.jobsExpanded = true
+                    Task { await vm.expandJobs() }
                 } label: {
-                    HStack { Spacer(); Text("Показать все вакансии (\(vm.visibleJobs.count))"); Spacer() }
+                    HStack { Spacer(); Text(vm.jobsPartial ? "Показать все вакансии" : "Показать все вакансии (\(jobs.count))"); Spacer() }
                 }
                 .font(YMFont.callout)
             }

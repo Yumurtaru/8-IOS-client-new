@@ -18,17 +18,19 @@ import UIKit
 /// Интерфейс тот же, что у AsyncImage(url:content:): замена — одно слово.
 struct CachedAsyncImage<Content: View>: View {
     private let url: URL?
+    private let maxPixel: CGFloat
     private let content: (AsyncImagePhase) -> Content
 
     @State private var phase: AsyncImagePhase
     @State private var shownURL: URL?
     @ObservedObject private var net = NetworkMonitor.shared
 
-    init(url: URL?, @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
+    init(url: URL?, maxPixel: CGFloat = 2000, @ViewBuilder content: @escaping (AsyncImagePhase) -> Content) {
         self.url = url
+        self.maxPixel = maxPixel
         self.content = content
         // Уже в памяти — показываем сразу, без мигания заглушкой при прокрутке.
-        if let url, let img = ImagePipeline.memoryImage(for: url) {
+        if let url, let img = ImagePipeline.memoryImage(for: url, maxPixel: maxPixel) {
             _phase = State(initialValue: .success(Image(uiImage: img)))
             _shownURL = State(initialValue: url)
         } else {
@@ -48,7 +50,7 @@ struct CachedAsyncImage<Content: View>: View {
                 // раньше фото, не скачанные без сети, оставались заглушками, пока
                 // карточку не прокрутят с экрана и обратно. Скачанные не трогаем
                 // (load() выходит сразу при показанной картинке).
-                .task(id: ImageLoadKey(url: url, online: net.online)) { await load() }
+                .task(id: ImageLoadKey(url: url, online: net.online, maxPixel: maxPixel)) { await load() }
         }
     }
 
@@ -60,7 +62,7 @@ struct CachedAsyncImage<Content: View>: View {
             return
         }
         if shownURL == url, case .success = phase { return }
-        if let img = ImagePipeline.memoryImage(for: url) {
+        if let img = ImagePipeline.memoryImage(for: url, maxPixel: maxPixel) {
             phase = .success(Image(uiImage: img))
             shownURL = url
             return
@@ -71,7 +73,7 @@ struct CachedAsyncImage<Content: View>: View {
             shownURL = nil
         }
         do {
-            let img = try await ImagePipeline.load(url)
+            let img = try await ImagePipeline.load(url, maxPixel: maxPixel)
             if Task.isCancelled { return }
             phase = .success(Image(uiImage: img))
             shownURL = url
@@ -87,12 +89,13 @@ struct CachedAsyncImage<Content: View>: View {
 private struct ImageLoadKey: Hashable {
     let url: URL?
     let online: Bool
+    let maxPixel: CGFloat
 }
 
 /// Сессия, кэши и раскодирование картинок — общие для всего приложения.
 enum ImagePipeline {
-    private static let memory: NSCache<NSURL, UIImage> = {
-        let c = NSCache<NSURL, UIImage>()
+    private static let memory: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
         c.countLimit = 400
         c.totalCostLimit = 96 * 1024 * 1024   // байты раскодированных картинок
         return c
@@ -113,12 +116,17 @@ enum ImagePipeline {
         return URLSession(configuration: cfg)
     }()
 
-    static func memoryImage(for url: URL) -> UIImage? {
-        memory.object(forKey: url as NSURL)
+    /// Ключ кэша памяти: адрес + предельный размер (одно и то же фото в списке и в галерее — разные записи).
+    private static func cacheKey(_ url: URL, _ maxPixel: CGFloat) -> NSString {
+        "\(url.absoluteString)|\(Int(maxPixel))" as NSString
     }
 
-    static func load(_ url: URL) async throws -> UIImage {
-        if let img = memoryImage(for: url) { return img }
+    static func memoryImage(for url: URL, maxPixel: CGFloat = 2000) -> UIImage? {
+        memory.object(forKey: cacheKey(url, maxPixel))
+    }
+
+    static func load(_ url: URL, maxPixel: CGFloat = 2000) async throws -> UIImage {
+        if let img = memoryImage(for: url, maxPixel: maxPixel) { return img }
         let (data, response) = try await session.data(from: url)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
             throw URLError(.badServerResponse)
@@ -128,7 +136,6 @@ enum ImagePipeline {
         // Большой снимок (4000×3000 в отзыве или объявлении) раскрывался целиком —
         // около 48 МБ на одну картинку, и несколько таких фото подряд выбивали
         // приложение по памяти. Экрану телефона хватает 2000 точек по большей стороне.
-        let maxPixel: CGFloat = 2000
         let longest = max(raw.size.width * raw.scale, raw.size.height * raw.scale)
         var prepared: UIImage?
         if longest > maxPixel, longest > 0 {
@@ -139,7 +146,7 @@ enum ImagePipeline {
         if prepared == nil { prepared = await raw.byPreparingForDisplay() }
         let img = prepared ?? raw
         let cost = Int(img.size.width * img.scale * img.size.height * img.scale * 4)
-        memory.setObject(img, forKey: url as NSURL, cost: cost)
+        memory.setObject(img, forKey: cacheKey(url, maxPixel), cost: cost)
         return img
     }
 }

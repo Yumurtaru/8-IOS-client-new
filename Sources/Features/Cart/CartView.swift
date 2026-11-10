@@ -358,14 +358,12 @@ private struct CartRow: View {
 
     // Как Cart.total и сервер: строка округляется до копейки отдельно,
     // иначе строка могла разойтись с итогом на 1 копейку.
-    private var lineTotal: Decimal {
-        var v = Money.parse(line.unitPrice) * (Decimal(string: String(line.qty)) ?? 0)
-        var r = Decimal(); NSDecimalRound(&r, &v, 2, .plain); return r
-    }
+    // O1: цена единицы — по формуле опта (qtyTotal по всем строкам товара).
+    private var lineTotal: Decimal { Wholesale.lineTotal(line, in: cart.lines) }
 
     var body: some View {
         HStack(spacing: YMSpace.md) {
-            PhotoPlaceholder(url: API.imageURL(line.photo), label: "ФОТО", radius: 14, tone: line.productId)
+            PhotoPlaceholder(url: API.imageURL(line.photo), label: "ФОТО", radius: 14, tone: line.productId, fit: true)
                 .frame(width: 56, height: 56)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -383,6 +381,7 @@ private struct CartRow: View {
                         .font(YMFont.caption)
                         .foregroundStyle(YMColor.muted)
                 }
+                WholesaleBadge(line: line, lines: cart.lines)
             }
 
             Spacer(minLength: YMSpace.sm)

@@ -229,6 +229,8 @@ struct Shop: Codable, Identifiable, Hashable {
     @LenientBool var paused: Bool?
     var pauseUntil: String?
     var pauseReason: String?
+    /// П-68: срок паузы unix-секундами (nil — бессрочно или без паузы).
+    @LenientInt var pauseUntilTs: Int?
 }
 // Категория организации (магазин/услуга). Ключи snake_case декодируются авто-конвертером — CodingKeys НЕ добавляем.
 struct OrgCategory: Codable, Identifiable, Hashable {
@@ -340,6 +342,12 @@ struct ShopDetail: Codable, Identifiable {
     @LenientBool var paused: Bool?
     var pauseUntil: String?
     var pauseReason: String?
+    /// П-68 (ответ сайта 09.11, аддитивно). pauseUntilTs — срок паузы unix-секундами
+    /// (nil — бессрочно или без паузы): подпись строим в поясе телефона, а не по Москве.
+    @LenientInt var pauseUntilTs: Int?
+    /// IANA-пояс города заведения ("Asia/Yekaterinburg"): часы работы, слоты
+    /// предзаказа и «Сегодня» записи считаем в нём (Core/ShopTime). Нет — Москва.
+    var timezone: String?
 }
 /// День графика заведения: open/close — "HH:MM[:SS]" или nil (часы не заданы).
 struct ScheduleDay: Codable, Hashable {
@@ -415,6 +423,8 @@ struct Product: Codable, Identifiable, Hashable {
     /// П-22.3 (А58): название заведения в умном поиске и избранных товарах.
     /// Нет поля (старый сервер, меню магазина) — nil, строка не показывается.
     let shopName: String?
+    /// O1: оптовые ступени (price_tiers). Нет поля (старый сервер) или мусор — nil = опта нет.
+    @LossyList var priceTiers: [PriceTier]?
 }
 struct ComboItem: Codable {
     let name: String?; @LenientInt var qty: Int?; @LenientDouble var price: Double?; let photo: String?
@@ -436,6 +446,8 @@ struct ProductDetail: Codable, Identifiable {
     /// остановленным компонентом) — «Закончился»; сервер тогда ставит и stopped.
     /// Нет поля (старый сервер) — nil, как раньше.
     @LenientBool var outOfStock: Bool?
+    /// O1: оптовые ступени (price_tiers). Нет поля или мусор — nil = опта нет.
+    @LossyList var priceTiers: [PriceTier]?
 }
 struct ModifierGroup: Codable, Identifiable {
     let id: Int; let name: String?; let type: String?; @LenientBool var isRequired: Bool?
@@ -1240,6 +1252,9 @@ struct ServicesResponse: Codable { let masters: [Master]?; let services: [Servic
 struct CatalogItem: Codable, Hashable {
     let id: Int; let name: String?; @LenientDouble var price: Double?
     let type: String?; let shopName: String?; let shopSlug: String?; let photo: String?; let category: String?
+    /// O1: оптовые ступени и единица для метки «от 25 кг — 37 ₽» (нет поля — метки нет).
+    @LossyList var priceTiers: [PriceTier]?
+    let unit: String?
     var uid: String { "\(type ?? "p")-\(id)" }
 }
 

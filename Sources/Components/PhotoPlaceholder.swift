@@ -9,6 +9,10 @@ struct PhotoPlaceholder: View {
     var radius: CGFloat = YMRadius.card
     /// Индекс для детерминированного выбора тона градиента (карусель выглядит разнообразно).
     var tone: Int = 0
+    /// true для фото ТОВАРА: показывать целиком (scaledToFit) на нейтральном фоне, без кадрирования.
+    var fit: Bool = false
+    /// Предел размера картинки в пикселях (списки — 800; галереи передают 2000).
+    var maxPixel: CGFloat = 800
 
     @Environment(\.colorScheme) private var scheme
 
@@ -24,9 +28,16 @@ struct PhotoPlaceholder: View {
         }
         .overlay {
             if let url {
-                CachedAsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url, maxPixel: maxPixel) { phase in
                     if case let .success(image) = phase {
-                        image.resizable().scaledToFill()
+                        if fit {
+                            ZStack {
+                                YMColor.surface
+                                image.resizable().scaledToFit()
+                            }
+                        } else {
+                            image.resizable().scaledToFill()
+                        }
                     }
                 }
             }

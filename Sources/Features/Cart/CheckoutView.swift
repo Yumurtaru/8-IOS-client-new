@@ -478,7 +478,7 @@ struct CheckoutView: View {
     private var needTime: Bool { shopClosed || byTime }
     /// Дни и время — по графику заведения.
     private var preorderDays: [PreorderDay] {
-        needTime ? PreorderSlots.build(shop?.statusSchedule) : []
+        needTime ? PreorderSlots.build(shop?.statusSchedule, tz: ShopTime.zone(shop?.timezone)) : []
     }
     /// Выбранное время ещё есть в графике (день мог смениться, пока экран открыт).
     private var preorderValid: Bool {
@@ -517,7 +517,7 @@ struct CheckoutView: View {
         if cart.shopSlug != nil && shop == nil {
             return shopLoadError == nil ? nil : "Не удалось загрузить условия заведения — нажмите на сообщение вверху"
         }
-        if shopPaused { return ShopPause.title(statusText: shop?.statusText, until: shop?.pauseUntil) }
+        if shopPaused { return ShopPause.title(statusText: shop?.statusText, until: shop?.pauseUntil, untilTs: shop?.pauseUntilTs) }
         // П-27.1: причины из настроек заведения (сервер отказал бы на последнем
         // шаге) — первыми: иначе под кнопкой стояла бы подсказка про адрес.
         if fulfillmentNone { return "Заведение сейчас не принимает заказы через приложение" }
@@ -692,7 +692,7 @@ struct CheckoutView: View {
                 // «Когда» — как на сайте: как можно скорее или ко времени (день и
                 // время в часы работы). Закрыто — только ко времени (предзаказ).
                 if shopPaused {
-                    ShopPauseBanner(title: ShopPause.title(statusText: shop?.statusText, until: shop?.pauseUntil),
+                    ShopPauseBanner(title: ShopPause.title(statusText: shop?.statusText, until: shop?.pauseUntil, untilTs: shop?.pauseUntilTs),
                                     reason: ShopPause.reason(shop?.pauseReason))
                         .padding(.top, YMSpace.md)
                 } else if shop != nil {
@@ -734,7 +734,11 @@ struct CheckoutView: View {
 
                 SectionKicker("Ваш заказ").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.md)
                 VStack(spacing: YMSpace.md) {
-                    ForEach(cart.lines) { line in CheckoutRow(line: line) }
+                    ForEach(cart.lines) { line in CheckoutRow(line: line, lines: cart.lines) }
+                    // O1: подсказки опта — только по свежему пересчёту ровно этого состава.
+                    if !promoPending, promoFor == cartSig, let hs = promo?.wholesaleHints, !hs.isEmpty {
+                        WholesaleHintsView(hints: hs)
+                    }
                 }
 
                 SectionKicker("Оплата").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.sm)
@@ -1585,7 +1589,7 @@ struct CheckoutView: View {
                     pricesCheckedFor = nil
                     return
                 }
-                var prices: [String: Double] = [:]
+                var prices: [String: ServerLinePrice] = [:]
                 var gone: [String] = []
                 var cut: [String] = []
                 for (i, line) in sent.enumerated() {
@@ -1595,7 +1599,7 @@ struct CheckoutView: View {
                     let mods = Set((row.modifiers ?? []).compactMap { $0.id })
                     guard mods == Set(line.modifierIds) else { cut.append(line.name); continue }
                     guard let lp = row.linePrice else { continue }
-                    prices[line.key] = lp
+                    prices[line.key] = ServerLinePrice(unit: lp, retail: row.retailLinePrice, wholesale: row.wholesale)
                 }
                 let changed = v != nil && cart.applyPrices(prices)
                 let now = Money.parse(cart.total)
@@ -1647,7 +1651,7 @@ struct CheckoutView: View {
                                 Text("\(fmtQty(l.qty, l.unit)) · \(l.name)")
                                     .font(.system(size: 13.5)).foregroundStyle(YMColor.text)
                                 Spacer(minLength: 8)
-                                Text(Money.format(Money.parse(l.unitPrice) * (Decimal(string: String(l.qty)) ?? 0)))
+                                Text(Money.format(Wholesale.lineTotal(l, in: po.lines)))
                                     .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.text)
                             }
                         }
@@ -1953,16 +1957,15 @@ private struct AddAddressSheet: View {
 
 private struct CheckoutRow: View {
     let line: CartLine
+    let lines: [CartLine]
     // Как Cart.total и сервер: каждая строка округляется до копейки отдельно,
     // иначе строка могла разойтись с итогом на 1 копейку (72,46 против 72,47).
-    private var lineTotal: Decimal {
-        var v = Money.parse(line.unitPrice) * (Decimal(string: String(line.qty)) ?? 0)
-        var r = Decimal(); NSDecimalRound(&r, &v, 2, .plain); return r
-    }
+    // O1: цена единицы — по формуле опта (qtyTotal по всем строкам товара).
+    private var lineTotal: Decimal { Wholesale.lineTotal(line, in: lines) }
 
     var body: some View {
         HStack(spacing: YMSpace.md) {
-            PhotoPlaceholder(url: API.imageURL(line.photo), label: "ФОТО", radius: 14, tone: line.productId)
+            PhotoPlaceholder(url: API.imageURL(line.photo), label: "ФОТО", radius: 14, tone: line.productId, fit: true)
                 .frame(width: 56, height: 56)
             VStack(alignment: .leading, spacing: 2) {
                 Text(line.name).font(.system(size: 14.5, weight: .bold)).foregroundStyle(YMColor.text).lineLimit(1)
@@ -1970,6 +1973,7 @@ private struct CheckoutRow: View {
                 if !sub.isEmpty {
                     Text(sub).font(YMFont.caption).foregroundStyle(YMColor.muted).lineLimit(1)
                 }
+                WholesaleBadge(line: line, lines: lines)
             }
             Spacer(minLength: YMSpace.sm)
             Text(quantityLabel).font(.system(size: 13, weight: .bold)).foregroundStyle(YMColor.muted)
@@ -2002,7 +2006,9 @@ struct PreorderDay: Identifiable, Hashable {
 /// время сверяется с графиком (границы включительно), графика нет — часы не
 /// проверяются. Слоты — как на сайте (/api/checkout/slots): шаг 30 минут от
 /// времени открытия, слот целиком в часах работы, не раньше чем через 20 минут
-/// от «сейчас»; время московское независимо от пояса телефона. Тот же выбор —
+/// от «сейчас»; время — стенные часы города заведения (П-68: `timezone` карточки,
+/// preorder_at сервер читает в том же поясе; нет поля — Москва) независимо от
+/// пояса телефона. Тот же выбор —
 /// «Ко времени» у открытого заведения. Паритет с Android (Preorder.kt).
 enum PreorderSlots {
     static let step = 30
@@ -2055,9 +2061,11 @@ enum PreorderSlots {
         return out
     }
 
-    static func build(_ schedule: [ScheduleDay]?, now: Date = Date()) -> [PreorderDay] {
+    /// tz — пояс заведения: ShopTime.zone(detail.timezone).
+    static func build(_ schedule: [ScheduleDay]?, tz: TimeZone = ShopTime.moscow,
+                      now: Date = Date()) -> [PreorderDay] {
         var cal = Calendar(identifier: .gregorian)
-        cal.timeZone = TimeZone(identifier: "Europe/Moscow") ?? .current
+        cal.timeZone = tz
         let hm = cal.dateComponents([.hour, .minute], from: now)
         let nowMin: Int = (hm.hour ?? 0) * 60 + (hm.minute ?? 0)
         let earliest: Int = nowMin + lead
@@ -2190,5 +2198,80 @@ private struct PreorderChip: View {
                             in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// O1: пометка «оптовая цена» и зачёркнутая розничная цена единицы (общая для корзины и оформления).
+struct WholesaleBadge: View {
+    let line: CartLine
+    let lines: [CartLine]
+    var body: some View {
+        if Wholesale.isWholesale(line, in: lines) {
+            HStack(spacing: 6) {
+                Text(Wholesale.optLabel)
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(YMColor.accent)
+                let r = Wholesale.retailUnit(line)
+                if r > Wholesale.lineUnit(line, in: lines) {
+                    Text(Money.format(r))
+                        .font(.system(size: 11.5))
+                        .strikethrough()
+                        .foregroundStyle(YMColor.muted)
+                }
+            }
+            .lineLimit(1)
+        }
+    }
+}
+
+/// O1: подсказка сервера «Добавьте ещё 1 кг — будет по 37 ₽/кг» с кнопкой (только near == true).
+struct WholesaleHintsView: View {
+    let hints: [WholesaleHint]
+    @ObservedObject private var cart = Cart.shared
+
+    private func addQty(_ h: WholesaleHint) -> Double {
+        let pid = h.productId ?? 0
+        let step = cart.lines.first(where: { $0.productId == pid && $0.modifierIds.isEmpty })?.step
+            ?? cart.lines.first(where: { $0.productId == pid })?.step ?? 1
+        return Wholesale.roundUp(h.addQty ?? 0, step: step)
+    }
+
+    /// Единица подсказки: от сервера, иначе из строки корзины (как на Android).
+    private func unitOf(_ h: WholesaleHint) -> String? {
+        if let u = h.unit?.trimmingCharacters(in: .whitespacesAndNewlines), !u.isEmpty { return u }
+        let pid = h.productId ?? 0
+        return cart.lines.first(where: { $0.productId == pid && $0.modifierIds.isEmpty })?.unit
+            ?? cart.lines.first(where: { $0.productId == pid })?.unit
+    }
+
+    var body: some View {
+        let shown = hints.filter { h in h.near == true && h.productId != nil && cart.lines.contains(where: { l in l.productId == h.productId }) }
+        if !shown.isEmpty {
+            VStack(spacing: YMSpace.sm) {
+                ForEach(shown) { h in
+                    let add = addQty(h)
+                    if add > 0 {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(Wholesale.hintText(add: add, price: h.price ?? 0, saving: h.saving ?? 0, unit: unitOf(h)))
+                                .font(YMFont.caption).foregroundStyle(YMColor.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button {
+                                Haptics.light()
+                                _ = cart.addWholesale(productId: h.productId ?? 0, qty: add)
+                            } label: {
+                                Text(Wholesale.addButtonText(add: add, unit: unitOf(h)))
+                                    .font(.system(size: 13.5, weight: .bold))
+                                    .foregroundStyle(YMColor.accent)
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(cart.pendingOrder != nil)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(YMSpace.md)
+                        .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                }
+            }
+        }
     }
 }

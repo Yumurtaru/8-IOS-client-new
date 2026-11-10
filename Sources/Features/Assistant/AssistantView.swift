@@ -545,7 +545,18 @@ struct AssistantView: View {
         let left = AssistantText.leftLabel(vm.leftToday)
         // Длина — в кодовых точках, как mb_strlen на сервере: счётчик, проверка и предел одинаковы.
         let counter = AssistantText.counter(AssistantText.length(draft), maxLen)
+        // 152-ФЗ: пока нет ни одного сообщения пользователя — строка сервера над полем ввода.
+        let notice = (st.notice ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let showNotice = !notice.isEmpty && !vm.items.contains(where: { $0.kind == "user" })
         return VStack(spacing: 6) {
+            if showNotice {
+                Text(notice)
+                    .font(YMFont.callout).foregroundStyle(YMColor.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, YMSpace.md).padding(.vertical, YMSpace.sm)
+                    .background(YMColor.accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
             HStack(alignment: .bottom, spacing: YMSpace.sm) {
                 TextField("Напишите вопрос…", text: $draft, axis: .vertical)
                     .font(YMFont.body).foregroundStyle(YMColor.text)

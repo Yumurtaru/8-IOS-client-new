@@ -12,10 +12,12 @@ enum AppStorageKey {
 struct YumurtaApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var session = Session.shared
-    @StateObject private var cart = Cart.shared
+    // Синглтоны, которые body не читает: @StateObject не нужен (иначе корень
+    // пересобирался при каждом изменении корзины/роутера).
+    private let cart = Cart.shared
     @StateObject private var net = NetworkMonitor.shared
-    @StateObject private var router = DeepLinkRouter.shared
-    @StateObject private var coord = NavCoordinator.shared
+    private let router = DeepLinkRouter.shared
+    private let coord = NavCoordinator.shared
     /// П-52: проверка «Вышла новая версия» — при запуске и каждом возврате на передний план.
     @Environment(\.scenePhase) private var scenePhase
 
@@ -78,7 +80,6 @@ struct YumurtaApp: App {
                 .task {
                     // П-52: в фоне, запуск не ждёт (не чаще раза в 6 часов).
                     await MainActor.run { AppUpdateStore.shared.onForeground() }
-                    Push.shared.requestAuthorization()
                     await Push.shared.registerIfPossible()
                 }
         }

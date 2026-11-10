@@ -4,12 +4,12 @@ import Combine
 struct CartLine: Codable, Identifiable {
     let key: String
     let productId: Int
-    let name: String
-    let unitPrice: Double
+    var name: String
+    var unitPrice: Double
     var qty: Double
     let modifierIds: [Int]
     let modsLabel: String
-    let photo: String?
+    var photo: String?
     var unit: String? = nil
     var qtyFractional: Bool? = nil
     var qtyPresets: String? = nil
@@ -18,6 +18,14 @@ struct CartLine: Codable, Identifiable {
     /// корзине «+» давал 0,4 кг, который сервер пересчитывал по своей сетке
     /// шага, — сумма в корзине и в заказе расходилась. nil у старых строк.
     var qtyStep: Double? = nil
+    /// O1: оптовые ступени товара; розница без добавок и с добавками (unitPrice после
+    /// ответа сервера может быть оптовой, поэтому розница хранится отдельно); флаг
+    /// «по опту» из прошлого ответа сервера (только для строк без ступеней).
+    /// nil у старых сохранений — читаются как раньше.
+    var priceTiers: [PriceTier]? = nil
+    var retailBase: Double? = nil
+    var retailUnit: Double? = nil
+    var serverWholesale: Bool? = nil
     var id: String { key }
 
     var presets: [Double] {
@@ -75,6 +83,14 @@ struct PendingOrder: Codable {
     let at: TimeInterval
 }
 
+/// O1: цена строки из ответа cart/validate. wholesale == true — unit уже по опту,
+/// retail — retail_line_price (розница единицы с добавками, может быть nil).
+struct ServerLinePrice {
+    let unit: Double
+    let retail: Double?
+    let wholesale: Bool?
+}
+
 final class Cart: ObservableObject {
     static let shared = Cart()
     @Published private(set) var lines: [CartLine] = []
@@ -88,12 +104,8 @@ final class Cart: ObservableObject {
     /// Раньше складывались неокруглённые: на дробных количествах кнопка
     /// обещала 150,65 ₽, а в заказе оказывалось 150,66 ₽.
     var total: Double {
-        // В Decimal: 289,90 × 0,25 в Double = 72,474999… → 72,47, а сервер берёт 72,48.
-        let s = lines.reduce(Decimal(0)) { acc, l in
-            var v = Money.parse(l.unitPrice) * (Decimal(string: String(l.qty)) ?? 0)
-            var r = Decimal(); NSDecimalRound(&r, &v, 2, .plain); return acc + r
-        }
-        return NSDecimalNumber(decimal: s).doubleValue
+        // O1: по формуле опта (qtyTotal по товару), каждая строка округляется до копейки.
+        NSDecimalNumber(decimal: Wholesale.cartTotal(lines)).doubleValue
     }
     var isEmpty: Bool { lines.isEmpty }
     private var snapshotTask: Task<Void, Never>?
@@ -179,24 +191,52 @@ final class Cart: ObservableObject {
 
     /// AT-2: цены строк по ответу сервера (ключ строки → цена за единицу с добавками).
     /// true — что-то поменялось. При неотвеченном оформлении не трогаем.
+    /// O1: у строки со ступенями розницу берём из retail_line_price (если сервер
+    /// прислал), цену по опту всегда считает формула от количества.
     @discardableResult
-    func applyPrices(_ prices: [String: Double]) -> Bool {
+    func applyPrices(_ prices: [String: ServerLinePrice]) -> Bool {
         guard pendingOrder == nil, !prices.isEmpty else { return false }
         var changed = false
         let fresh: [CartLine] = lines.map { old in
-            guard let p = prices[old.key], abs(p - old.unitPrice) >= 0.005 else { return old }
-            changed = true
-            var line = CartLine(key: old.key, productId: old.productId, name: old.name,
-                                unitPrice: p, qty: old.qty, modifierIds: old.modifierIds,
-                                modsLabel: old.modsLabel, photo: old.photo)
-            line.unit = old.unit
-            line.qtyFractional = old.qtyFractional
-            line.qtyPresets = old.qtyPresets
-            line.qtyStep = old.qtyStep
+            guard let sp = prices[old.key] else { return old }
+            var line = old
+            let hasTiers = !Wholesale.steps(for: old).isEmpty
+            // Розничная цена единицы: при опте — retail_line_price, иначе сама цена.
+            var retail: Double? = sp.retail
+            if retail == nil && sp.wholesale != true { retail = sp.unit }
+            if hasTiers {
+                if let r = retail {
+                    let oldR: Double = old.retailUnit ?? old.unitPrice
+                    line.retailUnit = r
+                    if let b = old.retailBase { line.retailBase = b + (r - oldR) }
+                    line.unitPrice = r
+                }
+            } else {
+                line.unitPrice = sp.unit
+                if let r = retail { line.retailUnit = r }
+            }
+            line.serverWholesale = sp.wholesale
+            if abs(line.unitPrice - old.unitPrice) >= 0.005
+                || abs((line.retailUnit ?? 0) - (old.retailUnit ?? 0)) >= 0.005
+                || line.serverWholesale != old.serverWholesale { changed = true }
             return line
         }
         guard changed else { return false }
         lines = fresh
+        save()
+        return true
+    }
+
+    /// O1: подсказка «Добавить N кг» — в первую строку товара без добавок, иначе в первую
+    /// строку товара. N уже округлено вверх до шага. false — корзина заперта или строки нет.
+    @discardableResult
+    func addWholesale(productId: Int, qty: Double) -> Bool {
+        if checkLocked() || qty <= 0 { return false }
+        let idx = lines.firstIndex(where: { $0.productId == productId && $0.modifierIds.isEmpty })
+            ?? lines.firstIndex(where: { $0.productId == productId })
+        guard let i = idx else { return false }
+        lines[i].qty = snapCartQty(lines[i], lines[i].qty + qty)
+        lines[i].serverWholesale = nil
         save()
         return true
     }
@@ -229,14 +269,15 @@ final class Cart: ObservableObject {
             let newQty: Double = ((old.qty + qty) * 1000).rounded() / 1000   // суммируем
             var freshPrice: Double = old.unitPrice
             if let p = product.price { freshPrice = p + modPrice }
-            var line = CartLine(key: key, productId: old.productId, name: product.name ?? old.name,
-                                unitPrice: freshPrice, qty: newQty, modifierIds: old.modifierIds,
-                                modsLabel: old.modsLabel,
-                                photo: product.photos?.first?.pathWebp ?? old.photo)
-            line.unit = old.unit
-            line.qtyFractional = old.qtyFractional
-            line.qtyPresets = old.qtyPresets
-            line.qtyStep = old.qtyStep
+            var line = old
+            line.unitPrice = freshPrice
+            line.qty = newQty
+            if let n = product.name { line.name = n }
+            line.photo = product.photos?.first?.pathWebp ?? old.photo
+            line.serverWholesale = nil
+            line.priceTiers = product.priceTiers
+            line.retailBase = product.price
+            line.retailUnit = freshPrice
             lines[idx] = line
         } else {
             lines.append(CartLine(key: key, productId: product.id, name: product.name ?? "",
@@ -244,7 +285,9 @@ final class Cart: ObservableObject {
                 modsLabel: chosen.compactMap { $0.name }.joined(separator: ", "),
                 photo: product.photos?.first?.pathWebp,
                 unit: product.unit, qtyFractional: (product.qtyFractional ?? 0) == 1, qtyPresets: product.qtyPresets,
-                qtyStep: product.qtyStep))
+                qtyStep: product.qtyStep,
+                priceTiers: product.priceTiers, retailBase: product.price,
+                retailUnit: (product.price ?? 0) + modPrice))
         }
         Track.addToCart(id: product.id, name: product.name, price: product.price, qty: 1)
         save()
@@ -252,13 +295,13 @@ final class Cart: ObservableObject {
     }
     func inc(_ key: String) {
         if checkLocked() { return }
-        if let i = lines.firstIndex(where: { $0.key == key }) { lines[i].qty = snapCartQty(lines[i], lines[i].qty + lines[i].step); save() }
+        if let i = lines.firstIndex(where: { $0.key == key }) { lines[i].qty = snapCartQty(lines[i], lines[i].qty + lines[i].step); lines[i].serverWholesale = nil; save() }
     }
     func dec(_ key: String) {
         if checkLocked() { return }
         if let i = lines.firstIndex(where: { $0.key == key }) {
             let raw = lines[i].qty - lines[i].step
-            if raw <= 0 { lines.remove(at: i) } else { lines[i].qty = snapCartQty(lines[i], raw) }
+            if raw <= 0 { lines.remove(at: i) } else { lines[i].qty = snapCartQty(lines[i], raw); lines[i].serverWholesale = nil }
             if lines.isEmpty { shopId = nil; shopName = nil; shopSlug = nil }
             save()
         }

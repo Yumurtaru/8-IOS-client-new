@@ -30,6 +30,8 @@ struct AssistantStatus: Decodable {
     /// nil — без дневного лимита.
     @LenientInt var leftToday: Int?
     @LenientInt var maxLength: Int?
+    /// Предупреждение (152-ФЗ): ИИ-сервис за рубежом. Нет или пусто — ничего не показываем.
+    let notice: String?
 }
 
 /// Статья базы знаний, на которую опирался ответ. url — от корня сайта ("/help/slug").
@@ -200,7 +202,9 @@ enum AssistantMd {
     private static let code = rx("`([^`]+)`")
     // Как в веб-виджете: последний знак адреса — не точка, запятая, скобка и т. п.
     private static let url = try? NSRegularExpression(pattern: "https?://[^\\s<>\"')«»]+[^\\s<>\"').,;:!?«»]", options: [.caseInsensitive])
-    private static let help = rx("(^|[ \\t(«])(/help/[a-z0-9\\-]+)")
+    // [текст](/путь) с путём сайта вида /about, /programma-dlya-kafe, /help/slug или [текст](https://…).
+    private static let mdLink = try? NSRegularExpression(pattern: #"\[([^\]\[]+)\]\((/[a-z0-9-]+(?:/[a-z0-9-]+)*|https?://[^\s()]+)\)"#, options: [.caseInsensitive])
+    private static let help =rx("(^|[ \\t(«])(/help/[a-z0-9\\-]+)")
 
     private static func matches(_ re: NSRegularExpression?, _ s: String) -> [NSTextCheckingResult] {
         guard let re else { return [] }
@@ -258,8 +262,18 @@ enum AssistantMd {
         struct Hit { let start: Int; let end: Int; let url: String; let label: String }
         let ns = s as NSString
         var hits: [Hit] = []
+        // Markdown-ссылка [текст](адрес): относительный путь сайта или свой полный адрес.
+        for m in matches(mdLink, s) {
+            let label = ns.substring(with: m.range(at: 1))
+            let target = ns.substring(with: m.range(at: 2))
+            let full = target.hasPrefix("/") ? trimSlash(base) + target : target
+            if isOwn(full, base: base) {
+                hits.append(Hit(start: m.range.location, end: m.range.location + m.range.length, url: full, label: label))
+            }
+        }
         for m in matches(url, s) {
             let u = ns.substring(with: m.range)
+            if hits.contains(where: { m.range.location < $0.end && m.range.location + m.range.length > $0.start }) { continue }
             if isOwn(u, base: base) { hits.append(Hit(start: m.range.location, end: m.range.location + m.range.length, url: u, label: shortLabel(u))) }
         }
         for m in matches(help, s) {

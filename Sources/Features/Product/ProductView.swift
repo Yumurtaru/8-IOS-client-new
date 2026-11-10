@@ -53,6 +53,14 @@ final class ProductViewModel: ObservableObject {
         self.service = service; self.serviceShopName = shopName
     }
 
+    /// Похожие товары (отдельно от детали: повторяется, если в прошлый раз не пришли).
+    func loadRecommended() async {
+        guard mode == .product, let id = productId else { return }
+        if let list: [Product] = try? await API.shared.list("api/v1/products/\(id)/recommended") {
+            recommended = list.filter { $0.id != id }
+        }
+    }
+
     func load() async {
         loading = true; error = nil
         switch mode {
@@ -71,9 +79,7 @@ final class ProductViewModel: ObservableObject {
                 self.error = error.localizedDescription
             }
             // Похожие товары грузим отдельно: ошибка/пусто не мешает карточке товара.
-            if let list: [Product] = try? await API.shared.list("api/v1/products/\(id)/recommended") {
-                recommended = list.filter { $0.id != id }
-            }
+            await loadRecommended()
         case .service:
             guard let s = service else { error = "Нет данных услуги"; loading = false; return }
             // Слоты записи. Отсутствие слотов — не ошибка (услуга без онлайн-записи).
@@ -205,7 +211,9 @@ struct ProductView: View {
         // «Повторить» в ошибке он не выполнялся, и «В корзину» оставалась серой.
         .onChange(of: vm.detail?.id) { _ in syncQtyDefaults(); preselectRequired() }
         .task {
-            await vm.load()
+            // Товар и рекомендации — один раз; избранное — при каждом появлении.
+            if vm.detail == nil { await vm.load() }
+            else if vm.recommended.isEmpty { await vm.loadRecommended() }
             syncQtyDefaults()
             preselectRequired()
             await loadFav()
@@ -293,7 +301,7 @@ struct ProductView: View {
             ForEach(Array(photos.enumerated()), id: \.offset) { i, p in
                 PhotoPlaceholder(url: API.imageURL(p.isEmpty ? nil : p),
                                  // Подпись видна, когда фото нет: служебное «ГАЛЕРЕЯ · СВАЙП» из макета не показываем.
-                                 label: "ФОТО", radius: 0, tone: i)
+                                 label: "ФОТО", radius: 0, tone: i, fit: true, maxPixel: 2000)
                     .frame(maxWidth: .infinity)
                     .tag(i)
             }
@@ -359,7 +367,27 @@ struct ProductView: View {
 
     // MARK: Product sections (Размер порции / Добавить к блюду)
 
+    /// O1: блок «Оптом дешевле» — строки «от 25 кг — 37 ₽/кг (−18%)».
+    @ViewBuilder private var wholesaleBlock: some View {
+        if let d = vm.detail, !wholesaleSteps.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(Wholesale.blockTitle)
+                    .font(.system(size: 16, weight: .heavy))
+                    .foregroundStyle(YMColor.text)
+                ForEach(wholesaleSteps, id: \.minQty) { s in
+                    Text(Wholesale.tierRow(s, retail: Money.dec(d.price), unit: d.unit))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(YMColor.text)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 20)
+        }
+    }
+
     @ViewBuilder private var productSections: some View {
+        wholesaleBlock
+
         // Весовой товар с пресетами: ряд чипов (0.3 / 0.5 / 1 кг) с ценой за
         // выбранный вес. Без пресетов чипов нет — количество набирается «+/−».
         if let d = vm.detail, weightPresets(d).count >= 2 {
@@ -453,8 +481,13 @@ struct ProductView: View {
     }
 
     /// Цена за выбранный вес: price × preset (строго Decimal).
+    /// O1: при наборе опта цена единицы — по ступени (qtyTotal = в корзине + выбранный вес).
     private func weightPrice(_ d: ProductDetail, _ w: Double) -> Decimal {
-        Money.dec(d.price) * decWeight(w)
+        let base = Money.dec(d.price)
+        let st = Wholesale.steps(d.priceTiers, retail: base)
+        let u = Wholesale.unit(retail: base, addons: 0, steps: st,
+                               qtyTotal: Wholesale.qtyTotal(cart.lines, productId: d.id) + w)
+        return Wholesale.round2(u * decWeight(w))
     }
 
     @ViewBuilder private func weightSection(_ d: ProductDetail) -> some View {
@@ -523,7 +556,7 @@ struct ProductView: View {
     private func recommendedCard(_ p: Product, tone: Int) -> some View {
         NavigationLink { ProductView(product: p) } label: {
             VStack(alignment: .leading, spacing: 7) {
-                PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 16, tone: tone)
+                PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 16, tone: tone, fit: true)
                     .frame(width: 150, height: 96)
                 Text(p.name ?? "—")
                     .font(.system(size: 13.5, weight: .bold))
@@ -791,6 +824,8 @@ struct ProductView: View {
 
     // Степпер −/N/+ + кнопка «В корзину · СУММА».
     private var productBottomBar: some View {
+        VStack(spacing: 8) {
+        wholesaleNote
         HStack(spacing: 12) {
             // Степпер −/N/+ показываем только для штучных: у весового кол-во задаёт чип-пресет.
             if !isWeighedProduct {
@@ -831,6 +866,9 @@ struct ProductView: View {
                         Text(added ? "Добавлено ✓" : "В корзину")
                         Text("·").opacity(0.6)
                         Text(Money.format(lineTotal))
+                        if cardTier != nil, retailTotal > lineTotal {
+                            Text(Money.format(retailTotal)).strikethrough().opacity(0.7)
+                        }
                     }
                 }
             }
@@ -841,6 +879,7 @@ struct ProductView: View {
             // кнопка работала, корзина набиралась, а отказ приходил только на
             // оформлении («Часть товаров закончилась»), без указания позиции.
             .disabled(vm.detail == nil || !requiredChosen || added || isStopped || effectiveQty <= 0)
+        }
         }
         .padding(.horizontal, YMSpace.xl)
         .padding(.top, 12)
@@ -1009,6 +1048,25 @@ struct ProductView: View {
     private var lineTotal: Decimal {
         guard let d = vm.detail else { return 0 }
         let base = Money.dec(d.price)
+        let unit = Wholesale.unit(retail: base, addons: modsSum, steps: wholesaleSteps, qtyTotal: cardQtyTotal)
+        return Wholesale.round2(unit * cardMult)
+    }
+
+    /// O1: применимые ступени товара.
+    private var wholesaleSteps: [Wholesale.Step] {
+        guard let d = vm.detail else { return [] }
+        return Wholesale.steps(d.priceTiers, retail: Money.dec(d.price))
+    }
+    /// O1: qtyTotal для карточки = уже в корзине (все строки товара) + выбранное сейчас
+    /// (карточка всегда добавляет количество в корзину).
+    private var cardQtyTotal: Double {
+        guard let d = vm.detail else { return 0 }
+        return Wholesale.qtyTotal(cart.lines, productId: d.id) + effectiveQty
+    }
+    private var cardMult: Decimal { isWeighedProduct ? decWeight(selectedWeight) : Wholesale.dec(qty) }
+    /// Сумма выбранных добавок на единицу.
+    private var modsSum: Decimal {
+        guard let d = vm.detail else { return 0 }
         let allOptions = (d.modifierGroups ?? []).flatMap { $0.options ?? [] }
         var mods = Decimal(0)
         for id in selectedRadio.values {
@@ -1017,8 +1075,33 @@ struct ProductView: View {
         for id in checkedAddons {
             if let opt = allOptions.first(where: { $0.id == id }) { mods += Money.dec(opt.price) }
         }
-        let mult = isWeighedProduct ? decWeight(selectedWeight) : Money.dec(qty)
-        return (base + mods) * mult
+        return mods
+    }
+    /// O1: та же сумма по рознице (для зачёркивания и «Экономия»).
+    private var retailTotal: Decimal {
+        guard let d = vm.detail else { return 0 }
+        return Wholesale.round2((Money.dec(d.price) + modsSum) * cardMult)
+    }
+    private var cardTier: Wholesale.Step? { Wholesale.tier(wholesaleSteps, qtyTotal: cardQtyTotal) }
+
+    /// O1: строка под суммой — «Экономия N ₽» или «Ещё N кг до оптовой цены».
+    @ViewBuilder private var wholesaleNote: some View {
+        if vm.detail != nil, !wholesaleSteps.isEmpty, !isStopped {
+            if cardTier != nil {
+                let saving = retailTotal - lineTotal
+                if saving > 0 {
+                    Text(Wholesale.savingText(saving))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(YMColor.accent)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+            } else if let n = Wholesale.next(wholesaleSteps, qtyTotal: cardQtyTotal) {
+                Text(Wholesale.moreText(n, qtyTotal: cardQtyTotal, unit: vm.detail?.unit))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(YMColor.muted)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+        }
     }
 
     private var selectedModifierIds: [Int] {

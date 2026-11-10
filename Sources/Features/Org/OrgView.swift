@@ -64,6 +64,10 @@ final class OrgViewModel: ObservableObject {
     /// Опорные данные для мгновенного hero до прихода detail.
     let seed: Shop?
 
+    /// Догрузка остальных страниц меню: хранится, чтобы отменяться при перезагрузке и уходе.
+    private var menuTask: Task<Void, Never>?
+    deinit { menuTask?.cancel() }
+
     init(shop: Shop) { self.slug = shop.slug ?? ""; self.seed = shop }
     init(shopSlug: String) { self.slug = shopSlug; self.seed = nil }
 
@@ -90,7 +94,8 @@ final class OrgViewModel: ObservableObject {
                 productsError = nil
                 if first.hasMore {
                     let s = slug
-                    Task { @MainActor in
+                    menuTask?.cancel()
+                    menuTask = Task { @MainActor [weak self] in
                         // Остальные страницы: при сбое — ещё одна попытка через 2 с, иначе
                         // всё после первых 200 позиций молча пропадало до перезахода.
                         var rest: (items: [Product], hasMore: Bool)? = try? await fetchShopMenu(slug: s, pages: 2...20)
@@ -98,9 +103,9 @@ final class OrgViewModel: ObservableObject {
                             try? await Task.sleep(nanoseconds: 2_000_000_000)
                             rest = try? await fetchShopMenu(slug: s, pages: 2...20)
                         }
-                        guard let rest else { return }
-                        let known = Set(products.map(\.id))
-                        products += rest.items.filter { !known.contains($0.id) }
+                        guard !Task.isCancelled, let self, let rest else { return }
+                        let known = Set(self.products.map(\.id))
+                        self.products += rest.items.filter { !known.contains($0.id) }
                     }
                 }
             } catch is CancellationError {
@@ -324,7 +329,8 @@ struct OrgView: View {
                         // Подпись видна, когда у заведения нет обложки: служебное
                         // «· ПАРАЛЛАКС» из макета человеку не показываем.
                         label: "ОБЛОЖКА",
-                        radius: 0, tone: 0
+                        radius: 0, tone: 0,
+                        maxPixel: 2000
                     )
                     .frame(width: geo.size.width, height: heroHeight + stretch)
                     .clipped()
@@ -390,14 +396,14 @@ struct OrgView: View {
             // Пауза приёма: вместо «Сейчас закрыто» и предзаказа — плашка с текстом сервера
             // и причиной; предзаказ при паузе сервер тоже отклонит (409 paused).
             if isPaused, let d = vm.detail {
-                ShopPauseBanner(title: ShopPause.title(statusText: d.statusText, until: d.pauseUntil),
+                ShopPauseBanner(title: ShopPause.title(statusText: d.statusText, until: d.pauseUntil, untilTs: d.pauseUntilTs),
                                 reason: ShopPause.reason(d.pauseReason))
                     .padding(.top, 12)
             }
             // Баннер нерабочего времени: «Сейчас закрыто. Откроется <день> в <время>».
             // Корзину собрать можно, оформить — предзаказом ко времени работы.
             else if !isOpen {
-                ClosedBanner(opensLabel: OrgHours.nextOpenLabel(vm.detail?.hours), preorder: !vm.isService)
+                ClosedBanner(opensLabel: OrgHours.nextOpenLabel(vm.detail?.hours, tz: ShopTime.zone(vm.detail?.timezone)), preorder: !vm.isService)
                     .padding(.top, 12)
             }
 
@@ -627,8 +633,9 @@ struct OrgView: View {
                 }
             }
 
+            let shown = shownProducts
             LazyVStack(spacing: 12) {
-                ForEach(shownProducts) { p in
+                ForEach(shown) { p in
                     DishRow(product: p) {
                         Haptics.light()
                         openProduct(p.id)
@@ -636,7 +643,7 @@ struct OrgView: View {
                         openProduct(p.id)   // «+» ведёт на карточку (модификаторы/степпер там)
                     }
                 }
-                if shownProducts.isEmpty, vm.products.isEmpty, let pe = vm.productsError {
+                if shown.isEmpty, vm.products.isEmpty, let pe = vm.productsError {
                     // Меню не загрузилось — это не «пусто»: даём повторить.
                     VStack(spacing: YMSpace.sm) {
                         Text("Не удалось загрузить меню: \(pe)")
@@ -653,7 +660,7 @@ struct OrgView: View {
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 24)
-                } else if shownProducts.isEmpty {
+                } else if shown.isEmpty {
                     Text("В этом разделе пока пусто")
                         .font(YMFont.callout)
                         .foregroundStyle(YMColor.muted)
@@ -834,7 +841,7 @@ struct OrgView: View {
     private var isOpen: Bool {
         if let srv = vm.detail?.isOpen { return srv }
         if let srv = vm.seed?.isOpen { return srv }
-        if let d = vm.detail, let computed = OrgHours.isOpenNow(d.hours) { return computed }
+        if let d = vm.detail, let computed = OrgHours.isOpenNow(d.hours, tz: ShopTime.zone(d.timezone)) { return computed }
         return true
     }
     private var rating: Double? { vm.detail?.rating ?? vm.seed?.rating }
@@ -944,12 +951,15 @@ struct DishRow: View {
                             .font(.system(size: 15, weight: .heavy))
                             .foregroundStyle(YMColor.text)
                             .padding(.top, 2)
+                        if let w = product.wholesaleLabel {
+                            Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
+                        }
                     }
                 }
                 Spacer(minLength: 8)
                 ZStack(alignment: .bottomTrailing) {
                     PhotoPlaceholder(url: API.imageURL(product.photo),
-                                     label: "ФОТО", radius: YMRadius.control, tone: product.id)
+                                     label: "ФОТО", radius: YMRadius.control, tone: product.id, fit: true)
                         .frame(width: 88, height: 88)
                     // Круглая золотая «+» со свечением. У закончившейся позиции её нет.
                     if product.stopped != true {
@@ -1000,7 +1010,7 @@ struct OrgMiniMap: View {
     let lat: Double
     let lng: Double
 
-    struct Pin: Identifiable { let id = UUID(); let coord: CLLocationCoordinate2D }
+    struct Pin: Identifiable { let id = 0; let coord: CLLocationCoordinate2D }
 
     var body: some View {
         let coord = CLLocationCoordinate2D(latitude: lat, longitude: lng)
@@ -1060,18 +1070,18 @@ struct ClosedBanner: View {
 /// Без падений при пустых/битых данных. Паритет с Android isOpenNow/nextOpenLabel.
 enum OrgHours {
     /// Открыто ли сейчас. nil = нет данных (вызывающий решает — считать открытым).
-    /// Часы работы заданы временем площадки (Москва), а не телефона: у
-    /// покупателя в другом поясе «Откроется сегодня/завтра в …» и запасной
-    /// расчёт «открыто» считались по его часам.
-    private static var cal: Calendar {
+    /// Часы работы заданы временем города заведения (П-68: `timezone` карточки;
+    /// нет поля — Москва), а не телефона: у покупателя в другом поясе «Откроется
+    /// сегодня/завтра в …» и запасной расчёт «открыто» считались по его часам.
+    private static func cal(_ tz: TimeZone) -> Calendar {
         var c = Calendar(identifier: .gregorian)
-        c.timeZone = TimeZone(identifier: "Europe/Moscow") ?? .current
+        c.timeZone = tz
         return c
     }
 
-    static func isOpenNow(_ hours: [ShopHour]?) -> Bool? {
+    static func isOpenNow(_ hours: [ShopHour]?, tz: TimeZone = ShopTime.moscow) -> Bool? {
         guard let hours, !hours.isEmpty else { return nil }
-        let cal = Self.cal
+        let cal = Self.cal(tz)
         let now = Date()
         let dow = weekdayToServer(cal.component(.weekday, from: now)) // 1=Пн..7=Вс
         guard let today = hours.first(where: { norm($0.dayOfWeek) == dow }) else { return nil }
@@ -1085,9 +1095,9 @@ enum OrgHours {
     }
 
     /// «сегодня в HH:MM» / «завтра в HH:MM» / «в <день недели> в HH:MM». nil = нет данных.
-    static func nextOpenLabel(_ hours: [ShopHour]?) -> String? {
+    static func nextOpenLabel(_ hours: [ShopHour]?, tz: TimeZone = ShopTime.moscow) -> String? {
         guard let hours, !hours.isEmpty else { return nil }
-        let cal = Self.cal
+        let cal = Self.cal(tz)
         let now = Date()
         let todayDow = weekdayToServer(cal.component(.weekday, from: now))
         let cur = String(format: "%02d:%02d", cal.component(.hour, from: now), cal.component(.minute, from: now))

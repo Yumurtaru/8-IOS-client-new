@@ -203,7 +203,9 @@ struct OrgBookingSection: View {
     @State private var loading = true
     @State private var error: String?
 
-    @State private var days: [DayOption] = OrgBookingSection.nearestDays(bookingDays)
+    /// Дни при первом показе — по Москве; пояс заведения (П-68) подставит
+    /// refreshDaysIfStale в .task и при смене `detail?.timezone`.
+    @State private var days: [DayOption] = OrgBookingSection.nearestDays(bookingDays, tz: ShopTime.moscow)
     @State private var selectedDate: String = ""
     @Environment(\.scenePhase) private var scenePhase
     /// Приложение уходило в фон (а не просто шторка уведомлений сверху).
@@ -370,6 +372,11 @@ struct OrgBookingSection: View {
                 startDayScan(force: true)
             }
             wasInBackground = false
+        }
+        // Карточка заведения пришла позже блока или сменился пояс (П-68) — дни
+        // пересчитываем по поясу заведения и перечитываем окна.
+        .onChange(of: detail?.timezone) { _ in
+            if refreshDaysIfStale(), selected != nil { startDayScan(force: true) }
         }
         // Уход с экрана — обзор дат больше не нужен.
         .onDisappear { stopDayScan() }
@@ -956,21 +963,22 @@ struct OrgBookingSection: View {
     /// true — список дней сменился (наступил новый день).
     @discardableResult
     private func refreshDaysIfStale() -> Bool {
-        let fresh = OrgBookingSection.nearestDays(bookingDays)
+        let fresh = OrgBookingSection.nearestDays(bookingDays, tz: ShopTime.zone(detail?.timezone))
         guard fresh.first?.value != days.first?.value else { return false }
         days = fresh
         if !fresh.contains(where: { $0.value == selectedDate }) { selectedDate = fresh.first?.value ?? "" }
         return true
     }
 
-    fileprivate static func nearestDays(_ count: Int) -> [DayOption] {
+    fileprivate static func nearestDays(_ count: Int, tz: TimeZone) -> [DayOption] {
         var cal = Calendar(identifier: .gregorian)
         cal.locale = Locale(identifier: "ru_RU")
-        // «Сегодня» считаем по времени ПЛОЩАДКИ, а не телефона: свободные окна
-        // сервер отсекает своим `date()`, и у покупателя восточнее/западнее
-        // Москвы чип «Сегодня» указывал на другой день — сегодняшние окна он не
-        // видел вовсе, а на «Сегодня» приходили окна следующих суток.
-        cal.timeZone = TimeZone(identifier: "Europe/Moscow") ?? .current
+        // «Сегодня» считаем по часам ГОРОДА ЗАВЕДЕНИЯ (П-68: timezone карточки; нет
+        // поля — Москва), а не телефона: свободные окна сервер считает по часам
+        // города, и у покупателя в другом поясе чип «Сегодня» указывал на другой
+        // день — сегодняшние окна он не видел вовсе, а на «Сегодня» приходили окна
+        // следующих суток.
+        cal.timeZone = tz
         let api = DateFormatter(); api.calendar = cal; api.timeZone = cal.timeZone
         api.locale = Locale(identifier: "en_US_POSIX"); api.dateFormat = "yyyy-MM-dd"
         let weekdays = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"] // weekday: 1 = Вс

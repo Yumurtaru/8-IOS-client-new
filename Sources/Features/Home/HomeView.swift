@@ -16,6 +16,8 @@ final class HomeViewModel: ObservableObject {
     @Published var error: String?
 
     private var didInitialLoad = false
+    /// Город, подставленный самим load(): onChange на него не перезагружает данные повторно.
+    var autoPickedCityId: Int?
 
     /// OrgKind → серверный typeFilter (как в старом клиенте: all|restaurant|store|service).
     private func typeParam(_ k: OrgKind) -> String {
@@ -48,7 +50,9 @@ final class HomeViewModel: ObservableObject {
         // Города: если город ещё не выбран (нет id) — берём первый как в старом клиенте.
         if session.cityId == nil,
            let cities: [City] = try? await API.shared.list("api/v1/cities", query: ["with_orgs": "1"]),
-           let first = cities.first {
+           let first = cities.first,
+           session.cityId == nil {   // пользователь мог выбрать город, пока шёл запрос
+            autoPickedCityId = first.id
             session.cityId = first.id
             session.cityName = session.cityName ?? first.name
         }
@@ -62,6 +66,8 @@ final class HomeViewModel: ObservableObject {
         await loadShops(session: session, myGen: myGen)
         _ = await (rec, sec)
         if myGen == gen { loading = false }
+        // Флаг нужен только на момент подстановки; не даём ему залипнуть.
+        autoPickedCityId = nil
     }
 
     /// «Рекомендуем вам» — персональные товары: GET api/v1/recommendations?city_id=
@@ -290,7 +296,11 @@ struct HomeView: View {
             // Город выбирается в онбординге ПОСЛЕ первой загрузки главной (HomeView рендерится
             // под онбордингом). Поэтому при смене cityId (онбординг / шторка города) —
             // перезагружаем данные под новый город, иначе организации не появляются.
-            .onChange(of: session.cityId) { _ in
+            .onChange(of: session.cityId) { newId in
+                if let auto = vm.autoPickedCityId, auto == newId {
+                    vm.autoPickedCityId = nil
+                    return
+                }
                 Task { await vm.load(session: session) }
             }
             // Причина отказа ♥ на Главной.
@@ -417,6 +427,7 @@ struct HomeView: View {
                                 tone: idx,
                                 // Паритет с Android: цена в карточке подборки.
                                 priceText: Money.format(Money.dec(item.price)),
+                                wholesaleLabel: item.wholesaleLabel,
                                 isFav: favBinding(product: item.id)
                             ) {
                                 go(.product(item.id))   // → карточка товара
@@ -443,6 +454,7 @@ struct HomeView: View {
                                 tone: idx,
                                 // Паритет с Android: цена в карточке подборки.
                                 priceText: Money.format(Money.dec(item.price)),
+                                wholesaleLabel: item.wholesaleLabel,
                                 isFav: favBinding(product: item.id)
                             ) {
                                 go(.product(item.id))   // → карточка товара

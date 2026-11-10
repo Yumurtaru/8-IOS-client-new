@@ -62,7 +62,7 @@ struct OrgCard: View {
         Button(action: { Haptics.light(); onTap() }) {
             VStack(alignment: .leading, spacing: 0) {
                 // ── Фото + оверлеи ──
-                PhotoPlaceholder(url: photoURL, label: "ОБЛОЖКА", radius: 0, tone: tone)
+                PhotoPlaceholder(url: photoURL, label: "ОБЛОЖКА", radius: 0, tone: tone, maxPixel: 1600)
                     .frame(height: 150)
                     .frame(maxWidth: .infinity)
                     .clipped()
@@ -158,6 +158,8 @@ struct PopularCard: View {
     var tone: Int = 0
     /// Паритет с Android: цена товара под названием (золотом). nil — без строки.
     var priceText: String? = nil
+    /// O1: метка опта под ценой («от 25 кг — 37 ₽»). nil — без строки.
+    var wholesaleLabel: String? = nil
     @Binding var isFav: Bool
     var onTap: () -> Void = {}
 
@@ -165,7 +167,7 @@ struct PopularCard: View {
         Button(action: { Haptics.light(); onTap() }) {
             VStack(alignment: .leading, spacing: 8) {
                 // Подпись видна без фото: «· БЛЮДО» из макета неверно у товаров магазина.
-                PhotoPlaceholder(url: photoURL, label: "ФОТО", radius: YMRadius.card, tone: tone)
+                PhotoPlaceholder(url: photoURL, label: "ФОТО", radius: YMRadius.card, tone: tone, fit: true)
                     .frame(width: 146, height: 104)
                     .overlay(alignment: .topLeading) {
                         if let r = rating, r > 0 {
@@ -192,6 +194,12 @@ struct PopularCard: View {
                         Text(priceText)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(YMColor.accent)
+                            .lineLimit(1)
+                    }
+                    if let wholesaleLabel, !wholesaleLabel.isEmpty {
+                        Text(wholesaleLabel)
+                            .font(.system(size: 11))
+                            .foregroundStyle(YMColor.muted)
                             .lineLimit(1)
                     }
                 }

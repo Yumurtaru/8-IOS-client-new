@@ -479,8 +479,9 @@ struct ListingView: View {
     @ViewBuilder private var listBody: some View {
         if vm.screen == .category {
             ScrollView {
+                let orgs = vm.sortedOrgs
                 LazyVStack(spacing: 12) {
-                    ForEach(Array(vm.sortedOrgs.enumerated()), id: \.element.id) { idx, shop in
+                    ForEach(Array(orgs.enumerated()), id: \.element.id) { idx, shop in
                         OrgListRow(shop: shop) {
                             Haptics.light()
                             go(.shop(shop))
@@ -490,7 +491,7 @@ struct ListingView: View {
                             BecomeSellerPromoCard { showBecomeSeller = true }
                         }
                     }
-                    if vm.sortedOrgs.isEmpty { emptyState }
+                    if orgs.isEmpty { emptyState }
                     if vm.orgsHasMore {
                         LoadMoreFooter(page: vm.orgsPage, failed: vm.orgsMoreFailed) { await vm.loadMore() }
                     }
@@ -675,7 +676,7 @@ struct ProductGridCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 ZStack(alignment: .topLeading) {
                     PhotoPlaceholder(url: API.imageURL(product.photo),
-                                     label: "ФОТО", radius: YMRadius.card, tone: product.id)
+                                     label: "ФОТО", radius: YMRadius.card, tone: product.id, fit: true)
                         .frame(height: 120)
                         .frame(maxWidth: .infinity)
                     if product.isHalal == true {
@@ -696,9 +697,14 @@ struct ProductGridCard: View {
                     }
                 }
                 HStack {
-                    Text(Money.format(Money.dec(product.price)))
-                        .font(.system(size: 15, weight: .heavy))
-                        .foregroundStyle(YMColor.text)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(Money.format(Money.dec(product.price)))
+                            .font(.system(size: 15, weight: .heavy))
+                            .foregroundStyle(YMColor.text)
+                        if let w = product.wholesaleLabel {
+                            Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
+                        }
+                    }
                     Spacer()
                     Button {
                         Haptics.light()

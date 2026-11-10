@@ -514,7 +514,8 @@ struct LodgingUnitView: View {
                             url: API.imageURL(p.path),
                             label: "ФОТО",
                             radius: YMRadius.card,
-                            tone: p.identifier
+                            tone: p.identifier,
+                            maxPixel: 1600
                         )
                         .frame(width: 280, height: 190)
                     }

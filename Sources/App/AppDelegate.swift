@@ -10,6 +10,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Фон таб-бара — системный материал (blur), тонкая золотая линия сверху. Один раз на запуск.
+        let tabAppearance = UITabBarAppearance()
+        tabAppearance.configureWithDefaultBackground()
+        UITabBar.appearance().scrollEdgeAppearance = tabAppearance
+        UITabBar.appearance().standardAppearance = tabAppearance
+        Haptics.prepare()
         // Кэш картинок. AsyncImage ходит через общий URLCache, а у него по
         // умолчанию ~0,5 МБ памяти и 10 МБ диска: фото каталога вытесняли друг
         // друга, и при прокрутке те же картинки качались заново. API-запросы

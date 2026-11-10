@@ -318,7 +318,7 @@ private struct SearchSection: View {
                 ForEach(recent) { r in
                     Button { go(.product(r.id)) } label: {
                         HStack(spacing: YMSpace.md) {
-                            PhotoPlaceholder(url: API.imageURL(r.photo), label: "ФОТО", radius: 12, tone: r.id)
+                            PhotoPlaceholder(url: API.imageURL(r.photo), label: "ФОТО", radius: 12, tone: r.id, fit: true)
                                 .frame(width: 44, height: 44)
                             Text(r.name).font(YMFont.body).foregroundStyle(YMColor.text).lineLimit(1)
                             Spacer(minLength: 8)
@@ -363,7 +363,7 @@ private struct SearchSection: View {
     private func productResultCard(_ p: Product, tone: Int) -> some View {
         Button { go(.product(p.id)) } label: {
             VStack(alignment: .leading, spacing: 7) {
-                PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 16, tone: tone)
+                PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 16, tone: tone, fit: true)
                     .frame(width: 150, height: 96)
                     .overlay(alignment: .topTrailing) {
                         HeartButton(isFav: favProduct(p.id), size: 26, favColor: YMColor.statusCancel).padding(6)
@@ -390,6 +390,9 @@ private struct SearchSection: View {
                 Text(Money.format(Money.parse(p.price)))
                     .font(.system(size: 12))
                     .foregroundStyle(YMColor.muted)
+                if let w = p.wholesaleLabel {
+                    Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
+                }
             }
             .frame(width: 150, alignment: .leading)
         }
@@ -1023,7 +1026,7 @@ private struct FavOrgCard: View {
         Button(action: { Haptics.light(); onTap() }) {
             VStack(alignment: .leading, spacing: 0) {
                 PhotoPlaceholder(url: API.imageURL(shop.cover ?? shop.banner ?? shop.logo),
-                                 label: "ОБЛОЖКА", radius: 0, tone: tone)
+                                 label: "ОБЛОЖКА", radius: 0, tone: tone, maxPixel: 1600)
                     .frame(height: 120).frame(maxWidth: .infinity).clipped()
                     .opacity(isOpen ? 1 : 0.55)   // закрытую приглушаем
                     .overlay(alignment: .topLeading) {
@@ -1056,7 +1059,7 @@ private struct FavOrgCard: View {
                         }
                     }
                     if isPaused {
-                        Text(ShopPause.title(statusText: nil, until: shop.pauseUntil))
+                        Text(ShopPause.title(statusText: nil, until: shop.pauseUntil, untilTs: shop.pauseUntilTs))
                             .font(.system(size: 12.5)).foregroundStyle(YMColor.statusCancel).lineLimit(2)
                         if let r = ShopPause.reason(shop.pauseReason) {
                             Text(r).font(.system(size: 12.5)).foregroundStyle(YMColor.muted).lineLimit(2)
@@ -1091,7 +1094,7 @@ private struct FavProductCard: View {
     var body: some View {
         Button(action: { Haptics.light(); onTap() }) {
             VStack(alignment: .leading, spacing: 0) {
-                PhotoPlaceholder(url: API.imageURL(product.photo), label: "ФОТО", radius: 0, tone: tone)
+                PhotoPlaceholder(url: API.imageURL(product.photo), label: "ФОТО", radius: 0, tone: tone, fit: true)
                     .frame(height: 120).frame(maxWidth: .infinity).clipped()
                 VStack(alignment: .leading, spacing: 4) {
                     Text(product.name ?? "—")
@@ -1113,6 +1116,9 @@ private struct FavProductCard: View {
                                 .strikethrough()
                                 .foregroundStyle(YMColor.muted)
                         }
+                    }
+                    if let w = product.wholesaleLabel {
+                        Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
                     }
                 }
                 .padding(.horizontal, 15).padding(.top, 12).padding(.bottom, 14)

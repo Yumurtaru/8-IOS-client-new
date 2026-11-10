@@ -7,6 +7,11 @@ import Foundation
 /// (текст продавца | null). Поля аддитивные: нет ключа (старый сервер) — не на паузе.
 /// На паузе заведение видно, а заказ сервер отклоняет (409, error.code = "paused").
 ///
+/// П-68 (ответ сайта 09.11): карточка, избранное — ещё pause_until_ts (unix-секунды |
+/// nil). Есть он — подпись «до ЧЧ:ММ» строим сами в поясе телефона: status_text и
+/// pause_until сервер пишет по Москве, и у покупателя в Екатеринбурге «до 18:30» было
+/// бы на 2 часа раньше настоящего. Нет его (старый сервер) — как раньше.
+///
 /// Тексты — как у сервера (v1PauseText): «Заведение временно не принимает заказы до 18:30»
 /// (сегодня — только время, иначе «ДД.ММ ЧЧ:ММ»; срока нет — без «до …»).
 /// Паритет с Android (core/ShopPause.kt).
@@ -41,9 +46,25 @@ enum ShopPause {
         return part(1) + "-" + part(2) + "-" + part(3) == today ? time : part(3) + "." + part(2) + " " + time
     }
 
-    /// Заголовок плашки. Текст сервера (status_text карточки) — как есть, если он пришёл;
-    /// иначе собираем сами из pause_until.
-    static func title(statusText: String?, until: String?, today: String = todayMsk()) -> String {
+    /// pause_until_ts → "18:30" (сегодня по tz) или "01.11 18:30" в поясе tz
+    /// (по умолчанию — телефона); nil и не дата (раньше 2001 г.: мусор, true→1) → nil.
+    static func untilTsLabel(_ ts: Int?, tz: TimeZone = .current, now: Date = Date()) -> String? {
+        guard let ts, ts >= 1_000_000_000 else { return nil }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = tz
+        let at = Date(timeIntervalSince1970: TimeInterval(ts))
+        let c = cal.dateComponents([.month, .day, .hour, .minute], from: at)
+        let time = String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+        if cal.isDate(at, inSameDayAs: now) { return time }
+        return String(format: "%02d.%02d ", c.day ?? 0, c.month ?? 0) + time
+    }
+
+    /// Заголовок плашки. Есть pause_until_ts — собираем сами в поясе телефона (текст
+    /// сервера по Москве). Иначе текст сервера (status_text карточки) — как есть, если
+    /// он пришёл; иначе собираем сами из pause_until.
+    static func title(statusText: String?, until: String?, untilTs: Int? = nil,
+                      today: String = todayMsk()) -> String {
+        if let l = untilTsLabel(untilTs) { return baseText + " до " + l }
         if let t = statusText?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty { return t }
         if let l = untilLabel(until, today: today) { return baseText + " до " + l }
         return baseText

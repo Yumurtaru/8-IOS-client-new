@@ -163,6 +163,20 @@ final class API {
         return URLSession(configuration: cfg)
     }()
 
+    /// Загрузка фото: тело большое, на медленной сети 40 с на ресурс не хватает.
+    /// Ожидание ответа 60 с, общий лимит 120 с; сеть не ждём (как longSession).
+    private let uploadSession: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 60
+        cfg.timeoutIntervalForResource = 120
+        cfg.waitsForConnectivity = false
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        cfg.httpCookieStorage = nil
+        cfg.httpShouldSetCookies = false
+        cfg.httpCookieAcceptPolicy = .never
+        return URLSession(configuration: cfg)
+    }()
+
     /// Удалить cookie сайта из общего хранилища (их туда клали прежние версии).
     static func clearCookies() {
         guard let url = URL(string: base) else { return }
@@ -223,13 +237,13 @@ final class API {
 
     /// Повтор только для идемпотентных запросов (GET): POST/PUT/DELETE не повторяем,
     /// чтобы не задвоить заказ или платёж.
-    private func send<T: Decodable>(_ req: URLRequest, as type: T.Type) async throws -> T {
+    private func send<T: Decodable>(_ req: URLRequest, as type: T.Type, upload: Bool = false) async throws -> T {
         let idempotent = (req.httpMethod ?? "GET") == "GET"
         let attempts = idempotent ? maxRetries + 1 : 1
         var lastError: Error = APIError.network
         for attempt in 0..<attempts {
             do {
-                return try await perform(req, as: type)
+                return try await perform(req, as: type, upload: upload)
             } catch let e as APIError where e.isRetryable && attempt < attempts - 1 {
                 lastError = e
                 // Без сети повтор бесполезен: каждая попытка ждёт сеть до 40 с
@@ -243,10 +257,10 @@ final class API {
         throw lastError
     }
 
-    private func perform<T: Decodable>(_ req: URLRequest, as type: T.Type, isRetryAfterRefresh: Bool = false) async throws -> T {
+    private func perform<T: Decodable>(_ req: URLRequest, as type: T.Type, isRetryAfterRefresh: Bool = false, upload: Bool = false) async throws -> T {
         let data: Data; let resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            (data, resp) = try await (upload ? uploadSession : session).data(for: req)
         } catch let urlError as URLError {
             if urlError.code == .cancelled { throw CancellationError() }   // отмена (дебаунс) — не повторяем
             // Таймаут при выключенной сети — это «нет соединения», а не
@@ -281,13 +295,13 @@ final class API {
                     retry.setValue("Bearer \(current)", forHTTPHeaderField: "Authorization")
                     // false: если и свежий токен отвергнут, этот повтор сам пойдёт в продление
                     // (заголовок теперь совпадает с текущим — второй раз сюда не попадём).
-                    return try await perform(retry, as: type, isRetryAfterRefresh: false)
+                    return try await perform(retry, as: type, isRetryAfterRefresh: false, upload: upload)
                 }
                 switch await refreshAccessToken() {
                 case .token(let newToken):
                     var retry = req
                     retry.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-                    return try await perform(retry, as: type, isRetryAfterRefresh: true)
+                    return try await perform(retry, as: type, isRetryAfterRefresh: true, upload: upload)
                 case .unavailable:
                     // Продлить не удалось из-за СЕТИ (таймаут, нет связи, 5xx).
                     // Раньше это считалось отказом, и человека разлогинивало со
@@ -544,7 +558,7 @@ final class API {
         body.append(jpeg)
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         req.httpBody = body
-        let r: PhotoResp = try await send(req, as: PhotoResp.self)
+        let r: PhotoResp = try await send(req, as: PhotoResp.self, upload: true)
         return r.attachment
     }
     // ── Доска объявлений (routes/ads.php) ──────────────────────────────────
@@ -610,7 +624,7 @@ final class API {
         body.append(jpeg)
         body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
         req.httpBody = body
-        let r: AdPhotoUploadedResponse = try await send(req, as: AdPhotoUploadedResponse.self)
+        let r: AdPhotoUploadedResponse = try await send(req, as: AdPhotoUploadedResponse.self, upload: true)
         return r.photo
     }
 

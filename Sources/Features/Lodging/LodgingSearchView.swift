@@ -407,7 +407,8 @@ struct LodgingResultCard: View {
                     url: API.imageURL(u?.photo),
                     label: "ФОТО",
                     radius: YMRadius.card,
-                    tone: u?.id ?? 0
+                    tone: u?.id ?? 0,
+                    maxPixel: 1600
                 )
                 .frame(height: 190)
                 .frame(maxWidth: .infinity)

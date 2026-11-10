@@ -28,40 +28,59 @@ struct PromoPreviewRequest: Encodable {
     var spendPointsAll: Bool = false
 }
 
+// Числа и флаги — через @Lenient*: сервер отдаёт DECIMAL строками ("0.00"), флаги 0/1.
 struct PromoGift: Codable, Identifiable {
-    let productId: Int?
+    @LenientInt var productId: Int?
     let name: String?
-    let qty: Double?
-    let price: Double?
+    @LenientDouble var qty: Double?
+    @LenientDouble var price: Double?
     var id: String { "\(productId ?? 0)-\(name ?? "")" }
 }
 
 struct AppliedPromo: Codable, Identifiable {
     let id: Int
+    /// Нет названия в ответе — безопасная подпись вместо падения разбора.
     let name: String
     let description: String?
-    let discount: Double?
-    let points: Double?
-    let freeDelivery: Bool?
+    @LenientDouble var discount: Double?
+    @LenientDouble var points: Double?
+    @LenientBool var freeDelivery: Bool?
     let gifts: [PromoGift]?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, description, discount, points, freeDelivery, gifts
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try c.decode(LenientInt.self, forKey: .id)).wrappedValue ?? 0
+        name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? "Акция"
+        description = try? c.decodeIfPresent(String.self, forKey: .description)
+        _discount = try c.decode(LenientDouble.self, forKey: .discount)
+        _points = try c.decode(LenientDouble.self, forKey: .points)
+        _freeDelivery = try c.decode(LenientBool.self, forKey: .freeDelivery)
+        gifts = try? c.decodeIfPresent([PromoGift].self, forKey: .gifts)
+    }
 }
 
 struct PromoPreview: Codable {
     let applied: [AppliedPromo]?
-    let discount: Double?
-    let freeDelivery: Bool?
+    @LenientDouble var discount: Double?
+    @LenientBool var freeDelivery: Bool?
     let gifts: [PromoGift]?
-    let pointsEarned: Double?
-    let pointsSpendMax: Double?
-    let pointsSpent: Double?
-    let subtotal: Double?
-    let deliveryPrice: Double?
-    let total: Double?
+    @LenientDouble var pointsEarned: Double?
+    @LenientDouble var pointsSpendMax: Double?
+    @LenientDouble var pointsSpent: Double?
+    @LenientDouble var subtotal: Double?
+    @LenientDouble var deliveryPrice: Double?
+    @LenientDouble var total: Double?
     /// А113: в корзине есть строки, которые нельзя заказать (нет в наличии,
     /// добавки недоступны) — subtotal тогда без них. Старый сервер — nil.
-    let cartHasIssues: Bool?
+    @LenientBool var cartHasIssues: Bool?
     /// А719: чем доставка стала бесплатной — "plus" | "code" | nil. Нет поля — старый сервер.
     let deliveryFreeBy: String?
+    /// O1: подсказки «до опта осталось немного» (показывать только near == true).
+    @LossyList var wholesaleHints: [WholesaleHint]?
 }
 
 /* AT-2: POST /api/cart/validate (routes/cart.php → cartRecompute, конверт сайта
@@ -73,20 +92,25 @@ struct CartValidateBody: Encodable {
     let items: [PromoCartItem]
 }
 struct CartValidateMod: Decodable {
-    let id: Int?
-    let price: Double?
+    @LenientInt var id: Int?
+    @LenientDouble var price: Double?
 }
 struct CartValidateLine: Decodable {
-    let row: Int?
-    let productId: Int?
-    let basePrice: Double?
-    let linePrice: Double?
-    let qty: Double?
+    @LenientInt var row: Int?
+    @LenientInt var productId: Int?
+    @LenientDouble var basePrice: Double?
+    @LenientDouble var linePrice: Double?
+    @LenientDouble var qty: Double?
     let modifiers: [CartValidateMod]?
-    let available: Bool?
+    @LenientBool var available: Bool?
+    /// O1: строка по оптовой цене; linePrice уже по опту, retailLinePrice — розница единицы с добавками.
+    @LenientBool var wholesale: Bool?
+    @LenientDouble var tierMinQty: Double?
+    @LenientDouble var retailLinePrice: Double?
 }
 struct CartValidateResult: Decodable {
     let items: [CartValidateLine]?
-    let subtotal: Double?
-    let hasIssues: Bool?
+    @LenientDouble var subtotal: Double?
+    @LenientBool var hasIssues: Bool?
+    @LossyList var wholesaleHints: [WholesaleHint]?
 }

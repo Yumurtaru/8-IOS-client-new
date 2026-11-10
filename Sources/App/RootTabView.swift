@@ -31,13 +31,8 @@ struct RootTabView: View {
     @ObservedObject private var updates = AppUpdateStore.shared
     @AppStorage(AppStorageKey.onboarded) private var onboarded = false
 
-    init() {
-        // Фон таб-бара — системный материал (blur), тонкая золотая линия сверху.
-        let appearance = UITabBarAppearance()
-        appearance.configureWithDefaultBackground()
-        UITabBar.appearance().scrollEdgeAppearance = appearance
-        UITabBar.appearance().standardAppearance = appearance
-    }
+    // Внешний вид таб-бара задаётся один раз при запуске (AppDelegate), а не в init:
+    // init вью вызывается при каждой пересборке корня.
 
     var body: some View {
         VStack(spacing: 0) {
