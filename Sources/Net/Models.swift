@@ -302,9 +302,9 @@ struct ShopDetail: Codable, Identifiable {
     @LenientInt var avgCookTime: Int?
     let description: String?; let address: String?; let phone: String?; @LenientDouble var rating: Double?
     @LenientDouble var lat: Double?; @LenientDouble var lng: Double?; let hours: [ShopHour]?
-    @LenientDouble var deliveryFee: Double?; @LenientDouble var minOrder: Double?; let deliveryTime: String?; let categories: [Category]?
+    @LenientDecimal var deliveryFee: Decimal?; @LenientDecimal var minOrder: Decimal?; let deliveryTime: String?; let categories: [Category]?
     let deliveryZones: [DeliveryZone]?
-    @LenientDouble var serviceFeePercent: Double?; let serviceFeePayer: String?; let serviceFeeType: String?; @LenientDouble var serviceFeeFixed: Double?
+    @LenientDouble var serviceFeePercent: Double?; let serviceFeePayer: String?; let serviceFeeType: String?; @LenientDecimal var serviceFeeFixed: Decimal?
     /// Лицензия (аддитивно). requiresLicense — организация в лицензируемой
     /// категории; license — реквизиты, если организация их опубликовала.
     @LenientBool var requiresLicense: Bool?
@@ -360,9 +360,9 @@ struct ScheduleDay: Codable, Hashable {
 struct DeliveryZone: Codable, Identifiable, Hashable {
     var id: String { name ?? "—" }
     let name: String?
-    @LenientDouble var deliveryPrice: Double?
-    @LenientDouble var minOrder: Double?
-    @LenientDouble var freeFrom: Double?
+    @LenientDecimal var deliveryPrice: Decimal?
+    @LenientDecimal var minOrder: Decimal?
+    @LenientDecimal var freeFrom: Decimal?
     @LenientInt var deliveryTimeMin: Int?
     @LenientInt var deliveryTimeMax: Int?
 }
@@ -375,10 +375,10 @@ struct DeliveryZone: Codable, Identifiable, Hashable {
 struct DeliveryQuote: Codable {
     let available: Bool
     let zone: String?
-    @LenientDouble var deliveryPrice: Double?
-    @LenientDouble var minOrder: Double?
+    @LenientDecimal var deliveryPrice: Decimal?
+    @LenientDecimal var minOrder: Decimal?
     let belowMin: Bool?
-    @LenientDouble var freeFrom: Double?
+    @LenientDecimal var freeFrom: Decimal?
     let freeApplies: Bool?
     @LenientInt var timeMin: Int?
     @LenientInt var timeMax: Int?
@@ -403,7 +403,7 @@ struct ShopHour: Codable, Hashable, Identifiable {
     @LenientInt var dayOfWeek: Int?; let openTime: String?; let closeTime: String?; @LenientInt var isClosed: Int?
 }
 struct Product: Codable, Identifiable, Hashable {
-    let id: Int; let name: String?; @LenientDouble var price: Double?; @LenientDouble var oldPrice: Double?
+    let id: Int; let name: String?; @LenientDecimal var price: Decimal?; @LenientDecimal var oldPrice: Decimal?
     let description: String?; let photo: String?; @LenientInt var categoryId: Int?; let hasMods: Bool?; @LenientInt var shopId: Int?
     let unit: String?
     @LenientBool var isHalal: Bool?
@@ -417,9 +417,9 @@ struct Product: Codable, Identifiable, Hashable {
     @LenientInt var isPromoted: Int?
     /// Меню магазина (`shops/{slug}/products`) отдаёт старую цену в `price_old`,
     /// а `old_price` там null: фильтр «Скидки» был всегда пустым.
-    @LenientDouble var priceOld: Double?
+    @LenientDecimal var priceOld: Decimal?
     /// Старая цена из любого из двух ключей.
-    var oldPriceAny: Double? { oldPrice ?? priceOld }
+    var oldPriceAny: Decimal? { oldPrice ?? priceOld }
     /// П-22.3 (А58): название заведения в умном поиске и избранных товарах.
     /// Нет поля (старый сервер, меню магазина) — nil, строка не показывается.
     let shopName: String?
@@ -427,10 +427,10 @@ struct Product: Codable, Identifiable, Hashable {
     @LossyList var priceTiers: [PriceTier]?
 }
 struct ComboItem: Codable {
-    let name: String?; @LenientInt var qty: Int?; @LenientDouble var price: Double?; let photo: String?
+    let name: String?; @LenientInt var qty: Int?; @LenientDecimal var price: Decimal?; let photo: String?
 }
 struct ProductDetail: Codable, Identifiable {
-    let id: Int; let name: String?; @LenientDouble var price: Double?; @LenientDouble var oldPrice: Double?
+    let id: Int; let name: String?; @LenientDecimal var price: Decimal?; @LenientDecimal var oldPrice: Decimal?
     let description: String?; let photos: [MediaPhoto]?; let modifierGroups: [ModifierGroup]?; @LenientInt var shopId: Int?; let shopName: String?; let shopSlug: String?
     let comboItems: [ComboItem]?
     let unit: String?; @LenientInt var qtyFractional: Int?; @LenientDouble var qtyStep: Double?; let qtyPresets: String?
@@ -453,14 +453,14 @@ struct ModifierGroup: Codable, Identifiable {
     let id: Int; let name: String?; let type: String?; @LenientBool var isRequired: Bool?
     @LenientInt var minQty: Int?; @LenientInt var maxQty: Int?; let options: [ModifierOption]?
 }
-struct ModifierOption: Codable, Identifiable, Hashable { let id: Int; let name: String?; @LenientDouble var price: Double?; let photoWebp: String? }
+struct ModifierOption: Codable, Identifiable, Hashable { let id: Int; let name: String?; @LenientDecimal var price: Decimal?; let photoWebp: String? }
 struct MediaPhoto: Codable, Hashable { let pathWebp: String? }
 
 // clientCode — карта клиента: личный штрихкод (EAN-13), который кассир
 // сканирует в магазине. Сервер выдаёт его при первом открытии профиля и больше
 // не меняет. Старый сервер поля не отдаёт — остаётся nil, блок не рисуется.
 // avatar — путь к фото профиля (api_v1.php:1652), паритет с Android; nil — нет фото.
-struct Profile: Codable { @LenientInt var id: Int?; let name: String?; let phone: String?; let email: String?; @LenientDouble var bonusBalance: Double?; let clientCode: String?; let avatar: String?
+struct Profile: Codable { @LenientInt var id: Int?; let name: String?; let phone: String?; let email: String?; @LenientDecimal var bonusBalance: Decimal?; let clientCode: String?; let avatar: String?
     /// А114: почта подтверждена кодом (true / false; null — почты нет или старый сервер).
     @LenientBool var emailVerified: Bool?
     /// А114: письма на почту не доходят — null | "typo" | "undeliverable". Старый сервер — nil.
@@ -478,7 +478,7 @@ struct Address: Codable, Identifiable {
 }
 
 struct Order: Codable, Identifiable {
-    let id: Int; @LenientInt var dailyNumber: Int?; let status: String?; @LenientDouble var total: Double?
+    let id: Int; @LenientInt var dailyNumber: Int?; let status: String?; @LenientDecimal var total: Decimal?
     let createdAt: String?; let shopName: String?; let shopLogo: String?
     /// Запись на услугу. На сервере запись хранится как заказ, поэтому она приходила
     /// и сюда, и должна была прийти в «Мои записи». Признак is_appointment позволяет
@@ -516,7 +516,7 @@ struct Appointment: Codable, Identifiable {
     let timeEnd: String?
     @LenientInt var serviceId: Int?
     let service: String?
-    @LenientDouble var price: Double?
+    @LenientDecimal var price: Decimal?
     @LenientInt var durationMin: Int?
     let master: String?
     let masterPhoto: String?
@@ -524,7 +524,7 @@ struct Appointment: Codable, Identifiable {
     @LenientInt var guests: Int?
     @LenientInt var slots: Int?
     let status: String?         // new | accepted | done | cancelled
-    @LenientDouble var total: Double?
+    @LenientDecimal var total: Decimal?
     @LenientInt var shopId: Int?
     let shop: String?
     let shopSlug: String?
@@ -554,7 +554,7 @@ struct OrderItem: Codable, Identifiable {
     @LenientDouble var qty: Double?
     /// Сколько заказывал КЛИЕНТ. Отличается от qty, если продавец правил заказ.
     @LenientDouble var qtyOrdered: Double?
-    @LenientDouble var price: Double?
+    @LenientDecimal var price: Decimal?
     let unit: String?
     /// А115 (П-60 №7), только GET api/v1/orders/{id}, строкой «0.000»:
     /// return_qty — уже одобренный возврат, return_pending_qty — в заявке,
@@ -592,9 +592,9 @@ struct OrderChangeLine: Codable, Identifiable {
     let unit: String?
     @LenientDouble var qtyBefore: Double?
     @LenientDouble var qtyAfter: Double?
-    @LenientDouble var price: Double?
-    @LenientDouble var sumBefore: Double?
-    @LenientDouble var sumAfter: Double?
+    @LenientDecimal var price: Decimal?
+    @LenientDecimal var sumBefore: Decimal?
+    @LenientDecimal var sumAfter: Decimal?
     var id: String { "\(itemId ?? 0)|\(name ?? "")|\(qtyAfter ?? 0)" }
 }
 
@@ -604,22 +604,22 @@ struct OrderChange: Codable, Identifiable {
     let actorType: String?           // pos | seller | system
     let actor: String?
     let reason: String?
-    @LenientDouble var totalBefore: Double?
-    @LenientDouble var totalAfter: Double?
+    @LenientDecimal var totalBefore: Decimal?
+    @LenientDecimal var totalAfter: Decimal?
     let lines: [OrderChangeLine]?
     let text: String?                // готовая строка на случай, если рисовать построчно негде
     var id: Int { rev ?? 0 }
 }
 struct OrderDetail: Codable, Identifiable {
-    let id: Int; @LenientInt var dailyNumber: Int?; let status: String?; @LenientDouble var total: Double?
+    let id: Int; @LenientInt var dailyNumber: Int?; let status: String?; @LenientDecimal var total: Decimal?
     let deliveryType: String?; let paymentType: String?; let address: String?
     /// pending | paid | … — чтобы не показывать «Оплатить» у оплаченного заказа.
     let paymentStatus: String?
     let createdAt: String?; let shopName: String?; let items: [OrderItem]?
-    @LenientDouble var subtotal: Double?; @LenientDouble var deliveryPrice: Double?; @LenientDouble var serviceFee: Double?
-    @LenientDouble var tip: Double?; @LenientDouble var discount: Double?; let promoCode: String?
+    @LenientDecimal var subtotal: Decimal?; @LenientDecimal var deliveryPrice: Decimal?; @LenientDecimal var serviceFee: Decimal?
+    @LenientDecimal var tip: Decimal?; @LenientDecimal var discount: Decimal?; let promoCode: String?
     // Баллы по заказу (points_spent / points_earned маппятся через .convertFromSnakeCase).
-    @LenientDouble var pointsSpent: Double?; @LenientDouble var pointsEarned: Double?
+    @LenientDecimal var pointsSpent: Decimal?; @LenientDecimal var pointsEarned: Decimal?
     /// Тип организации: shop | cafe | service (аддитивно, см. Order.shopType).
     let shopType: String?
     /// Ревизия состава и история правок (аддитивно). Пусто — заказ не правили.
@@ -765,7 +765,7 @@ struct BonusInfo: Codable { @LenientDouble var balance: Double?; let history: [B
 struct BonusRow: Codable, Identifiable { @LenientInt var id: Int?; @LenientDouble var amount: Double?; let reason: String?; let createdAt: String?
     var stableId: Int { id ?? 0 } }
 // Баланс баллов по магазину (ответ /profile/bonuses — массив).
-struct BonusShopBalance: Codable { @LenientInt var shopId: Int?; let shop: String?; @LenientDouble var balance: Double?
+struct BonusShopBalance: Codable { @LenientInt var shopId: Int?; let shop: String?; @LenientDecimal var balance: Decimal?
     /// П-25 №3: shop_id здесь всегда число и уникален — ключ строки списка.
     var rowKey: String { shopId.map { "s\($0)" } ?? "n-\(shop ?? "")" } }
 // Операция по баллам (ответ /profile/bonuses/history).
@@ -1113,7 +1113,7 @@ struct WalletTopupBody: Encodable {
 // ---- Возвраты ----
 struct ReturnItem: Codable, Identifiable {
     let id: Int; @LenientInt var orderId: Int?; let type: String?; let reasonCode: String?
-    let status: String?; @LenientDouble var refundAmount: Double?; let createdAt: String?; let shop: String?
+    let status: String?; @LenientDecimal var refundAmount: Decimal?; let createdAt: String?; let shop: String?
     /// П-23.3 (А58): номер заказа за день (как видит клиент). nil — старые заказы/сервер.
     @LenientInt var orderDailyNumber: Int?
     /// П-24 №1 (А62): дата заказа "YYYY-MM-DD HH:MM:SS" (Москва) или null.
@@ -1124,12 +1124,12 @@ struct ReturnEligibility: Codable { let eligible: Bool?; @LenientInt var windowH
 // ---- Вакансии ----
 struct Job: Codable, Identifiable {
     let id: Int; let title: String?; let category: String?
-    @LenientDouble var salaryFrom: Double?; @LenientDouble var salaryTo: Double?; let employmentType: String?
+    @LenientDecimal var salaryFrom: Decimal?; @LenientDecimal var salaryTo: Decimal?; let employmentType: String?
     let experience: String?; let schedule: String?; let shop: String?
 }
 struct JobDetail: Codable, Identifiable {
     let id: Int; let title: String?; let category: String?
-    @LenientDouble var salaryFrom: Double?; @LenientDouble var salaryTo: Double?; let description: String?; let requirements: String?
+    @LenientDecimal var salaryFrom: Decimal?; @LenientDecimal var salaryTo: Decimal?; let description: String?; let requirements: String?
     let schedule: String?; let employmentType: String?; let experience: String?
     let shop: String?; let shopAddress: String?
     /// Условия работы и адрес самой вакансии — сервер шлёт, экран не показывал.
@@ -1141,13 +1141,13 @@ struct JobDetail: Codable, Identifiable {
 struct Master: Codable, Identifiable { let id: Int; let name: String?; let photoWebp: String?; let bio: String?; @LenientDouble var rating: Double? }
 struct ServiceItem: Codable, Identifiable {
     let id: Int; @LenientInt var masterId: Int?; let name: String?; let description: String?
-    @LenientInt var durationMin: Int?; @LenientDouble var price: Double?
+    @LenientInt var durationMin: Int?; @LenientDecimal var price: Decimal?
     /// Где оказывается услуга: at_business (в заведении) | at_client (выезд).
     /// Сервер отдаёт location_type всегда, со значением по умолчанию
     /// at_business — форма ответа одинакова даже без миграции (api_v1.php).
     let locationType: String?
     /// Доплата за выезд. Приходит строкой ("0.00"), поэтому @LenientDouble.
-    @LenientDouble var travelFee: Double?
+    @LenientDecimal var travelFee: Decimal?
     /// Услуга с выездом к клиенту — тогда при записи нужен адрес.
     var isAtClient: Bool { locationType == "at_client" }
 
@@ -1250,7 +1250,7 @@ struct ServiceItem: Codable, Identifiable {
 /// nil → "first".
 struct ServicesResponse: Codable { let masters: [Master]?; let services: [ServiceItem]?; let placement: String? }
 struct CatalogItem: Codable, Hashable {
-    let id: Int; let name: String?; @LenientDouble var price: Double?
+    let id: Int; let name: String?; @LenientDecimal var price: Decimal?
     let type: String?; let shopName: String?; let shopSlug: String?; let photo: String?; let category: String?
     /// O1: оптовые ступени и единица для метки «от 25 кг — 37 ₽» (нет поля — метки нет).
     @LossyList var priceTiers: [PriceTier]?
@@ -1262,8 +1262,19 @@ struct CatalogItem: Codable, Hashable {
 // popular — товары по истории заказов (та же форма, что CatalogItem),
 // ordered_again — магазины, где пользователь уже заказывал.
 struct RecommendationsResp: Codable {
-    let orderedAgain: [Shop]?
+    let orderedAgain: [OrderedAgainShop]?
     let popular: [CatalogItem]?
+}
+/// Заведение из блока «Вы заказывали» (recommendations.ordered_again).
+/// rating приходит строкой "4.80" -> точный Decimal; всё опционально (старый сервер).
+struct OrderedAgainShop: Codable, Identifiable, Hashable {
+    let id: Int
+    let name: String?
+    let slug: String?
+    let logo: String?
+    @LenientDecimal var rating: Decimal?
+    let lastAt: String?
+    @LenientInt var orders: Int?
 }
 struct Slot: Codable, Identifiable {
     let id: Int
@@ -1396,9 +1407,9 @@ struct AppointmentResult: Codable {
     @LenientInt var guests: Int?
     @LenientInt var slots: Int?
     @LenientDouble var hours: Double?
-    @LenientDouble var price: Double?
+    @LenientDecimal var price: Decimal?
     @LenientInt var atClient: Int?
-    @LenientDouble var travelFee: Double?
+    @LenientDecimal var travelFee: Decimal?
     let address: String?
 }
 struct SocialBody: Encodable { let provider: String; let code: String }
@@ -1422,11 +1433,11 @@ struct ReorderData: Decodable {
     let items: [ReorderItem]?
 }
 struct ReorderItem: Decodable {
-    @LenientInt var productId: Int?; @LenientDouble var qty: Double?; let name: String?; @LenientDouble var price: Double?; let photo: String?
+    @LenientInt var productId: Int?; @LenientDouble var qty: Double?; let name: String?; @LenientDecimal var price: Decimal?; let photo: String?
     // Аддитивно (сервер 2026-09): модификаторы строки, цена с ними, единица и дробность.
     let modifierIds: [Int]?
     let modifiersLabel: String?
-    @LenientDouble var unitPrice: Double?
+    @LenientDecimal var unitPrice: Decimal?
     let unit: String?
     @LenientBool var qtyFractional: Bool?
     let qtyPresets: String?

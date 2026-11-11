@@ -251,6 +251,8 @@ private struct AddAddressView: View {
     @State private var suggestions: [AddrSuggest] = []
     @State private var suggestTask: Task<Void, Never>?
     @State private var suppress = false
+    @State private var needHouse = false
+    @FocusState private var streetFocused: Bool
     @State private var saving = false
     @State private var error: String?
 
@@ -266,16 +268,15 @@ private struct AddAddressView: View {
                         HStack { Text("Город"); Spacer(); Text(cityName).foregroundStyle(YMColor.muted) }
                     }
                     TextField("Улица и дом", text: $street)
+                        .focused($streetFocused)
                         .onChange(of: street) { v in scheduleSuggest(v) }
+                        .onChange(of: streetFocused) { f in if !f { suggestions = [] } }
                         .ymMaxLength($street, 190)
-                    ForEach(suggestions) { s in
-                        Button { pick(s) } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "mappin.circle").foregroundStyle(YMColor.muted)
-                                Text(s.value ?? "").foregroundStyle(YMColor.text)
-                                Spacer()
-                            }
-                        }
+                    if streetFocused && !suggestions.isEmpty {
+                        AddressSuggestRows(items: suggestions) { s in pick(s) }
+                    }
+                    if needHouse {
+                        Text("Укажите номер дома").font(YMFont.caption).foregroundStyle(YMColor.muted)
                     }
                     TextField("Дом", text: $house).ymMaxLength($house, 30)
                     TextField("Квартира (по желанию)", text: $apartment).keyboardType(.numbersAndPunctuation)
@@ -314,14 +315,14 @@ private struct AddAddressView: View {
         // Улицу правят руками — координаты прежней подсказки больше не её.
         // Раньше адрес сохранялся с новой улицей и старой точкой: зона, цена
         // доставки и точка для курьера были от другого адреса.
-        lat = nil; lng = nil; picked = false
+        lat = nil; lng = nil; picked = false; needHouse = false
         let q = text.trimmingCharacters(in: .whitespaces)
         guard q.count >= 3 else { suggestions = []; return }
         let query = cityName.isEmpty ? q : "\(cityName), \(q)"
         suggestTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: 350_000_000)
             if Task.isCancelled { return }
-            let res: [AddrSuggest] = (try? await API.shared.get("api/address/suggest", query: ["q": query])) ?? []
+            let res: [AddrSuggest] = await AddressSuggestService.shared.fetch(query) ?? []
             if Task.isCancelled { return }
             await MainActor.run { suggestions = res }
         }
@@ -338,6 +339,8 @@ private struct AddAddressView: View {
         if let h = s.house, !h.isEmpty { house = h }
         lat = s.lat; lng = s.lng; picked = true
         suggestions = []
+        needHouse = s.house?.isEmpty ?? true
+        streetFocused = true
     }
     private func save() {
         // Двойное нажатие до перерисовки кнопки сохраняло адрес дважды.

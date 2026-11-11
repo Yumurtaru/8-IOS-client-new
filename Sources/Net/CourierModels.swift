@@ -287,7 +287,9 @@ enum CourierAPI {
 
     /// Города площадки — те же, что у веб-страницы и приложения курьера (with_orgs=1).
     static func cities() async throws -> [City] {
-        let list: [City] = try await API.shared.list("api/v1/cities", query: ["with_orgs": "1"])
+        // П-71 п.6: все активные города — заявку курьера сервер принимает из любого города справочника
+        // (with_orgs=1 отдаёт только города с заведениями, как Android CourierRepo.cities).
+        let list: [City] = try await API.shared.list("api/v1/cities")
         return list.filter { $0.id > 0 && !($0.name ?? "").isEmpty }
     }
 

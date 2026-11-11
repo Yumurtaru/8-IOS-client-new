@@ -1835,6 +1835,8 @@ private struct AddAddressSheet: View {
     @State private var suggestions: [AddrSuggest] = []
     @State private var suggestTask: Task<Void, Never>?
     @State private var suppressSuggest = false
+    @State private var needHouse = false
+    @FocusState private var streetFocused: Bool
     @State private var saving = false
     @State private var error: String?
 
@@ -1849,17 +1851,16 @@ private struct AddAddressSheet: View {
                         HStack { Text("Город"); Spacer(); Text(cityName).foregroundStyle(YMColor.muted) }
                     }
                     TextField("Улица", text: $street)
+                        .focused($streetFocused)
                         .onChange(of: street) { v in scheduleSuggest(v) }
+                        .onChange(of: streetFocused) { f in if !f { suggestions = [] } }
                         .ymMaxLength($street, 190)
-                    // Подсказки Dadata, отфильтрованные по выбранному городу.
-                    ForEach(suggestions) { s in
-                        Button { pick(s) } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "mappin.circle").foregroundStyle(YMColor.muted)
-                                Text(suggestLine(s)).foregroundStyle(YMColor.text)
-                                Spacer()
-                            }
-                        }
+                    // Подсказки (серверный прокси), отфильтрованные по выбранному городу.
+                    if streetFocused && !suggestions.isEmpty {
+                        AddressSuggestRows(items: suggestions) { s in pick(s) }
+                    }
+                    if needHouse {
+                        Text("Укажите номер дома").font(YMFont.caption).foregroundStyle(YMColor.muted)
                     }
                     TextField("Дом", text: $house).ymMaxLength($house, 30)
                     TextField("Квартира (по желанию)", text: $apartment).keyboardType(.numbersAndPunctuation)
@@ -1905,15 +1906,16 @@ private struct AddAddressSheet: View {
         // если сбросить lat/lng ДО этой проверки — обнулим только что выбранные координаты (баг
         // «Выберите адрес из подсказок» после выбора). Обнуляем ТОЛЬКО при ручном вводе.
         if suppressSuggest { suppressSuggest = false; suggestions = []; return }
+        needHouse = false
         lat = nil; lng = nil   // ручной ввод улицы — координаты недействительны, пока не выбрана подсказка
         let q = text.trimmingCharacters(in: .whitespaces)
         guard q.count >= 3 else { suggestions = []; return }
         // Запрос строим как «<Город>, <ввод>» — Dadata приоритезирует этот город.
         let query = cityName.isEmpty ? q : "\(cityName), \(q)"
         suggestTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(nanoseconds: 350_000_000)
             if Task.isCancelled { return }
-            let res: [AddrSuggest] = (try? await API.shared.get("api/address/suggest", query: ["q": query])) ?? []
+            let res: [AddrSuggest] = await AddressSuggestService.shared.fetch(query) ?? []
             if Task.isCancelled { return }
             // Дополнительная фильтрация: остаются только адреса выбранного города
             // (или без города — если прокси не вернул city), чтобы улицы других городов не лезли.
@@ -1926,11 +1928,16 @@ private struct AddAddressSheet: View {
 
     // Выбор подсказки: заполняем улицу/дом/координаты.
     private func pick(_ s: AddrSuggest) {
-        suppressSuggest = true
-        street = s.street?.isEmpty == false ? s.street! : (s.value ?? street)
+        let newStreet = s.street?.isEmpty == false ? s.street! : (s.value ?? street)
+        // Улица не меняется — onChange не придёт; взведённый флаг съел бы следующую ручную правку
+        // (не сбросил бы lat/lng и подсказки).
+        suppressSuggest = newStreet != street
+        street = newStreet
         if let h = s.house, !h.isEmpty { house = h }
         lat = s.lat; lng = s.lng
         suggestions = []
+        needHouse = s.house?.isEmpty ?? true
+        streetFocused = true   // курсор остаётся в поле
     }
 
     private func save() {

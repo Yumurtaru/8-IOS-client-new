@@ -28,7 +28,7 @@ import SwiftUI
 enum JobFormat {
     /// Зарплата → человекочитаемый диапазон. Деньги — через Money (Decimal, канон клиента).
     /// null/0 → «з/п не указана».
-    static func salary(_ from: Double?, _ to: Double?) -> String {
+    static func salary(_ from: Decimal?, _ to: Decimal?) -> String {
         let f = from.flatMap { $0 > 0 ? $0 : nil }
         let t = to.flatMap { $0 > 0 ? $0 : nil }
         switch (f, t) {

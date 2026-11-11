@@ -39,12 +39,17 @@ struct PayLink: Identifiable {
     let url: URL
 }
 
-/// Тело отзыва: POST api/v1/reviews {order_id, rating, text}.
+/// Тело отзыва: POST api/v1/reviews {order_id, rating, rating_food?, rating_delivery?, rating_service?, text?, photos?}.
 /// camelCase → snake_case через API.encoder (.convertToSnakeCase) — 1:1 с Android createReview.
+/// nil-поля не кодируются (synthesized encodeIfPresent): «не оценивал» = поля нет.
 private struct OrderReviewBody: Encodable {
     let orderId: Int
     let rating: Int
+    let ratingFood: Int?
+    let ratingDelivery: Int?
+    let ratingService: Int?
     let text: String?
+    let photos: [String]?
 }
 
 // MARK: - OrderDetailViewModel
@@ -141,7 +146,7 @@ final class OrderDetailViewModel: ObservableObject {
     }
 
     /// Отзыв: POST api/v1/reviews {order_id, rating, text}. Контракт 1:1 с Android createReview.
-    func sendReview(rating: Int, text: String) async {
+    func sendReview(rating: Int, food: Int, delivery: Int, service: Int, text: String, photos: [ReviewPhoto]) async {
         guard !actionBusy else { return }
         // Сервер (А719) отклоняет отзыв без оценки или с оценкой < 1 (422 «Поставьте оценку от 1 до 5»):
         // 0 и «без оценки» в запрос не отправляем.
@@ -149,13 +154,24 @@ final class OrderDetailViewModel: ObservableObject {
         actionBusy = true; defer { actionBusy = false }
         // Пробелы и пустые строки по краям не отправляем: «   » уходило отзывом-пустышкой.
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // base64 без переносов строк — вне главного потока (до 5 фото ≈ несколько МБ).
+        let jpegs = photos.map { $0.jpeg }
+        let b64: [String] = await Task.detached(priority: .userInitiated) {
+            jpegs.map { $0.base64EncodedString() }
+        }.value
+        func part(_ v: Int) -> Int? { (1...5).contains(v) ? v : nil }
         do {
+            // retryKey: повтор после обрыва уходит с тем же Idempotency-Key и теми же байтами тела.
             try await API.shared.postVoid("api/v1/reviews",
-                body: OrderReviewBody(orderId: id, rating: rating, text: t.isEmpty ? nil : t))
+                body: OrderReviewBody(orderId: id, rating: rating,
+                                      ratingFood: part(food), ratingDelivery: part(delivery), ratingService: part(service),
+                                      text: t.isEmpty ? nil : t, photos: b64.isEmpty ? nil : b64),
+                retryKey: true)
             Haptics.success(); reviewSent = true; toast = "Спасибо за отзыв!"
         } catch let e as APIError where e.rejectStatus == 409 {
             // П-23.1: 409 — отзыв по заказу уже есть: форму прячем, не «ошибка».
-            Haptics.warning(); reviewAlready = true; toast = "Отзыв уже оставлен"
+            Haptics.warning(); reviewAlready = true
+            toast = e.errorDescription ?? "Отзыв уже оставлен"
         } catch {
             Haptics.error(); toast = (error as? LocalizedError)?.errorDescription ?? "Не удалось отправить отзыв"
         }
@@ -296,7 +312,7 @@ final class OrderDetailViewModel: ObservableObject {
             var line = CartLine(key: "reorder-\(pid)-\(mods.map(String.init).joined(separator: "."))-\(idx)",
                                 productId: pid,
                                 name: it.name ?? "Товар",
-                                unitPrice: it.unitPrice ?? it.price ?? 0,
+                                unitPrice: Money.toDouble(it.unitPrice ?? it.price) ?? 0,
                                 qty: it.qty ?? 1,
                                 modifierIds: mods,
                                 modsLabel: it.modifiersLabel ?? "",
@@ -490,6 +506,10 @@ struct OrderDetailView: View {
     @State private var visible = false
     @State private var reviewRating = 5
     @State private var reviewText = ""
+    @State private var reviewFood = 0
+    @State private var reviewDelivery = 0
+    @State private var reviewService = 0
+    @State private var reviewPhotos: [ReviewPhoto] = []
     @State private var npsScore = -1
 
     /// Сервер прислал имя или телефон курьера (только пока заказ в пути).
@@ -957,7 +977,7 @@ struct OrderDetailView: View {
         return "\(n)×"
     }
 
-    private func sumRow(_ title: String, _ value: Double?, negative: Bool = false, green: Bool = false) -> some View {
+    private func sumRow(_ title: String, _ value: Decimal?, negative: Bool = false, green: Bool = false) -> some View {
         HStack {
             Text(title).font(YMFont.callout).foregroundStyle(YMColor.muted)
             Spacer()
@@ -1010,8 +1030,18 @@ struct OrderDetailView: View {
                             .font(.system(size: 28))
                             .foregroundStyle(i <= reviewRating ? YMColor.accent : YMColor.hairline)
                             .onTapGesture { Haptics.light(); reviewRating = i }
-                            .accessibilityLabel("\(i) из 5")
+                            .accessibilityLabel("Общая оценка: \(i) из 5")
+                            .accessibilityAddTraits(.isButton)
                     }
+                }
+                // Раздельные оценки — необязательные, повторное нажатие снимает.
+                let st = (o.shopType ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+                let foodLabel = st == "shop" ? "Товары" : (st.isEmpty ? "Еда и товары" : "Еда")
+                let hasDelivery = (o.deliveryType ?? "").trimmingCharacters(in: .whitespaces).lowercased() == "delivery"
+                VStack(alignment: .leading, spacing: YMSpace.xs) {
+                    reviewPartRow(foodLabel, $reviewFood)
+                    if hasDelivery { reviewPartRow("Доставка", $reviewDelivery) }
+                    reviewPartRow("Сервис", $reviewService)
                 }
                 TextField("Комментарий (необязательно)", text: $reviewText, axis: .vertical)
                     .lineLimit(2...5)
@@ -1023,21 +1053,37 @@ struct OrderDetailView: View {
                     .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous)
                         .strokeBorder(YMColor.hairline, lineWidth: 1))
+                ReviewPhotosField(photos: $reviewPhotos, busy: vm.actionBusy) {
+                    Haptics.warning(); vm.toast = "Одно фото не удалось прочитать"
+                }
                 Button {
-                    Task { await vm.sendReview(rating: reviewRating, text: reviewText) }
+                    Task {
+                        await vm.sendReview(rating: reviewRating, food: reviewFood, delivery: reviewDelivery,
+                                            service: reviewService, text: reviewText, photos: reviewPhotos)
+                    }
                 } label: {
-                    HStack {
-                        if vm.actionBusy { ProgressView().tint(YMColor.onAccent) }
+                    HStack(spacing: YMSpace.sm) {
+                        if vm.actionBusy { ProgressView().tint(YMColor.onAccent); Text("Отправляем…") }
                         else { Text("Отправить отзыв") }
                     }
                 }
                 .buttonStyle(YMPrimaryButtonStyle())
                 .disabled(vm.actionBusy)
+                Text("Отзыв появится после проверки модератором")
+                    .font(YMFont.caption).foregroundStyle(YMColor.muted)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
         .ymCard(radius: YMRadius.card)
+    }
+
+    private func reviewPartRow(_ label: String, _ value: Binding<Int>) -> some View {
+        HStack(spacing: YMSpace.md) {
+            Text(label).font(YMFont.callout).foregroundStyle(YMColor.text)
+                .frame(width: 110, alignment: .leading)
+            ReviewStarsRow(label: label, value: value, size: 22, disabled: vm.actionBusy)
+        }
     }
 
     // MARK: Блок NPS (0–10, опционально)

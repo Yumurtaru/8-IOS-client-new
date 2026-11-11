@@ -16,13 +16,12 @@ import ActivityKit
 //     на экране — по .ymOrderPushed;
 //   - done / cancelled — завершение активности.
 //
-//  Серверный push-to-update (APNs liveactivity) выключен: ручки токена на
-//  сервере ещё нет. Включить: serverPushEnabled = true.
+//  Серверный push-to-update (APNs liveactivity) включён: сервер принимает токен
+//  (POST /api/v1/push/live-activity, ответ сайта на П-71) и шлёт обновления статуса.
 
 enum OrderLiveActivity {
-    /// Отправлять push-токен активности на сервер. Ручки POST /api/v1/push/live-activity
-    /// {order_id, token} на сервере пока нет — выключено.
-    static let serverPushEnabled = false
+    /// Отправлять push-токен активности на сервер: POST /api/v1/push/live-activity {order_id, token} (П-71).
+    static let serverPushEnabled = true
     static let tokenPath = "api/v1/push/live-activity"
 
     // MARK: - Вход для остального приложения
@@ -207,7 +206,7 @@ enum OrderActivityController {
         }
     }
 
-    /// Push-токен активности — на сервер (пока выключено флагом).
+    /// Push-токен активности — на сервер (флаг serverPushEnabled).
     private static func observeToken(_ a: Activity<OrderActivityAttributes>) {
         guard OrderLiveActivity.serverPushEnabled else { return }
         lock.lock()

@@ -483,6 +483,13 @@ final class API {
         if retryKey { return try await sendKeyed(req, as: T.self) }
         return try await send(req, as: T.self)
     }
+    /// POST с готовым JSON: ключи уходят как есть (без convertToSnakeCase) - нужно для
+    /// WebAuthn credential (rawId, clientDataJSON...). Используют ключи доступа.
+    func postJSON<T: Decodable>(_ path: String, json: [String: Any]) async throws -> T {
+        var req = try makeRequest("POST", path)
+        req.httpBody = try JSONSerialization.data(withJSONObject: json)
+        return try await send(req, as: T.self)
+    }
     func put<T: Decodable>(_ path: String, body: Encodable? = nil) async throws -> T {
         try await send(try makeRequest("PUT", path, body: body), as: T.self)
     }

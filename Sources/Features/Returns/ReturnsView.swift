@@ -695,7 +695,7 @@ struct ReturnCreateView: View {
         }
         // Пока ждали ответ, человек выбрал другой заказ (или тот же заново) — не перетираем.
         guard token == linesToken, selectedOrderId == id else { return }
-        let ls = (d?.items ?? []).filter { ($0.lineId ?? 0) > 0 && ($0.qty ?? 0) > 0.0005 && ($0.price ?? 0) > 0.0049 }
+        let ls = (d?.items ?? []).filter { ($0.lineId ?? 0) > 0 && ($0.qty ?? 0) > 0.0005 && ($0.price ?? 0) > 0 }
         var q: [Int: Double] = [:]
         // По умолчанию — всё, что ещё можно вернуть (А115: returnable_qty).
         for l in ls { if let lid = l.lineId { q[lid] = returnMax(l) } }

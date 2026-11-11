@@ -31,7 +31,7 @@ private struct RegRequestResult: Decodable {
 }
 
 /// Ответ login / register/confirm: токены доступа и продления.
-private struct AuthTokens: Decodable {
+struct AuthTokens: Decodable {
     let token: String?
     let refresh: String?
     /// user.id из ответа входа — только чтобы узнать, тот же ли это человек.
@@ -40,7 +40,7 @@ private struct AuthTokens: Decodable {
 
 /// Из `user` берём один id. Разбор не бросает ошибок: неожиданная форма
 /// `user` не должна ломать сам вход.
-private struct AuthUser: Decodable {
+struct AuthUser: Decodable {
     let id: Int?
     private enum K: String, CodingKey { case id }
     init(from decoder: Decoder) throws {
@@ -119,6 +119,9 @@ struct AuthView: View {
 
     @State private var busy = false
     @State private var error: String?
+    /// 152-ФЗ: отдельная галочка согласия на обработку ПДн — при каждом показе экрана не отмечена.
+    @State private var pdChecked = false
+    @State private var pdError = false
     /// А114: 422 email_invalid на «Получить код» — текст у поля почты и
     /// исправленный адрес для кнопки «Исправить на …» (nil — подсказки нет).
     @State private var emailError: String?
@@ -220,6 +223,13 @@ struct AuthView: View {
                             .padding(.top, YMSpace.sm)
                     }
 
+                    // 152-ФЗ: галочка — на входе (пароль, ключ доступа) и в регистрации; на шаге кода согласие уже дано.
+                    if step != .registerCode {
+                        PdConsentRow(checked: $pdChecked, showError: pdError)
+                            .padding(.top, YMSpace.md)
+                            .onChange(of: pdChecked) { on in if on { pdError = false } }
+                    }
+
                     Button(action: act) {
                         HStack(spacing: YMSpace.sm) {
                             if busy { ProgressView().tint(YMColor.onAccent) }
@@ -230,6 +240,21 @@ struct AuthView: View {
                     .disabled(!actionEnabled)
                     .opacity(actionEnabled ? 1 : 0.55)
                     .padding(.top, YMSpace.xl)
+
+                    if step == .password {
+                        Button(action: loginByPasskey) {
+                            Label("Войти с ключом доступа", systemImage: "person.badge.key.fill")
+                                .font(YMFont.subhead)
+                                .foregroundStyle(YMColor.accent)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, YMSpace.md)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(busy)
+                        .accessibilityLabel("Войти с ключом доступа")
+                        .accessibilityHint("Вход по Face ID или Touch ID без пароля")
+                        .padding(.top, YMSpace.sm)
+                    }
 
                     footerLinks.padding(.top, YMSpace.md)
                 }
@@ -441,6 +466,7 @@ struct AuthView: View {
     /// Вход логин(email/телефон) + пароль → токены.
     private func loginByPassword() {
         guard passwordValid, !busy else { return }
+        guard PdConsent.allowed(pdChecked) else { pdError = true; Haptics.error(); return }
         busy = true; error = nil
         Task {
             do {
@@ -455,9 +481,24 @@ struct AuthView: View {
         }
     }
 
+    /// Вход по ключу доступа - дальше тот же finish(), что у пароля.
+    private func loginByPasskey() {
+        guard !busy else { return }
+        guard PdConsent.allowed(pdChecked) else { pdError = true; Haptics.error(); return }
+        busy = true; error = nil
+        Task { @MainActor in
+            switch await Passkeys.signIn() {
+            case .ok(let t): finish(t)
+            case .cancelled: busy = false
+            case .fail(let m): busy = false; error = m; Haptics.error()
+            }
+        }
+    }
+
     /// Шаг 1 регистрации: отправить код на почту.
     private func registerRequest() {
         guard registerValid, !busy else { return }
+        guard PdConsent.allowed(pdChecked) else { pdError = true; Haptics.error(); return }
         busy = true; error = nil
         let body: [String: String] = [
             "name": name.trimmingCharacters(in: .whitespaces),
@@ -531,6 +572,7 @@ struct AuthView: View {
             return
         }
         AuthLastUser.switchTo(tokens.user?.id)
+        PdConsent.remember()
         session.signIn(token, refresh: tokens.refresh)
         Haptics.success()
         if let onAuthed { onAuthed() } else { dismiss() }

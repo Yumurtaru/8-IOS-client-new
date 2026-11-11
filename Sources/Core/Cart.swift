@@ -259,7 +259,7 @@ final class Cart: ObservableObject {
         if self.shopId != nil && self.shopId != shopId { lines = [] } // корзина из одного заведения
         self.shopId = shopId; self.shopName = shopName; self.shopSlug = product.shopSlug
         let chosen = options.filter { modifierIds.contains($0.id) }
-        let modPrice = chosen.reduce(0) { $0 + ($1.price ?? 0) }
+        let modPrice = chosen.reduce(0.0) { $0 + (Money.toDouble($1.price) ?? 0) }
         let key = "\(product.id)-\(modifierIds.sorted().map(String.init).joined(separator: ","))"
         if let idx = lines.firstIndex(where: { $0.key == key }) {
             // Паритет с Android: количество суммируем, а цену, название и фото
@@ -268,7 +268,7 @@ final class Cart: ObservableObject {
             let old = lines[idx]
             let newQty: Double = ((old.qty + qty) * 1000).rounded() / 1000   // суммируем
             var freshPrice: Double = old.unitPrice
-            if let p = product.price { freshPrice = p + modPrice }
+            if let p = Money.toDouble(product.price) { freshPrice = p + modPrice }
             var line = old
             line.unitPrice = freshPrice
             line.qty = newQty
@@ -276,20 +276,20 @@ final class Cart: ObservableObject {
             line.photo = product.photos?.first?.pathWebp ?? old.photo
             line.serverWholesale = nil
             line.priceTiers = product.priceTiers
-            line.retailBase = product.price
+            line.retailBase = Money.toDouble(product.price)
             line.retailUnit = freshPrice
             lines[idx] = line
         } else {
             lines.append(CartLine(key: key, productId: product.id, name: product.name ?? "",
-                unitPrice: (product.price ?? 0) + modPrice, qty: qty, modifierIds: modifierIds,
+                unitPrice: (Money.toDouble(product.price) ?? 0) + modPrice, qty: qty, modifierIds: modifierIds,
                 modsLabel: chosen.compactMap { $0.name }.joined(separator: ", "),
                 photo: product.photos?.first?.pathWebp,
                 unit: product.unit, qtyFractional: (product.qtyFractional ?? 0) == 1, qtyPresets: product.qtyPresets,
                 qtyStep: product.qtyStep,
-                priceTiers: product.priceTiers, retailBase: product.price,
-                retailUnit: (product.price ?? 0) + modPrice))
+                priceTiers: product.priceTiers, retailBase: Money.toDouble(product.price),
+                retailUnit: (Money.toDouble(product.price) ?? 0) + modPrice))
         }
-        Track.addToCart(id: product.id, name: product.name, price: product.price, qty: 1)
+        Track.addToCart(id: product.id, name: product.name, price: Money.toDouble(product.price), qty: 1)
         save()
         return true
     }
@@ -392,7 +392,7 @@ enum Fees {
         // Как на сервере (api_v1.php: payer === 'shop' ? 'shop' : 'client'): сбор не берётся
         // только при payer == "shop". Пустое поле раньше давало 0 в приложении, а сервер сбор брал.
         guard let shop, (shop.serviceFeePayer ?? "") != "shop" else { return 0 }
-        if (shop.serviceFeeType ?? "percent") == "fixed" { return shop.serviceFeeFixed ?? 0 }
+        if (shop.serviceFeeType ?? "percent") == "fixed" { return Money.toDouble(shop.serviceFeeFixed) ?? 0 }
         // В Decimal: 1234,50 × 3 % в Double = 37,0349… → 37,03, сервер — 37,04.
         var v = Money.parse(subtotal) * Money.parse(shop.serviceFeePercent ?? 0) / 100
         var r = Decimal(); NSDecimalRound(&r, &v, 2, .plain)

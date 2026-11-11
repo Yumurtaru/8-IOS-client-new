@@ -10,6 +10,7 @@ final class HomeViewModel: ObservableObject {
     @Published var banners: [Banner] = []
     @Published var popular: [CatalogItem] = []      // «Популярное в городе»
     @Published var recommendations: [CatalogItem] = [] // «Рекомендуем вам» (персонально)
+    @Published var orderedAgain: [OrderedAgainShop] = [] // «Вы заказывали» (ordered_again)
     @Published var shops: [Shop] = []               // список организаций
     @Published var kind: OrgKind = .all
     @Published var loading = true
@@ -84,12 +85,14 @@ final class HomeViewModel: ObservableObject {
         // прежнего города под новый — товары, которые сюда не возят.
         guard session.token == t, session.cityId == c else { return }
         recommendations = resp?.popular ?? []
+        orderedAgain = resp?.orderedAgain ?? []
     }
 
     /// Сменился аккаунт (вход/выход): личную подборку перечитываем, прежнюю
     /// убираем сразу — она собрана по заказам другого человека.
     func reloadRecommendations(session: Session) async {
         recommendations = []
+        orderedAgain = []
         await loadRecommendations(session: session)
     }
 
@@ -194,6 +197,7 @@ struct HomeView: View {
     // держим ОДИН destination на enum-маршрут.
     private enum HomeRoute {
         case shop(Shop)
+        case orgSlug(String)
         case product(Int)
         case listing(orgType: String, title: String)
         case becomeSeller
@@ -317,6 +321,7 @@ struct HomeView: View {
             )) {
                 switch route {
                 case .shop(let s):                   OrgView(shop: s)
+                case .orgSlug(let slug):             OrgView(shopSlug: slug)
                 case .product(let id):               ProductView(id: id)
                 case .listing(let type, let title):  ListingView(orgType: type, title: title, cityId: session.cityId)
                 case .becomeSeller:                  BecomeSellerView()
@@ -416,6 +421,22 @@ struct HomeView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
+            // «Вы заказывали» — заведения, где клиент уже заказывал (у гостя пусто — блока нет).
+            let again = vm.orderedAgain.filter { !($0.slug ?? "").isEmpty }.prefix(10)
+            if !again.isEmpty {
+                SectionHeader(title: "Вы заказывали", actionTitle: nil, action: nil)
+                    .padding(.top, 16)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: YMSpace.md) {
+                        ForEach(Array(again)) { s in
+                            OrderedAgainCard(shop: s) { go(.orgSlug(s.slug ?? "")) }
+                        }
+                    }
+                    .padding(.horizontal, YMSpace.xl)
+                    .padding(.top, 4)
+                }
+            }
+
             // «Популярное в городе» — горизонтальная карусель PopularCard.
             if !vm.popular.isEmpty {
                 SectionHeader(title: "Популярное в городе", actionTitle: "Все") {
@@ -892,5 +913,83 @@ private struct CityPickerSheet: View {
             loadFailed = true
         }
         loading = false
+    }
+}
+
+// MARK: - Карточка «Вы заказывали»
+
+/// Логотип (или буква), название, ★ рейтинг (если > 0), «N заказов».
+private struct OrderedAgainCard: View {
+    let shop: OrderedAgainShop
+    let onTap: () -> Void
+
+    private var name: String { shop.name ?? "" }
+
+    /// Рейтинг, округлённый до одного знака, "4.8"; nil — нет оценок.
+    private var ratingText: String? {
+        guard let r = shop.rating, r > 0 else { return nil }
+        var src = r
+        var out = Decimal()
+        NSDecimalRound(&out, &src, 1, .plain)
+        return "\(out)"
+    }
+
+    private var ordersText: String? {
+        guard let n = shop.orders, n > 0 else { return nil }
+        let m10 = n % 10, m100 = n % 100
+        let w: String
+        if m10 == 1 && m100 != 11 { w = "заказ" }
+        else if (2...4).contains(m10) && !(12...14).contains(m100) { w = "заказа" }
+        else { w = "заказов" }
+        return "\(n) \(w)"
+    }
+
+    private var a11y: String {
+        var parts: [String] = []
+        if !name.isEmpty { parts.append(name) }
+        if let r = ratingText { parts.append("рейтинг " + r.replacingOccurrences(of: ".", with: ",")) }
+        if let o = ordersText { parts.append(o) }
+        return parts.joined(separator: ", ") + ", кнопка"
+    }
+
+    var body: some View {
+        Button(action: { Haptics.light(); onTap() }) {
+            VStack(spacing: 4) {
+                Group {
+                    if let url = API.imageURL(shop.logo) {
+                        PhotoPlaceholder(url: url, label: "", radius: 28, tone: shop.id, fit: false)
+                    } else {
+                        ZStack {
+                            Circle().fill(YMColor.surface2)
+                            Text(String(name.trimmingCharacters(in: .whitespaces).prefix(1)).uppercased())
+                                .ymFont(20, weight: .bold)
+                                .foregroundStyle(YMColor.text)
+                        }
+                    }
+                }
+                .frame(width: 56, height: 56)
+                .clipShape(Circle())
+
+                Text(name)
+                    .ymFont(14, weight: .bold)
+                    .foregroundStyle(YMColor.text)
+                    .lineLimit(1)
+                if let r = ratingText {
+                    Text("★ " + r).ymFont(12).foregroundStyle(YMColor.muted).lineLimit(1)
+                }
+                if let o = ordersText {
+                    Text(o).ymFont(12).foregroundStyle(YMColor.muted).lineLimit(1)
+                }
+            }
+            .padding(12)
+            .frame(width: 132)
+            // Фон из темы: белый в светлой, графит в тёмной (как Android c.surface).
+            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: YMRadius.card))
+            .overlay(RoundedRectangle(cornerRadius: YMRadius.card).strokeBorder(YMColor.hairline, lineWidth: 1))
+        }
+        .buttonStyle(CardPressStyle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(a11y)
+        .accessibilityAddTraits(.isButton)
     }
 }

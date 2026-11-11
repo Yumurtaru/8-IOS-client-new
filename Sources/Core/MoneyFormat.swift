@@ -83,6 +83,12 @@ enum Money {
         return f
     }()
 
+    /// Мост к Double ТОЛЬКО для мест, где остался Double-контур (корзина CartLine,
+    /// аналитика Track). Для расчётов и показа денег не использовать.
+    static func toDouble(_ v: Decimal?) -> Double? {
+        v.map { NSDecimalNumber(decimal: $0).doubleValue }
+    }
+
     /// Деньги НА ПРОВОД: всегда "0.00" — точка разделителем, два знака, без
     /// пробелов и ₽ (канон SKILL.md, так же как number_format на сервере).
     /// `format` для этого не годится: он печатает «1 000,50 ₽» под русскую

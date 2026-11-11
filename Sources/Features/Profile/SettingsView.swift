@@ -42,6 +42,7 @@ struct SettingsView: View {
                 appearanceSection
                 notificationsSection
                 paySection
+                PasskeysSection()
                 citySection
                 aboutSection
             }
@@ -165,6 +166,9 @@ struct SettingsView: View {
 
             linkRow(icon: "lock.shield", label: "Политика конфиденциальности",
                     url: "https://yumurta.ru/privacy")
+            rowDivider
+            linkRow(icon: "checkmark.shield", label: "Согласие на обработку персональных данных",
+                    url: "https://yumurta.ru/consent")
             rowDivider
             linkRow(icon: "doc.text", label: "Условия использования",
                     url: "https://yumurta.ru/terms")

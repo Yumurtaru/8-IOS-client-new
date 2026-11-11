@@ -58,6 +58,8 @@ enum CourierSignupText {
     static let errPd = "Нужно согласие на обработку персональных данных"
     static let errRules = "Нужно согласие с правилами курьеров"
     static let privacyURL = "https://yumurta.ru/privacy#couriers"
+    static let consentURL = "https://yumurta.ru/consent"
+    static let consentLink = "Согласие на обработку персональных данных"
     static let keyPd = "consent_pd"
     static let keyRules = "consent"
 
@@ -410,11 +412,19 @@ private struct CourierApplyForm: View {
                     consentPd.toggle()
                     fields[CourierSignupText.keyPd] = nil
                 }
+                // Согласие — отдельный документ (/consent), политика — отдельно (/privacy).
+                Button(CourierSignupText.consentLink) {
+                    if let u = URL(string: CourierSignupText.consentURL) { CourierLive.leftForLink = true; UIApplication.shared.open(u) }
+                }
+                .font(YMFont.callout.weight(.semibold))
+                .foregroundStyle(YMColor.accent)
+                .frame(minHeight: 44, alignment: .leading)
                 Button("Политика конфиденциальности") {
                     if let u = URL(string: CourierSignupText.privacyURL) { CourierLive.leftForLink = true; UIApplication.shared.open(u) }
                 }
                 .font(YMFont.callout.weight(.semibold))
                 .foregroundStyle(YMColor.accent)
+                .frame(minHeight: 44, alignment: .leading)
                 if let v = me.consentVersion {
                     Text(CourierSignupText.consentVersion(v)).font(YMFont.caption).foregroundStyle(YMColor.muted)
                 }

@@ -352,7 +352,10 @@ struct ParcelFormView: View {
     @State private var showCity = false
     /// Форма на экране: долгий вызов мог закончиться, когда человек уже ушёл.
     @State private var visible = false
-    @FocusState private var focus: Bool
+    /// Фокус по полям: подсказки адреса — только под адресом, который сейчас в фокусе
+    /// (общий Bool держал список «Откуда» открытым, пока заполняли «Телефон» или «Получатель»).
+    private enum ParcelFocus: Hashable { case from, to, other(String) }
+    @FocusState private var focus: ParcelFocus?
 
     init(draft: ParcelDraft?, onCreated: @escaping (Int) -> Void) {
         _m = StateObject(wrappedValue: ParcelFormModel(draft: draft, sessionCity: Session.shared.cityId))
@@ -379,7 +382,7 @@ struct ParcelFormView: View {
         .toolbar {
             ToolbarItemGroup(placement: .keyboard) {
                 Spacer()
-                Button("Готово") { focus = false }
+                Button("Готово") { focus = nil }
             }
         }
     }
@@ -410,12 +413,14 @@ struct ParcelFormView: View {
 
                 section("Откуда") {
                     pickerField("Город", value: m.originName.isEmpty ? "Город аккаунта" : m.originName, error: m.error("city_id")) { showCity = true }
-                    field("Адрес", text: $m.from, prompt: "Улица, дом, подъезд", limit: 255, error: m.error("pickup_address"))
+                    field("Адрес", text: $m.from, prompt: "Улица, дом, подъезд", limit: 255, error: m.error("pickup_address"), focusID: .from)
+                    AddressSuggestBox(text: $m.from, city: m.originName.isEmpty ? (Session.shared.cityName ?? "") : m.originName, focused: focus == .from)
                     field("Телефон отправителя", text: $m.senderPhone, prompt: "По умолчанию — телефон аккаунта", limit: 32,
                           keyboard: .phonePad, error: m.error("pickup_phone"))
                 }
                 section("Куда") {
-                    field("Адрес", text: $m.to, prompt: "Улица, дом, квартира", limit: 500, error: m.error("drop_address"))
+                    field("Адрес", text: $m.to, prompt: "Улица, дом, квартира", limit: 500, error: m.error("drop_address"), focusID: .to)
+                    AddressSuggestBox(text: $m.to, city: m.trip == "intercity" ? "" : (m.originName.isEmpty ? (Session.shared.cityName ?? "") : m.originName), focused: focus == .to)
                     field("Получатель", text: $m.recipientName, prompt: "Имя", limit: 120, error: m.error("recipient_name"))
                     field("Телефон получателя", text: $m.recipientPhone, prompt: "+7 900 000-00-00", limit: 32,
                           keyboard: .phonePad, error: m.error("recipient_phone"))
@@ -443,7 +448,7 @@ struct ParcelFormView: View {
                         Text("Цена доставки, ₽").font(YMFont.subhead).foregroundStyle(YMColor.text)
                         TextField("", text: $m.fee)
                             .keyboardType(.decimalPad)
-                            .focused($focus)
+                            .focused($focus, equals: .other("fee"))
                             .disabled(m.feeLocked)
                             .ymFont(20, weight: .bold)
                             .foregroundStyle(m.feeLocked ? YMColor.muted : YMColor.text)
@@ -490,7 +495,7 @@ struct ParcelFormView: View {
                     Text(e).font(YMFont.callout).foregroundStyle(YMColor.statusCancel)
                 }
                 Button {
-                    focus = false
+                    focus = nil
                     Task { @MainActor in
                         // Ушёл с формы, пока шёл вызов, — экран не подменяем (посылка видна в «Мои посылки»).
                         if let id = await m.submit(), visible { onCreated(id) }
@@ -546,12 +551,12 @@ struct ParcelFormView: View {
     }
 
     private func field(_ label: String, text: Binding<String>, prompt: String, limit: Int,
-                       keyboard: UIKeyboardType = .default, error: String?) -> some View {
+                       keyboard: UIKeyboardType = .default, error: String?, focusID: ParcelFocus? = nil) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label).font(YMFont.subhead).foregroundStyle(YMColor.text)
             TextField(prompt, text: text)
                 .keyboardType(keyboard)
-                .focused($focus)
+                .focused($focus, equals: focusID ?? .other(label + "|" + prompt))
                 .font(YMFont.body)
                 .padding(.horizontal, 14).frame(height: 46)
                 .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))

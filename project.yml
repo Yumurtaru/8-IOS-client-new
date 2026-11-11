@@ -91,6 +91,7 @@ targets:
         # профиль yumurta_appstore в Codemagic — иначе подпись .ipa не пройдёт.
         com.apple.developer.associated-domains:
           - applinks:yumurta.ru
+          - webcredentials:yumurta.ru
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ru.marketplace.client.premium
