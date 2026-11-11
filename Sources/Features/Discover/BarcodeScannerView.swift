@@ -5,7 +5,9 @@ import VisionKit
 /// Сканер штрихкодов на VisionKit (iOS 16). Кнопку показываем только при isAvailable.
 enum BarcodeScanner {
     /// Телефон умеет сканировать, камера разрешена и не запрещена родительским контролем.
-    static var isAvailable: Bool {
+    /// @MainActor: DataScannerViewController.isSupported/isAvailable изолированы главным потоком (Swift 6 / Xcode 26 —
+    /// ошибка сборки из неизолированного контекста). Вызывается из body экрана — он и так на главном потоке.
+    @MainActor static var isAvailable: Bool {
         if #available(iOS 16.0, *) {
             return DataScannerViewController.isSupported && DataScannerViewController.isAvailable
         }
