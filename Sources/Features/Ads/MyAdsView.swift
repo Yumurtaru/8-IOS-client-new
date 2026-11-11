@@ -58,6 +58,8 @@ final class MyAdsViewModel: ObservableObject {
         guard !paying else { return }
         paying = true
         defer { paying = false }
+        // Списание из кошелька — сначала Face ID / код-пароль; отмена — ничего не списываем.
+        if (ad.renewPrice ?? 0) > 0, !(await PayConfirm.confirm(reason: "Подтвердите оплату объявления из кошелька")) { return }
         do {
             // Сумма с кнопки: цена рубрики поменялась, пока экран был открыт, —
             // сервер откажет 409 price_changed, ничего не списав.
@@ -84,6 +86,7 @@ final class MyAdsViewModel: ObservableObject {
         guard !paying else { return }
         paying = true
         defer { paying = false }
+        if (ad.renewPrice ?? 0) > 0, !(await PayConfirm.confirm(reason: "Подтвердите продление объявления из кошелька")) { return }
         do {
             let r = try await API.shared.adRenew(ad.stableId, expectedPrice: ad.renewPrice)
             let charged = r.charged ?? 0

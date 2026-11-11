@@ -63,7 +63,7 @@ struct LoyaltyView: View {
     private func heroCard(_ i: LoyaltyInfo) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: YMSpace.md) {
-                Text(iconOr(i.level?.icon, "🌱")).font(.system(size: 40))
+                Text(iconOr(i.level?.icon, "🌱")).ymFont(40)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(nameOr(i.level?.name, "Новичок"))
                         .font(YMFont.title3)

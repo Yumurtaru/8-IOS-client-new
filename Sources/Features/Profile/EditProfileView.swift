@@ -190,6 +190,7 @@ struct EditProfileView: View {
                     .padding(.top, YMSpace.sm)
                 }
             }
+            .ymReadableWidth()
             .padding(.horizontal, YMSpace.xl)
             .padding(.top, YMSpace.lg)
             .padding(.bottom, YMSpace.xxxl)
@@ -251,10 +252,10 @@ struct EditProfileView: View {
     private var currentPasswordField: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Текущий пароль")
-                .font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.muted)
+                .ymFont(13, weight: .heavy).foregroundStyle(YMColor.muted)
             SecureField("Пароль от аккаунта", text: $currentPassword)
                 .textContentType(.password)
-                .font(.system(size: 15))
+                .ymFont(15)
                 .foregroundStyle(YMColor.text)
                 .padding(.horizontal, 14).padding(.vertical, 14)
                 .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
@@ -278,13 +279,13 @@ struct EditProfileView: View {
                        autocap: TextInputAutocapitalization) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(title)
-                .font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.muted)
+                .ymFont(13, weight: .heavy).foregroundStyle(YMColor.muted)
             TextField(placeholder, text: text)
                 .textContentType(contentType)
                 .keyboardType(keyboard)
                 .textInputAutocapitalization(autocap)
                 .autocorrectionDisabled(contentType == .emailAddress)
-                .font(.system(size: 15))
+                .ymFont(15)
                 .foregroundStyle(YMColor.text)
                 .padding(.horizontal, 14).padding(.vertical, 14)
                 .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
@@ -295,10 +296,10 @@ struct EditProfileView: View {
     private var passwordField: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Новый пароль")
-                .font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.muted)
+                .ymFont(13, weight: .heavy).foregroundStyle(YMColor.muted)
             SecureField("Оставьте пустым, чтобы не менять", text: $password)
                 .textContentType(.newPassword)
-                .font(.system(size: 15))
+                .ymFont(15)
                 .foregroundStyle(YMColor.text)
                 .padding(.horizontal, 14).padding(.vertical, 14)
                 .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
@@ -320,7 +321,7 @@ struct EditProfileView: View {
                     .font(YMFont.callout).foregroundStyle(YMColor.muted)
                 TextField("Код", text: $code)
                     .keyboardType(.numberPad)
-                    .font(.system(size: 22, weight: .bold))
+                    .ymFont(22, weight: .bold)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 14).padding(.vertical, 14)
                     .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
@@ -566,7 +567,7 @@ private struct EditProfileErrorState: View {
     let onRetry: () -> Void
     var body: some View {
         VStack(spacing: YMSpace.md) {
-            Text("😕").font(.system(size: 44))
+            Text("😕").ymFont(44)
             Text(message)
                 .font(YMFont.callout).foregroundStyle(YMColor.muted)
                 .multilineTextAlignment(.center)
@@ -605,7 +606,7 @@ private struct SupportComposeSheet: View {
                 ZStack(alignment: .topLeading) {
                     if message.isEmpty {
                         Text("Ваше сообщение…")
-                            .font(.system(size: 15)).foregroundStyle(YMColor.muted)
+                            .ymFont(15).foregroundStyle(YMColor.muted)
                             .padding(.horizontal, 14).padding(.vertical, 16)
                     }
                     TextEditor(text: $message)

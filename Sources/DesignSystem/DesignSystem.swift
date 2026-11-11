@@ -107,18 +107,77 @@ extension Color {
 
 enum YMFont {
     /// SF Pro Display для крупных заголовков, SF Pro Text для тела — системные шрифты iOS.
-    static let largeTitle = Font.system(size: 34, weight: .heavy,    design: .default) // экраны-заголовки
-    static let title      = Font.system(size: 28, weight: .bold,     design: .default)
-    static let title2     = Font.system(size: 22, weight: .bold,     design: .default) // секции
-    static let title3     = Font.system(size: 20, weight: .bold,     design: .default)
-    static let headline   = Font.system(size: 17, weight: .semibold, design: .default) // карточки
-    static let body       = Font.system(size: 15, weight: .regular,  design: .default)
-    static let callout    = Font.system(size: 14, weight: .regular,  design: .default)
-    static let subhead    = Font.system(size: 13, weight: .semibold, design: .default)
-    static let caption    = Font.system(size: 12, weight: .regular,  design: .default)
-    static let caption2   = Font.system(size: 11, weight: .semibold, design: .default) // kicker/бейджи
+    // Стили привязаны к системным текстовым стилям: размер на обычных настройках
+    // тот же (34/28/22/20/17/15/13/12/11), но шрифт растёт с «Размером текста» в
+    // настройках iPhone. Раньше стояли Font.system(size:) — они НЕ масштабируются.
+    static let largeTitle = Font.system(.largeTitle, design: .default).weight(.heavy)    // экраны-заголовки
+    static let title      = Font.system(.title,      design: .default).weight(.bold)
+    static let title2     = Font.system(.title2,     design: .default).weight(.bold)     // секции
+    static let title3     = Font.system(.title3,     design: .default).weight(.bold)
+    static let headline   = Font.system(.headline,   design: .default).weight(.semibold) // карточки
+    static let body       = Font.system(.subheadline, design: .default)                  // 15
+    static let callout    = Font.system(.subheadline, design: .default)                  // было 14
+    static let subhead    = Font.system(.footnote,   design: .default).weight(.semibold) // 13
+    static let caption    = Font.system(.caption,    design: .default)                   // 12
+    static let caption2   = Font.system(.caption2,   design: .default).weight(.semibold) // kicker/бейджи
 
-    /// Все стили используют .system → Dynamic Type масштабируется автоматически.
+    /// Для произвольного размера есть `.ymFont(size, weight:, design:)` — тоже масштабируется.
+}
+
+/// Шрифт заданного размера, который растёт вместе с Dynamic Type, но не больше
+/// чем в 1,35 раза: фиксированные плашки, бейджи и кнопки не ломаются, а крупный
+/// текст при этом читаем. Для цен и кнопок дополнительно ставят lineLimit/minimumScaleFactor.
+struct YMScaledFont: ViewModifier {
+    @ScaledMetric private var scaled: CGFloat
+    private let base: CGFloat
+    private let weight: Font.Weight
+    private let design: Font.Design
+
+    init(size: CGFloat, weight: Font.Weight, design: Font.Design) {
+        _scaled = ScaledMetric(wrappedValue: size, relativeTo: .body)
+        base = size
+        self.weight = weight
+        self.design = design
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: min(scaled, base * 1.35), weight: weight, design: design))
+    }
+}
+
+/// Фон плавающей панели поверх контента. iOS 26+ (сборка Xcode 26) — «жидкое стекло»
+/// с тонировкой; iOS 16–18 и старые SDK — прежняя сплошная заливка.
+struct YMFloatingSurface<S: Shape>: ViewModifier {
+    let shape: S
+    let fill: Color
+
+    func body(content: Content) -> some View {
+        #if compiler(>=6.2)
+        if #available(iOS 26.0, *) {
+            content.glassEffect(.regular.tint(fill).interactive(), in: shape)   // под #available(iOS 26.0, *) выше
+        } else {
+            content.background(fill, in: shape)
+        }
+        #else
+        content.background(fill, in: shape)
+        #endif
+    }
+}
+
+extension View {
+    /// Контент экрана не шире 700 pt и по центру: на телефоне ничего не меняется,
+    /// на широком экране (iPad, альбомный режим) нет растянутого телефонного вида.
+    func ymReadableWidth() -> some View {
+        frame(maxWidth: 700).frame(maxWidth: .infinity)
+    }
+
+    func ymFloatingSurface<S: Shape>(_ shape: S, fill: Color) -> some View {
+        modifier(YMFloatingSurface(shape: shape, fill: fill))
+    }
+
+    func ymFont(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> some View {
+        modifier(YMScaledFont(size: size, weight: weight, design: design))
+    }
 }
 
 // MARK: - Spacing (сетка 4/8/12/16/24)
@@ -200,6 +259,8 @@ struct YMPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(YMFont.headline)
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
             .foregroundStyle(YMColor.onAccent)
             .frame(maxWidth: .infinity, minHeight: 54)
             .background(YMColor.accent, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))

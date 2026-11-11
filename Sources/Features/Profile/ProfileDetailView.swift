@@ -95,7 +95,7 @@ struct AddressesView: View {
         Button { Haptics.light(); showAdd = true } label: {
             HStack(spacing: 10) {
                 Image(systemName: "plus")
-                Text("Добавить адрес").font(.system(size: 14.5, weight: .heavy))
+                Text("Добавить адрес").ymFont(14.5, weight: .heavy)
             }
             .foregroundStyle(YMColor.accent)
             .frame(maxWidth: .infinity)
@@ -111,7 +111,7 @@ struct AddressesView: View {
 
     private var emptyState: some View {
         VStack(spacing: YMSpace.sm) {
-            Text("📍").font(.system(size: 44))
+            Text("📍").ymFont(44)
             Text("Адресов пока нет").font(YMFont.title3).foregroundStyle(YMColor.text)
             Text("Добавьте адрес доставки, чтобы оформлять заказы быстрее.")
                 .font(YMFont.callout).foregroundStyle(YMColor.muted).multilineTextAlignment(.center)
@@ -173,25 +173,25 @@ private struct AddressCard: View {
     var body: some View {
         HStack(alignment: .top, spacing: 13) {
             Text(icon)
-                .font(.system(size: 18))
+                .ymFont(18)
                 .frame(width: 40, height: 40)
                 .background(isMain ? YMColor.accent.opacity(0.14) : YMColor.surface2,
                             in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 8) {
                     Text(title)
-                        .font(.system(size: 15, weight: .heavy))
+                        .ymFont(15, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                     if isMain {
                         Text("Основной")
-                            .font(.system(size: 10, weight: .heavy))
+                            .ymFont(10, weight: .heavy)
                             .foregroundStyle(YMColor.accent)
                             .padding(.horizontal, 8).padding(.vertical, 2)
                             .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                     }
                 }
                 Text(address.display.isEmpty ? "—" : address.display)
-                    .font(.system(size: 13))
+                    .ymFont(13)
                     .foregroundStyle(YMColor.muted)
                     .lineLimit(2)
             }
@@ -203,7 +203,7 @@ private struct AddressCard: View {
                 Button(role: .destructive) { onDelete() } label: { Label("Удалить", systemImage: "trash") }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 16, weight: .semibold))
+                    .ymFont(16, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
                     .frame(width: 30, height: 30)
             }
@@ -550,7 +550,7 @@ struct BookingsView: View {
 
     private var emptyState: some View {
         VStack(spacing: YMSpace.sm) {
-            Text("📅").font(.system(size: 44))
+            Text("📅").ymFont(44)
             Text(tab == .upcoming ? "Нет предстоящих записей" : "Нет прошедших записей")
                 .font(YMFont.title3).foregroundStyle(YMColor.text)
             Text("Запишитесь на услугу в разделе организаций.")
@@ -656,10 +656,10 @@ private struct BookingCard: View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
                 VStack(spacing: 0) {
-                    Text(monthText).font(.system(size: 11, weight: .bold)).foregroundStyle(YMColor.accent)
-                    Text(dayText).font(.system(size: 22, weight: .heavy)).foregroundStyle(YMColor.text)
+                    Text(monthText).ymFont(11, weight: .bold).foregroundStyle(YMColor.accent)
+                    Text(dayText).ymFont(22, weight: .heavy).foregroundStyle(YMColor.text)
                     if let y = yearText {
-                        Text(y).font(.system(size: 10, weight: .semibold)).foregroundStyle(YMColor.muted)
+                        Text(y).ymFont(10, weight: .semibold).foregroundStyle(YMColor.muted)
                     }
                 }
                 .frame(width: 56)
@@ -667,15 +667,15 @@ private struct BookingCard: View {
                 .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(booking.service).font(.system(size: 15.5, weight: .heavy)).foregroundStyle(YMColor.text).lineLimit(1)
-                    Text(booking.org).font(.system(size: 12.5)).foregroundStyle(YMColor.muted).lineLimit(1)
+                    Text(booking.service).ymFont(15.5, weight: .heavy).foregroundStyle(YMColor.text).lineLimit(1)
+                    Text(booking.org).ymFont(12.5).foregroundStyle(YMColor.muted).lineLimit(1)
                     HStack(spacing: 8) {
                         Label(booking.time, systemImage: "clock")
-                            .font(.system(size: 12, weight: .bold))
+                            .ymFont(12, weight: .bold)
                             .foregroundStyle(YMColor.text)
                             .labelStyle(.titleAndIcon)
                         Text(booking.status.title)
-                            .font(.system(size: 10.5, weight: .bold))
+                            .ymFont(10.5, weight: .bold)
                             .foregroundStyle(statusColor)
                             .padding(.horizontal, 9).padding(.vertical, 3)
                             .background(statusColor.opacity(0.16), in: Capsule())
@@ -684,7 +684,7 @@ private struct BookingCard: View {
 
                     if let visit = booking.visitAddress {
                         Label("Мастер приедет: \(visit)", systemImage: "location.fill")
-                            .font(.system(size: 11.5, weight: .semibold))
+                            .ymFont(11.5, weight: .semibold)
                             .foregroundStyle(YMColor.muted)
                             .labelStyle(.titleAndIcon)
                             .lineLimit(2)
@@ -693,7 +693,7 @@ private struct BookingCard: View {
                     // А63: комментарий мастеру, оставленный при записи.
                     if let note = booking.clientComment {
                         Label(note, systemImage: "text.bubble")
-                            .font(.system(size: 11.5))
+                            .ymFont(11.5)
                             .foregroundStyle(YMColor.muted)
                             .labelStyle(.titleAndIcon)
                             .lineLimit(3)
@@ -712,7 +712,7 @@ private struct BookingCard: View {
                         Haptics.light(); confirmCancel = true
                     } label: {
                         Text(working ? "Отменяем…" : "Отменить")
-                            .font(.system(size: 13.5, weight: .bold))
+                            .ymFont(13.5, weight: .bold)
                             .foregroundStyle(YMColor.muted)
                             .frame(maxWidth: .infinity).padding(.vertical, 12)
                     }
@@ -725,7 +725,7 @@ private struct BookingCard: View {
                         Haptics.light(); openRoute()
                     } label: {
                         Text("Маршрут")
-                            .font(.system(size: 13.5, weight: .heavy))
+                            .ymFont(13.5, weight: .heavy)
                             .foregroundStyle(YMColor.accent)
                             .frame(maxWidth: .infinity).padding(.vertical, 12)
                     }

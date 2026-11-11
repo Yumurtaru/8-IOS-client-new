@@ -33,6 +33,9 @@ workflows:
       ios_signing:
         provisioning_profiles:
           - yumurta_appstore
+          # Расширения (project.extensions.yml): виджеты/Live Activity и фото в push.
+          - yumurta_widgets
+          - yumurta_notifications
         certificates:
           - yumurta_dist
     scripts:
@@ -117,6 +120,15 @@ workflows:
           if [ "$LAST" -ge "$NUM" ]; then NUM=$((LAST + 1)); fi
           echo "Счётчик Codemagic: ${BUILD_NUMBER:-нет}; последняя сборка у Apple: $LAST; номер сборки: $NUM"
           agvtool new-version -all "$NUM"
+
+          # Расширения обязаны иметь ту же версию и тот же номер сборки, что приложение
+          # (иначе Apple: ITMS-90473 / отказ загрузки). Версию выше могли поднять автоматически.
+          for EXT in Generated/YumurtaWidgets-Info.plist Generated/YumurtaNotificationService-Info.plist; do
+            [ -f "$EXT" ] || continue
+            /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$EXT" \n              || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string $VERSION" "$EXT"
+            /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $NUM" "$EXT" \n              || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $NUM" "$EXT"
+            echo "  $EXT: версия $VERSION, сборка $NUM"
+          done
 
           FINAL_V=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$PLIST")
           FINAL_B=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$PLIST")
@@ -215,6 +227,9 @@ workflows:
         # Подпись та же, что у ios-testflight (не менялась).
         provisioning_profiles:
           - yumurta_appstore
+          # Расширения (project.extensions.yml): виджеты/Live Activity и фото в push.
+          - yumurta_widgets
+          - yumurta_notifications
         certificates:
           - yumurta_dist
     scripts:

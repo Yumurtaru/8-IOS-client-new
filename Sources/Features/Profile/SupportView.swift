@@ -122,18 +122,19 @@ struct SupportView: View {
         NavigationLink { AssistantView() } label: {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 18)).foregroundStyle(YMColor.accent)
+                    .accessibilityHidden(true)
+                    .ymFont(18).foregroundStyle(YMColor.accent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Спросить помощника").font(.system(size: 15, weight: .heavy)).foregroundStyle(YMColor.text)
+                    Text("Спросить помощника").ymFont(15, weight: .heavy).foregroundStyle(YMColor.text)
                     Text("ИИ ответит сразу, сложный вопрос передаст сотруднику")
                         .font(YMFont.caption).foregroundStyle(YMColor.muted)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(YMColor.muted)
+                    .ymFont(13, weight: .semibold).foregroundStyle(YMColor.muted)
             }
             .padding(YMSpace.md)
             .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -148,19 +149,20 @@ struct SupportView: View {
         NavigationLink { SupportTicketsView() } label: {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
-                    .font(.system(size: 17)).foregroundStyle(YMColor.accent)
+                    .accessibilityHidden(true)
+                    .ymFont(17).foregroundStyle(YMColor.accent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Мои обращения").font(.system(size: 15, weight: .heavy)).foregroundStyle(YMColor.text)
+                    Text("Мои обращения").ymFont(15, weight: .heavy).foregroundStyle(YMColor.text)
                     Text("Вопросы в поддержку и ответы на них")
                         .font(YMFont.caption).foregroundStyle(YMColor.muted)
                         .multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(YMColor.muted)
+                    .ymFont(13, weight: .semibold).foregroundStyle(YMColor.muted)
                     .accessibilityHidden(true)
             }
             .padding(YMSpace.md)
@@ -199,10 +201,10 @@ struct SupportView: View {
         Button(action: { Haptics.light(); action() }) {
             VStack(alignment: .leading, spacing: YMSpace.sm) {
                 Image(systemName: icon)
-                    .font(.system(size: 18)).foregroundStyle(YMColor.accent)
+                    .ymFont(18).foregroundStyle(YMColor.accent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
-                Text(title).font(.system(size: 15, weight: .heavy)).foregroundStyle(YMColor.text)
+                Text(title).ymFont(15, weight: .heavy).foregroundStyle(YMColor.text)
                 Text(subtitle).font(YMFont.caption).foregroundStyle(YMColor.muted).lineLimit(1)
             }
             .padding(YMSpace.md)
@@ -258,7 +260,7 @@ struct SupportView: View {
 
             // Тема (reason)
             VStack(alignment: .leading, spacing: 8) {
-                Text("Тема").font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.muted)
+                Text("Тема").ymFont(13, weight: .heavy).foregroundStyle(YMColor.muted)
                 Menu {
                     ForEach(supportReasons) { r in
                         Button {
@@ -271,10 +273,10 @@ struct SupportView: View {
                     }
                 } label: {
                     HStack {
-                        Text(reason.label).font(.system(size: 15)).foregroundStyle(YMColor.text)
+                        Text(reason.label).ymFont(15).foregroundStyle(YMColor.text)
                         Spacer()
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 12, weight: .semibold)).foregroundStyle(YMColor.muted)
+                            .ymFont(12, weight: .semibold).foregroundStyle(YMColor.muted)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 14)
                     .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
@@ -283,9 +285,9 @@ struct SupportView: View {
 
             // Описание (text)
             VStack(alignment: .leading, spacing: 8) {
-                Text("Описание").font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.muted)
+                Text("Описание").ymFont(13, weight: .heavy).foregroundStyle(YMColor.muted)
                 TextEditor(text: $text)
-                    .font(.system(size: 15))
+                    .ymFont(15)
                     .foregroundStyle(YMColor.text)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: 120)
@@ -294,7 +296,7 @@ struct SupportView: View {
                     .overlay(alignment: .topLeading) {
                         if text.isEmpty {
                             Text("Опишите проблему подробно…")
-                                .font(.system(size: 15)).foregroundStyle(YMColor.muted)
+                                .ymFont(15).foregroundStyle(YMColor.muted)
                                 .padding(.horizontal, 15).padding(.vertical, 18)
                                 .allowsHitTesting(false)
                         }
@@ -325,7 +327,7 @@ struct SupportView: View {
     }
 
     private func sectionTitle(_ t: String) -> some View {
-        Text(t).font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.muted)
+        Text(t).ymFont(13, weight: .heavy).foregroundStyle(YMColor.muted)
     }
 
     // ── Отправка жалобы ──
@@ -373,12 +375,12 @@ private struct SupportFaqRow: View {
             } label: {
                 HStack(spacing: 8) {
                     Text(item.question)
-                        .font(.system(size: 14.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                        .ymFont(14.5, weight: .semibold).foregroundStyle(YMColor.text)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.down")
-                        .font(.system(size: 13, weight: .semibold))
+                        .ymFont(13, weight: .semibold)
                         .foregroundStyle(expanded ? YMColor.accent : YMColor.muted)
                         .rotationEffect(.degrees(expanded ? 180 : 0))
                 }

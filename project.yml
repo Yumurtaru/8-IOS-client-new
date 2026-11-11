@@ -1,13 +1,26 @@
 name: YumurtaPremium
+# Расширения (виджеты, Live Activity, фото в push) — включены 11.11.2026 после настройки
+# App ID / App Group / профилей у Apple и в Codemagic (yumurta_widgets, yumurta_notifications).
+include:
+  - project.extensions.yml
 options:
   bundleIdPrefix: ru.marketplace.client.premium
   createIntermediateGroups: true
+packages:
+  AppMetrica:
+    url: https://github.com/appmetrica/appmetrica-sdk-ios
+    from: 7.0.0
 targets:
   YumurtaPremium:
     type: application
     platform: iOS
     deploymentTarget: "16.0"
     sources: [Sources]
+    dependencies:
+      - package: AppMetrica
+        product: AppMetricaCore
+      - package: AppMetrica
+        product: AppMetricaCrashes
     info:
       path: Generated/Info.plist
       properties:
@@ -32,7 +45,32 @@ targets:
         NSLocationWhenInUseUsageDescription: "Нужно, чтобы определить ваш город и показать курьера на карте во время доставки"
         # А97 «Стать курьером»: фото лица и водительских прав для заявки курьера (камера
         # открывается только по кнопке «Сфотографировать»; галерея — системный выбор без разрешения).
-        NSCameraUsageDescription: "Камера нужна, чтобы сфотографировать ваше лицо и водительские права для заявки курьера"
+        NSCameraUsageDescription: "Камера нужна, чтобы сканировать штрихкоды товаров в поиске, а также сфотографировать лицо и водительские права для заявки курьера"
+        # Голосовой поиск (кнопка микрофона в строке поиска).
+        NSMicrophoneUsageDescription: "Микрофон нужен для голосового поиска: скажите, что ищете, и текст появится в строке поиска"
+        NSSpeechRecognitionUsageDescription: "Распознавание речи нужно, чтобы превратить вашу фразу в текст поискового запроса"
+        # Подтверждение оплаты из кошелька и баллами (Face ID / Touch ID / код-пароль).
+        NSFaceIDUsageDescription: "Face ID подтверждает списание денег или баллов, чтобы никто чужой не оплатил заказ с вашего телефона"
+        # Siri и «Команды» ищут фразы по-русски, поэтому основной язык приложения — русский.
+        CFBundleDevelopmentRegion: ru
+        CFBundleLocalizations: [ru]
+        # AppMetrica (падения и события воронки). ПУСТО — SDK не запускается вообще.
+        # Вписать ключ приложения из кабинета appmetrica.yandex.ru — и со следующей сборки заработает.
+        AppMetricaAPIKey: "6a44ab80-3344-4c3d-897e-c762ea68acf0"
+        # Быстрые действия иконки (долгое нажатие). Разбор — App/QuickActions.swift по окончанию типа.
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: ru.marketplace.client.premium.orders
+            UIApplicationShortcutItemTitle: Мои заказы
+            UIApplicationShortcutItemIconSymbolName: bag.fill
+          - UIApplicationShortcutItemType: ru.marketplace.client.premium.parcel
+            UIApplicationShortcutItemTitle: Отправить посылку
+            UIApplicationShortcutItemIconSymbolName: shippingbox.fill
+          - UIApplicationShortcutItemType: ru.marketplace.client.premium.search
+            UIApplicationShortcutItemTitle: Поиск
+            UIApplicationShortcutItemIconSymbolName: magnifyingglass
+          - UIApplicationShortcutItemType: ru.marketplace.client.premium.cart
+            UIApplicationShortcutItemTitle: Корзина
+            UIApplicationShortcutItemIconSymbolName: cart.fill
         UILaunchScreen:
           UIColorName: LaunchBG
           UIImageRespectsSafeAreaInsets: true

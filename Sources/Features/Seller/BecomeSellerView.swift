@@ -112,7 +112,7 @@ struct BecomeSellerView: View {
                 ForEach(benefits, id: \.0) { title, sub in
                     HStack(alignment: .top, spacing: YMSpace.md) {
                         Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 20)).foregroundStyle(YMColor.accent)
+                            .ymFont(20).foregroundStyle(YMColor.accent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(title).font(YMFont.headline).foregroundStyle(YMColor.text)
                             Text(sub).font(YMFont.callout).foregroundStyle(YMColor.muted)
@@ -139,7 +139,7 @@ struct BecomeSellerView: View {
     private var doneContent: some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 64)).foregroundStyle(YMColor.accent)
+                .ymFont(64).foregroundStyle(YMColor.accent)
                 .padding(.top, YMSpace.xxxl)
             if approved {
                 // Волна А75: организация активирована сразу — «на рассмотрении»

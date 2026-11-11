@@ -133,14 +133,14 @@ struct ReviewsScreen: View {
             if cnt > 0 || avg > 0 {
                 HStack(spacing: 10) {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 22))
+                        .ymFont(22)
                         .foregroundStyle(YMColor.accent)
                     Text(fmtRatingHeader(avg))
-                        .font(.system(size: 30, weight: .heavy))
+                        .ymFont(30, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                     if cnt > 0 {
                         Text(pluralReviewsHeader(cnt))
-                            .font(.system(size: 14))
+                            .ymFont(14)
                             .foregroundStyle(YMColor.muted)
                     }
                     Spacer(minLength: 0)
@@ -152,12 +152,12 @@ struct ReviewsScreen: View {
 
     private var emptyBox: some View {
         VStack(spacing: 8) {
-            Text("⭐️").font(.system(size: 40))
+            Text("⭐️").ymFont(40)
             Text("Пока нет отзывов")
-                .font(.system(size: 16, weight: .bold))
+                .ymFont(16, weight: .bold)
                 .foregroundStyle(YMColor.text)
             Text("Будьте первым, кто оставит отзыв")
-                .font(.system(size: 13.5))
+                .ymFont(13.5)
                 .foregroundStyle(YMColor.muted)
                 .multilineTextAlignment(.center)
         }
@@ -168,7 +168,7 @@ struct ReviewsScreen: View {
     private func errorBox(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 30, weight: .semibold))
+                .ymFont(30, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message.isEmpty ? "Не удалось загрузить отзывы" : message)
                 .font(YMFont.callout)

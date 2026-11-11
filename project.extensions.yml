@@ -1,0 +1,103 @@
+# =============================================================================
+#  project.extensions.yml - расширения клиента Yumurta (XcodeGen). ВКЛЮЧЕНО 11.11.2026:
+#  подключён в project.yml (include), профили расширений — в codemagic.yaml.
+#
+#    YumurtaWidgets              виджеты рабочего стола, Live Activity (экран
+#                                блокировки и Dynamic Island)
+#                                bundle ru.marketplace.client.premium.widgets
+#    YumurtaNotificationService  фото в push (UNNotificationServiceExtension)
+#                                bundle ru.marketplace.client.premium.notifications
+#
+#  Как включить (ПОСЛЕ того, как в Apple Developer созданы App ID, App Group и
+#  профили, а профили добавлены в Codemagic - пошагово в отчёте/ПУБЛИКАЦИЯ_И_PUSH.md):
+#    1. В project.yml, на верхнем уровне (рядом с name: и options:), добавить:
+#           include:
+#             - project.extensions.yml
+#    2. В codemagic.yaml в ios_signing -> provisioning_profiles добавить два
+#       профиля расширений (см. инструкцию).
+#
+#  Что этот файл добавляет к основному target YumurtaPremium (раздел
+#  "YumurtaPremium" ниже): встраивание обоих расширений, App Group в
+#  entitlements и NSSupportsLiveActivities в Info.plist. Если XcodeGen при
+#  include не склеит эти ключи с project.yml (в основном target уже есть
+#  info/entitlements), перенесите три блока из раздела "YumurtaPremium" в
+#  project.yml руками - содержимое то же.
+#
+#  ВЕРСИЯ. У расширения CFBundleShortVersionString обязан совпадать с версией
+#  приложения. Поднимая версию в project.yml, поднимайте её и здесь (три места
+#  "1.3"). codemagic.yaml (шаг «Версия и номер сборки») проставляет ту же версию и
+#  номер сборки в Generated/YumurtaWidgets-Info.plist и Generated/YumurtaNotificationService-Info.plist.
+#
+#  Код: Extensions/Widgets, Extensions/NotificationService; общие файлы для
+#  приложения и виджетов - Sources/Shared (входят в оба target через sources).
+# =============================================================================
+
+targets:
+  YumurtaPremium:
+    dependencies:
+      - target: YumurtaWidgets
+        embed: true
+      - target: YumurtaNotificationService
+        embed: true
+    info:
+      properties:
+        # Live Activity: без этого ключа система не даст запустить активность.
+        NSSupportsLiveActivities: true
+    entitlements:
+      properties:
+        # Общий контейнер приложения и виджетов (снимок заказа и баланс баллов).
+        com.apple.security.application-groups:
+          - group.ru.marketplace.client.premium
+
+  YumurtaWidgets:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Extensions/Widgets
+      - path: Sources/Shared
+    info:
+      path: Generated/YumurtaWidgets-Info.plist
+      properties:
+        CFBundleDisplayName: Yumurta
+        CFBundleShortVersionString: "1.3"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Generated/YumurtaWidgets.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.ru.marketplace.client.premium
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.marketplace.client.premium.widgets
+        MARKETING_VERSION: "1.3"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: 1
+        SWIFT_VERSION: "5.0"
+        SKIP_INSTALL: YES
+        CODE_SIGN_STYLE: Manual
+
+  YumurtaNotificationService:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Extensions/NotificationService
+    info:
+      path: Generated/YumurtaNotificationService-Info.plist
+      properties:
+        CFBundleDisplayName: Yumurta
+        CFBundleShortVersionString: "1.3"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).NotificationService
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ru.marketplace.client.premium.notifications
+        MARKETING_VERSION: "1.3"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: 1
+        SWIFT_VERSION: "5.0"
+        SKIP_INSTALL: YES
+        CODE_SIGN_STYLE: Manual

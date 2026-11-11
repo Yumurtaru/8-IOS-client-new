@@ -20,7 +20,7 @@ struct PhotoPlaceholder: View {
         ZStack {
             gradient
             Text(label)
-                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .ymFont(9, weight: .semibold, design: .monospaced)
                 .tracking(0.5)
                 .foregroundStyle(.white.opacity(0.45))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)

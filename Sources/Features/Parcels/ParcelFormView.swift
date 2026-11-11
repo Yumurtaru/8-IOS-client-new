@@ -445,7 +445,7 @@ struct ParcelFormView: View {
                             .keyboardType(.decimalPad)
                             .focused($focus)
                             .disabled(m.feeLocked)
-                            .font(.system(size: 20, weight: .bold))
+                            .ymFont(20, weight: .bold)
                             .foregroundStyle(m.feeLocked ? YMColor.muted : YMColor.text)
                             .padding(.horizontal, 14).frame(height: 48)
                             .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
@@ -477,7 +477,7 @@ struct ParcelFormView: View {
                 Button { Haptics.selection(); m.confirm.toggle() } label: {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: m.confirm ? "checkmark.square.fill" : "square")
-                            .font(.system(size: 20)).foregroundStyle(m.confirm ? YMColor.accent : YMColor.muted)
+                            .ymFont(20).foregroundStyle(m.confirm ? YMColor.accent : YMColor.muted)
                         Text("Во вложении нет запрещённого, это вещь — не пассажир и не животное")
                             .font(YMFont.callout).foregroundStyle(YMColor.text)
                             .multilineTextAlignment(.leading)
@@ -583,7 +583,7 @@ struct ParcelFormView: View {
         Button { Haptics.selection(); action() } label: {
             HStack(spacing: 10) {
                 Image(systemName: on ? "largecircle.fill.circle" : "circle")
-                    .font(.system(size: 18)).foregroundStyle(on ? YMColor.accent : YMColor.muted)
+                    .ymFont(18).foregroundStyle(on ? YMColor.accent : YMColor.muted)
                 Text(title).font(YMFont.callout).foregroundStyle(YMColor.text).multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }

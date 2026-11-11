@@ -257,7 +257,7 @@ private struct CourierStatusCard: View {
 
     var body: some View {
         VStack(spacing: YMSpace.sm) {
-            Text(icon).font(.system(size: 40))
+            Text(icon).ymFont(40)
             Text(title).font(YMFont.title3).foregroundStyle(YMColor.text).multilineTextAlignment(.center)
             ForEach(Array(lines.filter { !$0.isEmpty }.enumerated()), id: \.offset) { _, line in
                 Text(line).font(YMFont.callout).foregroundStyle(YMColor.muted).multilineTextAlignment(.center)
@@ -584,7 +584,7 @@ private struct CourierApplyForm: View {
         Button(action: toggle) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: checked ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 20))
+                    .ymFont(20)
                     .foregroundStyle(checked ? YMColor.accent : YMColor.muted)
                 Text(text).font(YMFont.callout).foregroundStyle(YMColor.text).multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)

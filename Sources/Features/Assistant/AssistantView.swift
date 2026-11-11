@@ -520,7 +520,7 @@ struct AssistantView: View {
         let on = item.rating == (up ? 1 : -1)
         return Button { vm.rate(item.id, up ? 1 : -1) } label: {
             Image(systemName: up ? (on ? "hand.thumbsup.fill" : "hand.thumbsup") : (on ? "hand.thumbsdown.fill" : "hand.thumbsdown"))
-                .font(.system(size: 14, weight: .semibold))
+                .ymFont(14, weight: .semibold)
                 .foregroundStyle(on ? YMColor.accent : YMColor.muted)
                 .frame(width: 36, height: 36)
                 .background(on ? YMColor.accent.opacity(0.16) : YMColor.surface2, in: Circle())
@@ -571,7 +571,7 @@ struct AssistantView: View {
                     if vm.ask(draft) { draft = "" }
                 } label: {
                     Image(systemName: "paperplane.fill")
-                        .font(.system(size: 17, weight: .semibold)).foregroundStyle(YMColor.onAccent)
+                        .ymFont(17, weight: .semibold).foregroundStyle(YMColor.onAccent)
                         .frame(width: 40, height: 40)
                         .background(YMColor.accent, in: Circle())
                 }

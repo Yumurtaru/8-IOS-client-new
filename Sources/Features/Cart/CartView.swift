@@ -39,7 +39,7 @@ struct CartView: View {
             await MainActor.run { feeShop = nil }
             return
         }
-        let d: ShopDetail? = try? await API.shared.get("api/v1/shops/\(slug)")
+        let d: ShopDetail? = try? await API.shared.get("api/v1/shops/\(slug)", fresh: true)
         // Пока грузили, корзина могла перейти к другому заведению — чужой сбор не кладём.
         await MainActor.run { if cart.shopSlug == slug { feeShop = d } }
     }
@@ -65,7 +65,8 @@ struct CartView: View {
         HStack(spacing: YMSpace.md) {
             Button(action: { Haptics.light(); onClose() }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
+                    .accessibilityLabel("Назад")
+                    .ymFont(18, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
                     .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -73,7 +74,7 @@ struct CartView: View {
             }
             .buttonStyle(.plain)
             Text("Корзина")
-                .font(.system(size: 20, weight: .heavy))
+                .ymFont(20, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             Spacer()
         }
@@ -103,7 +104,7 @@ struct CartView: View {
                                     .font(YMFont.caption).foregroundStyle(YMColor.muted)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Text("Открыть оформление")
-                                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(YMColor.accent)
+                                    .ymFont(14, weight: .semibold).foregroundStyle(YMColor.accent)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(YMSpace.lg)
@@ -121,7 +122,7 @@ struct CartView: View {
                                 Text("Прошлое оформление сутки назад не завершилось — проверьте «Мои заказы», не создался ли заказ.")
                                     .font(YMFont.caption).foregroundStyle(YMColor.text)
                                     .fixedSize(horizontal: false, vertical: true)
-                                Text("Понятно").font(.system(size: 14, weight: .semibold)).foregroundStyle(YMColor.accent)
+                                Text("Понятно").ymFont(14, weight: .semibold).foregroundStyle(YMColor.accent)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(YMSpace.lg)
@@ -150,6 +151,7 @@ struct CartView: View {
 
                     Color.clear.frame(height: YMSpace.lg)
                 }
+                .ymReadableWidth()
                 .padding(.horizontal, YMSpace.xl)
             }
             // Клавиатура комментария убирается жестом прокрутки.
@@ -173,14 +175,14 @@ struct CartView: View {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(YMColor.surface2)
                 Text(monogram)
-                    .font(.system(size: 17, weight: .heavy))
+                    .ymFont(17, weight: .heavy)
                     .foregroundStyle(YMColor.accent)
             }
             .frame(width: 40, height: 40)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(cart.shopName ?? "Магазин")
-                    .font(.system(size: 14.5, weight: .bold))
+                    .ymFont(14.5, weight: .bold)
                     .foregroundStyle(YMColor.text)
                 // Слово — «товар/товара/товаров», как на плашке корзины: «3 блюда»
                 // у магазина или аптеки читалось как ошибка.
@@ -191,7 +193,7 @@ struct CartView: View {
             Spacer()
             Button(action: { Haptics.light(); if let m = onMenu { m() } else { onClose() } }) {
                 Text("Меню")
-                    .font(.system(size: 12, weight: .bold))
+                    .ymFont(12, weight: .bold)
                     .foregroundStyle(YMColor.accent)
             }
             .buttonStyle(.plain)
@@ -210,13 +212,13 @@ struct CartView: View {
     private var commentField: some View {
         HStack(spacing: YMSpace.sm) {
             Image(systemName: "square.and.pencil")
-                .font(.system(size: 15))
+                .ymFont(15)
                 .foregroundStyle(YMColor.muted)
             TextField("Комментарий к заказу…", text: $comment, axis: .vertical)
                 .focused($commentFocused)
                 // AT-3: при неотвеченном оформлении комментарий не правится (уйдёт прежний).
                 .disabled(cart.pendingOrder != nil)
-                .font(.system(size: 13.5))
+                .ymFont(13.5)
                 .foregroundStyle(YMColor.text)
                 .tint(YMColor.accent)
                 .lineLimit(1...4)
@@ -257,7 +259,7 @@ struct CartView: View {
 
     private func totalRow(_ label: String, _ value: String, bold: Bool = false) -> some View {
         HStack {
-            Text(label).font(.system(size: 13.5)).foregroundStyle(YMColor.muted)
+            Text(label).ymFont(13.5).foregroundStyle(YMColor.muted)
             Spacer()
             Text(value)
                 .font(.system(size: 13.5, weight: bold ? .heavy : .semibold))
@@ -269,7 +271,7 @@ struct CartView: View {
         HStack {
             Spacer()
             Button("Готово") { commentFocused = false }
-                .font(.system(size: 15, weight: .semibold))
+                .ymFont(15, weight: .semibold)
                 .foregroundStyle(YMColor.accent)
         }
         .padding(.horizontal, YMSpace.lg)
@@ -287,12 +289,14 @@ struct CartView: View {
         VStack(spacing: YMSpace.md) {
             HStack {
                 Text("Итого")
-                    .font(.system(size: 13.5))
+                    .ymFont(13.5)
                     .foregroundStyle(YMColor.muted)
                 Spacer()
                 // Итог со сбором — как на Android и как потом на оформлении.
                 Text(Money.format(cartGrand))
-                    .font(.system(size: 22, weight: .heavy))
+                    .ymFont(22, weight: .heavy)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .foregroundStyle(YMColor.text)
             }
             Button(action: { Haptics.medium(); onCheckout() }) {
@@ -323,12 +327,12 @@ struct CartView: View {
                         .fill(YMColor.accent.opacity(0.12))
                         .frame(width: 120, height: 120)
                     Image(systemName: "bag")
-                        .font(.system(size: 48, weight: .light))
+                        .ymFont(48, weight: .light)
                         .foregroundStyle(YMColor.accent)
                 }
                 VStack(spacing: YMSpace.sm) {
                     Text("Корзина пуста")
-                        .font(.system(size: 22, weight: .heavy))
+                        .ymFont(22, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                     Text("Загляните в каталог — выберите\nблюда любимого заведения")
                         .font(YMFont.body)
@@ -365,12 +369,13 @@ private struct CartRow: View {
         HStack(spacing: YMSpace.md) {
             PhotoPlaceholder(url: API.imageURL(line.photo), label: "ФОТО", radius: 14, tone: line.productId, fit: true)
                 .frame(width: 56, height: 56)
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(line.name)
-                    .font(.system(size: 14.5, weight: .bold))
+                    .ymFont(14.5, weight: .bold)
                     .foregroundStyle(YMColor.text)
-                    .lineLimit(1)
+                    .lineLimit(2)
                 if !line.modsLabel.isEmpty {
                     Text(line.modsLabel)
                         .font(YMFont.caption)
@@ -389,9 +394,12 @@ private struct CartRow: View {
             stepper
 
             Text(Money.format(lineTotal))
-                .font(.system(size: 14.5, weight: .heavy))
+                .ymFont(14.5, weight: .heavy)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
                 .foregroundStyle(YMColor.text)
                 .fixedSize()
+                .accessibilityLabel("Сумма \(Money.format(lineTotal))")
         }
     }
 
@@ -400,7 +408,8 @@ private struct CartRow: View {
         HStack(spacing: 8) {
             Button(action: { Haptics.light(); cart.dec(line.key) }) {
                 Image(systemName: "minus")
-                    .font(.system(size: 14, weight: .semibold))
+                    .accessibilityLabel("Уменьшить количество, \(line.name)")
+                    .ymFont(14, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
@@ -408,13 +417,16 @@ private struct CartRow: View {
             .buttonStyle(.plain)
 
             Text(line.isFractional ? fmtQty(line.qty) : "\(Int(line.qty.rounded()))")
-                .font(.system(size: 14, weight: .heavy))
+                .ymFont(14, weight: .heavy)
                 .foregroundStyle(YMColor.text)
                 .frame(minWidth: 20)
+                .accessibilityLabel("Количество")
+                .accessibilityValue(line.isFractional ? fmtQty(line.qty) : "\(Int(line.qty.rounded()))")
 
             Button(action: { Haptics.light(); cart.inc(line.key) }) {
                 Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .semibold))
+                    .accessibilityLabel("Увеличить количество, \(line.name)")
+                    .ymFont(14, weight: .semibold)
                     .foregroundStyle(YMColor.onAccent)
                     .frame(width: 26, height: 26)
                     .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -438,7 +450,7 @@ struct SectionKicker: View {
     init(_ text: String) { self.text = text }
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 13, weight: .heavy))
+            .ymFont(13, weight: .heavy)
             .tracking(0.5)
             .foregroundStyle(YMColor.muted)
             .frame(maxWidth: .infinity, alignment: .leading)

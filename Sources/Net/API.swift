@@ -258,27 +258,46 @@ final class API {
     }
 
     private func perform<T: Decodable>(_ req: URLRequest, as type: T.Type, isRetryAfterRefresh: Bool = false, upload: Bool = false) async throws -> T {
-        let data: Data; let resp: URLResponse
-        do {
-            (data, resp) = try await (upload ? uploadSession : session).data(for: req)
-        } catch let urlError as URLError {
-            if urlError.code == .cancelled { throw CancellationError() }   // отмена (дебаунс) — не повторяем
-            // Таймаут при выключенной сети — это «нет соединения», а не
-            // «превышено время ожидания»: запрос просто ждал сеть.
-            if urlError.code == .timedOut {
-                if await API.offlineNow() { throw APIError.network }
-                throw APIError.timeout
+        var data = Data(); var resp: URLResponse?
+        // Офлайн-кэш (только чтение витрины, см. OfflineCache): нет сети или связь
+        // оборвалась — отдаём последний сохранённый ответ вместо ошибки.
+        let cacheable = !upload && OfflineCache.isCacheable(req)
+        var fromCache = false
+        if cacheable, await API.offlineNow(), let hit = OfflineCache.shared.read(for: req) {
+            data = hit.data; fromCache = true
+            OfflineCache.shared.markStale(hit.at)
+        }
+        if !fromCache {
+            do {
+                // Служебная пометка «без кэша» (X-YM-Fresh) на сервер не уходит.
+                var wire = req
+                wire.setValue(nil, forHTTPHeaderField: OfflineCache.freshHeader)
+                let got = try await (upload ? uploadSession : session).data(for: wire)
+                data = got.0; resp = got.1
+            } catch let urlError as URLError {
+                if urlError.code == .cancelled { throw CancellationError() }   // отмена (дебаунс) — не повторяем
+                if cacheable, let hit = OfflineCache.shared.read(for: req) {
+                    data = hit.data; fromCache = true
+                    OfflineCache.shared.markStale(hit.at)
+                } else {
+                    // Таймаут при выключенной сети — это «нет соединения», а не
+                    // «превышено время ожидания»: запрос просто ждал сеть.
+                    if urlError.code == .timedOut {
+                        if await API.offlineNow() { throw APIError.network }
+                        throw APIError.timeout
+                    }
+                    // AT-3: соединения не было вовсе — запрос точно не ушёл.
+                    if API.notSentCodes.contains(urlError.code) { throw APIError.notConnected }
+                    throw APIError.network
+                }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                throw APIError.network
             }
-            // AT-3: соединения не было вовсе — запрос точно не ушёл.
-            if API.notSentCodes.contains(urlError.code) { throw APIError.notConnected }
-            throw APIError.network
-        } catch is CancellationError {
-            throw CancellationError()
-        } catch {
-            throw APIError.network
         }
 
-        let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        let status = fromCache ? 200 : ((resp as? HTTPURLResponse)?.statusCode ?? 0)
         if status == 401 {
             // Тихое продление access-токена (security-аудит): refresh → один повтор запроса.
             // Позволяет серверу сократить JWT_EXPIRES до часов без массовых разлогинов.
@@ -397,6 +416,10 @@ final class API {
             }
             guard let payload = env.data else { throw APIError.decoding }
             (payload as? PageMetaReceiving)?.receive(meta: env.meta)   // Page<T>: has_more из meta
+            if cacheable, !fromCache, (200..<300).contains(status) {
+                OfflineCache.shared.store(data, for: req)
+                OfflineCache.shared.markFresh()
+            }
             return payload
         } catch let e as APIError {
             throw e
@@ -448,8 +471,11 @@ final class API {
         }
     }
 
-    func get<T: Decodable>(_ path: String, query: [String: String] = [:]) async throws -> T {
-        try await send(try makeRequest("GET", path, query: query), as: T.self)
+    /// fresh: true — не брать ответ из офлайн-кэша (оформление, деньги).
+    func get<T: Decodable>(_ path: String, query: [String: String] = [:], fresh: Bool = false) async throws -> T {
+        var req = try makeRequest("GET", path, query: query)
+        if fresh { req.setValue("1", forHTTPHeaderField: OfflineCache.freshHeader) }
+        return try await send(req, as: T.self)
     }
     /// retryKey: true — создание с ключом повтора (П-27.14, см. sendKeyed).
     func post<T: Decodable>(_ path: String, body: Encodable? = nil, retryKey: Bool = false) async throws -> T {

@@ -37,7 +37,7 @@ struct ClientCardBlock: View {
         if let modules = EAN13.modules(code) {
             VStack(spacing: 8) {
                 Text("Карта клиента")
-                    .font(.system(size: 13, weight: .semibold))
+                    .ymFont(13, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 VStack(spacing: 6) {
@@ -59,7 +59,7 @@ struct ClientCardBlock: View {
                     }
                     .frame(height: 76)
                     Text(EAN13.pretty(code))
-                        .font(.system(size: 15, weight: .semibold))
+                        .ymFont(15, weight: .semibold)
                         .foregroundStyle(Color.black)
                 }
                 .padding(.horizontal, 10)
@@ -67,7 +67,7 @@ struct ClientCardBlock: View {
                 .frame(maxWidth: .infinity)
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 Text("Покажите этот код кассиру — покупка учтётся в бонусах")
-                    .font(.system(size: 12))
+                    .ymFont(12)
                     .foregroundStyle(YMColor.muted)
                     .multilineTextAlignment(.center)
             }

@@ -89,20 +89,20 @@ private struct WelcomeStep: View {
                     .frame(width: 104, height: 104)
                     .overlay(
                         Text("Y")
-                            .font(.system(size: 52, weight: .heavy))
+                            .ymFont(52, weight: .heavy)
                             .foregroundStyle(YMPalette.goldInk)
                     )
                     .shadow(color: YMPalette.gold.opacity(0.5), radius: 30, y: 24)
                     .offset(y: floatUp ? -10 : 0)
 
                 Text("Yumurta")
-                    .font(.system(size: 38, weight: .heavy))
+                    .ymFont(38, weight: .heavy)
                     .tracking(-1)
                     .foregroundStyle(Color(hex: "#F6F5F1"))
                     .padding(.top, 34)
 
                 Text("Рестораны, магазины и услуги вашего города — в одном приложении.")
-                    .font(.system(size: 16))
+                    .ymFont(16)
                     .lineSpacing(4)
                     .multilineTextAlignment(.center)
                     .foregroundStyle(Color(hex: "#B8B7BD"))
@@ -164,11 +164,11 @@ private struct CityStep: View {
             // Заголовок.
             VStack(alignment: .leading, spacing: 8) {
                 Text("Ваш город")
-                    .font(.system(size: 30, weight: .heavy))
+                    .ymFont(30, weight: .heavy)
                     .tracking(-0.6)
                     .foregroundStyle(YMColor.text)
                 Text("Покажем рестораны, магазины и услуги рядом с вами.")
-                    .font(.system(size: 14.5))
+                    .ymFont(14.5)
                     .lineSpacing(2)
                     .foregroundStyle(YMColor.muted)
             }
@@ -187,19 +187,19 @@ private struct CityStep: View {
             } label: {
                 HStack(spacing: YMSpace.md) {
                     Text("📍")
-                        .font(.system(size: 19))
+                        .ymFont(19)
                         .frame(width: 40, height: 40)
                         .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Определить автоматически")
-                            .font(.system(size: 14.5, weight: .heavy))
+                            .ymFont(14.5, weight: .heavy)
                             .foregroundStyle(YMColor.text)
                         Text("По вашей геолокации")
-                            .font(.system(size: 12))
+                            .ymFont(12)
                             .foregroundStyle(YMColor.muted)
                     }
                     Spacer()
-                    Text("›").font(.system(size: 20)).foregroundStyle(YMColor.accent)
+                    Text("›").ymFont(20).foregroundStyle(YMColor.accent)
                 }
                 .padding(14)
                 .background(YMColor.accent.opacity(0.10),
@@ -224,7 +224,7 @@ private struct CityStep: View {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if query.trimmingCharacters(in: .whitespaces).isEmpty {
                         Text("ГОРОДА С ЗАВЕДЕНИЯМИ")
-                            .font(.system(size: 12, weight: .heavy))
+                            .ymFont(12, weight: .heavy)
                             .tracking(0.6)
                             .foregroundStyle(YMColor.muted)
                             .padding(.horizontal, YMSpace.xxl)
@@ -238,7 +238,7 @@ private struct CityStep: View {
                     // а не оставляем пустой список без слова.
                     if !query.trimmingCharacters(in: .whitespaces).isEmpty && shownNames.isEmpty && !cities.isEmpty {
                         Text("Город не найден. Пока Yumurta работает только в городах из списка")
-                            .font(.system(size: 14))
+                            .ymFont(14)
                             .foregroundStyle(YMColor.muted)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, YMSpace.xxl)
@@ -255,11 +255,11 @@ private struct CityStep: View {
                     if citiesFailed && cities.isEmpty {
                         VStack(alignment: .leading, spacing: YMSpace.sm) {
                             Text("Не удалось загрузить список городов. Проверьте интернет или продолжите — город можно выбрать позже на главной.")
-                                .font(.system(size: 14))
+                                .ymFont(14)
                                 .foregroundStyle(YMColor.muted)
                                 .fixedSize(horizontal: false, vertical: true)
                             Button("Повторить") { Task { await loadCities() } }
-                                .font(.system(size: 14.5, weight: .bold))
+                                .ymFont(14.5, weight: .bold)
                                 .foregroundStyle(YMColor.accent)
                         }
                         .padding(.horizontal, YMSpace.xxl)
@@ -297,14 +297,14 @@ private struct CityStep: View {
             selectedId = cities.first { $0.name == name }?.id
         } label: {
             HStack(spacing: YMSpace.md) {
-                Text("🏙️").font(.system(size: 18))
+                Text("🏙️").ymFont(18)
                 Text(name)
                     .font(.system(size: 15.5, weight: selected ? .heavy : .semibold))
                     .foregroundStyle(YMColor.text)
                 Spacer()
                 if selected {
                     Text("✓")
-                        .font(.system(size: 14, weight: .black))
+                        .ymFont(14, weight: .black)
                         .foregroundStyle(YMPalette.goldInk)
                         .frame(width: 24, height: 24)
                         .background(YMColor.accent, in: Circle())

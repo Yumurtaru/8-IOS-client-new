@@ -106,7 +106,7 @@ struct BonusesView: View {
                         Button { Task { await loadMoreHistory() } } label: {
                             Group {
                                 if historyLoadingMore { ProgressView() }
-                                else { Text("Показать ещё").font(.system(size: 14.5, weight: .heavy)).foregroundStyle(YMColor.accent) }
+                                else { Text("Показать ещё").ymFont(14.5, weight: .heavy).foregroundStyle(YMColor.accent) }
                             }
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
@@ -155,7 +155,7 @@ struct BonusesView: View {
 
     private var emptyState: some View {
         VStack(spacing: YMSpace.sm) {
-            Text("🎁").font(.system(size: 44))
+            Text("🎁").ymFont(44)
             Text("Бонусов пока нет")
                 .font(YMFont.title3)
                 .foregroundStyle(YMColor.text)
@@ -232,7 +232,7 @@ private struct ShopBalanceRow: View {
     var body: some View {
         HStack(spacing: YMSpace.md) {
             Image(systemName: "star.fill")
-                .font(.system(size: 18))
+                .ymFont(18)
                 .foregroundStyle(YMColor.accent)
                 .frame(width: 44, height: 44)
                 .background(YMColor.accent.opacity(0.16),

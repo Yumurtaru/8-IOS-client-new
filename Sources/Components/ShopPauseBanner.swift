@@ -10,11 +10,11 @@ struct ShopPauseBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title)
-                .font(.system(size: 14.5, weight: .bold))
+                .ymFont(14.5, weight: .bold)
                 .foregroundStyle(YMColor.text)
             if let r = reason, !r.isEmpty {
                 Text(r)
-                    .font(.system(size: 12.5))
+                    .ymFont(12.5)
                     .foregroundStyle(YMColor.muted)
             }
         }

@@ -71,11 +71,21 @@ struct YumurtaApp: App {
                     }
                 }
                 .onOpenURL { url in router.handle(url: url) }
+                // Результат Spotlight (заведение, товар, заказ).
+                .onContinueUserActivity(SpotlightIndex.activityType) { activity in
+                    SpotlightIndex.handle(activity: activity)
+                }
+                .onAppear { AppRoute.markReady() }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     if let url = activity.webpageURL { router.handle(url: url) }
                 }
                 .onChange(of: scenePhase) { phase in
-                    if phase == .active { AppUpdateStore.shared.onForeground() }
+                    if phase == .active {
+                        AppUpdateStore.shared.onForeground()
+                        // Виджеты и Live Activity заказа берут свежие данные при возврате в приложение
+                        // (applicationDidBecomeActive в приложении со сценами не вызывается).
+                        Task { await OrderWidgetBridge.syncOnActive() }
+                    }
                 }
                 .task {
                     // П-52: в фоне, запуск не ждёт (не чаще раза в 6 часов).

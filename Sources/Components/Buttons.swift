@@ -9,6 +9,8 @@ struct YMSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(YMFont.headline)
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
             .foregroundStyle(YMColor.accent)
             .frame(maxWidth: .infinity, minHeight: 54)
             .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))

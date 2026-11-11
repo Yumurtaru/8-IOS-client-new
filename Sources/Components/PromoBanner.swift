@@ -29,17 +29,17 @@ struct PromoBanner: View {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(kicker.uppercased())
-                    .font(.system(size: 11, weight: .bold))
+                    .ymFont(11, weight: .bold)
                     .tracking(1)
                     .foregroundStyle(YMPalette.gold)
                 Text(title)
-                    .font(.system(size: 22, weight: .heavy))
+                    .ymFont(22, weight: .heavy)
                     .foregroundStyle(Color(hex: "#F5EEDE"))
                     .lineLimit(2)
                     .frame(maxWidth: 210, alignment: .leading)
                 Button(action: { Haptics.light(); action() }) {
                     Text(cta)
-                        .font(.system(size: 12.5, weight: .bold))
+                        .ymFont(12.5, weight: .bold)
                         .foregroundStyle(YMColor.onAccent)
                         .padding(.horizontal, 14).padding(.vertical, 7)
                         .background(YMPalette.gold, in: Capsule())

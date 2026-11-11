@@ -17,7 +17,7 @@ struct LoadMoreFooter: View {
         Group {
             if failed {
                 Button { Task { await onLoadMore() } } label: {
-                    Text("Показать ещё").font(.system(size: 14.5, weight: .heavy)).foregroundStyle(YMColor.accent)
+                    Text("Показать ещё").ymFont(14.5, weight: .heavy).foregroundStyle(YMColor.accent)
                         .padding(.horizontal, YMSpace.xxl).padding(.vertical, 10)
                         .background(YMColor.accent.opacity(0.14), in: Capsule())
                 }

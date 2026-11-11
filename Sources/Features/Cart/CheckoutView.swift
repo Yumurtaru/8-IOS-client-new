@@ -488,7 +488,7 @@ struct CheckoutView: View {
 
     private func loadShop(_ slug: String) async {
         do {
-            let loaded: ShopDetail = try await API.shared.get("api/v1/shops/\(slug)")
+            let loaded: ShopDetail = try await API.shared.get("api/v1/shops/\(slug)", fresh: true)
             // Пока грузили, корзина перешла к другому заведению — чужие условия не кладём.
             await MainActor.run { if cart.shopSlug == slug { shop = loaded; shopLoadError = nil } }
         } catch is CancellationError {
@@ -607,7 +607,7 @@ struct CheckoutView: View {
         .onChange(of: cart.shopId) { _ in reloadForShop() }
         .onChange(of: session.token) { _ in resetForAccount() }
         // AT-3: неотвеченное оформление старше суток снимаем (корзина скажет, что проверить).
-        .onAppear { cart.expireStalePending(); restoreDraft() }
+        .onAppear { cart.expireStalePending(); restoreDraft(); Track.checkoutStarted(items: cart.lines.count) }
         // Один параметр в onChange: двухпараметрический вариант — iOS 17, цель 16.0.
         .onChange(of: cart.lines.count) { _ in refreshPromo() }
         .onChange(of: cart.total) { _ in
@@ -629,7 +629,8 @@ struct CheckoutView: View {
         HStack(spacing: YMSpace.md) {
             Button(action: { Haptics.light(); onBack() }) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 18, weight: .semibold))
+                    .accessibilityLabel("Назад")
+                    .ymFont(18, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
                     .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -641,7 +642,7 @@ struct CheckoutView: View {
             // со старым составом.
             .disabled(placing)
             Text("Оформление")
-                .font(.system(size: 20, weight: .heavy))
+                .ymFont(20, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             Spacer()
         }
@@ -768,6 +769,7 @@ struct CheckoutView: View {
                 // прокрутки её не было видно — нажал «Оформить», и ничего.
                 Color.clear.frame(height: YMSpace.lg)
             }
+            .ymReadableWidth()
             .padding(.horizontal, YMSpace.xl)
         }
         // Клавиатура убирается жестом прокрутки (как в корзине).
@@ -778,11 +780,11 @@ struct CheckoutView: View {
         HStack(spacing: YMSpace.md) {
             ZStack {
                 RoundedRectangle(cornerRadius: 11, style: .continuous).fill(YMColor.surface2)
-                Text(monogram).font(.system(size: 17, weight: .heavy)).foregroundStyle(YMColor.accent)
+                Text(monogram).ymFont(17, weight: .heavy).foregroundStyle(YMColor.accent)
             }
             .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 2) {
-                Text(cart.shopName ?? "Магазин").font(.system(size: 14.5, weight: .bold)).foregroundStyle(YMColor.text)
+                Text(cart.shopName ?? "Магазин").ymFont(14.5, weight: .bold).foregroundStyle(YMColor.text)
                 // cart.count — число штук, а не позиций: одна позиция ×3 читалась
                 // как «3 поз.». Слово то же, что в корзине.
                 Text("В заказе \(cart.count) \(ruItemsWord(cart.count))").font(YMFont.caption).foregroundStyle(YMColor.muted)
@@ -836,9 +838,9 @@ struct CheckoutView: View {
             } else {
                 Button(action: { Haptics.light(); showAddAddress = true }) {
                     HStack(spacing: YMSpace.sm) {
-                        Text("＋").font(.system(size: 17, weight: .bold)).foregroundStyle(YMColor.accent)
+                        Text("＋").ymFont(17, weight: .bold).foregroundStyle(YMColor.accent)
                         Text("Добавить новый адрес")
-                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(YMColor.accent)
+                            .ymFont(14, weight: .semibold).foregroundStyle(YMColor.accent)
                         Spacer()
                     }
                     .padding(.horizontal, 10).padding(.vertical, 12)
@@ -892,7 +894,7 @@ struct CheckoutView: View {
             .frame(width: 20, height: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(a.label?.isEmpty == false ? a.label! : "Адрес")
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(YMColor.text)
+                    .ymFont(15, weight: .semibold).foregroundStyle(YMColor.text)
                 Text(a.display.isEmpty ? "Адрес без деталей" : a.display)
                     .font(YMFont.caption).foregroundStyle(YMColor.muted).lineLimit(2)
             }
@@ -909,7 +911,7 @@ struct CheckoutView: View {
             // П-27.1: заведение требует номер стола — так и пишем в поле.
             TextField(shop?.dineInTableRequired == true ? "Номер стола (обязательно)" : "Номер стола", text: $tableNumber)
                 .focused($field, equals: .table)
-                .font(.system(size: 13.5))
+                .ymFont(13.5)
                 .foregroundStyle(YMColor.text)
                 .tint(YMColor.accent)
                 .onChange(of: tableNumber) { v in CheckoutDraft.shopId = cart.shopId; CheckoutDraft.table = v }
@@ -927,7 +929,7 @@ struct CheckoutView: View {
             Image(systemName: "bag").font(.system(size: 15)).foregroundStyle(YMColor.muted)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Заберёте заказ в заведении")
-                    .font(.system(size: 13.5)).foregroundStyle(YMColor.text)
+                    .ymFont(13.5).foregroundStyle(YMColor.text)
                 if let a = pickupAddress {
                     Text(a).font(YMFont.caption).foregroundStyle(YMColor.muted)
                         .fixedSize(horizontal: false, vertical: true)
@@ -960,7 +962,7 @@ struct CheckoutView: View {
             TextField("Сдача с (сумма купюры, необязательно)", text: $changeFrom)
                 .focused($field, equals: .change)
                 .keyboardType(.numberPad)
-                .font(.system(size: 13.5))
+                .ymFont(13.5)
                 .foregroundStyle(YMColor.text)
                 .tint(YMColor.accent)
                 .ymMaxLength($changeFrom, 9)
@@ -976,7 +978,7 @@ struct CheckoutView: View {
                 Image(systemName: "ticket").font(.system(size: 15)).foregroundStyle(YMColor.muted)
                 TextField("Промокод", text: $promoInput)
                     .focused($field, equals: .promo)
-                    .font(.system(size: 13.5))
+                    .ymFont(13.5)
                     .foregroundStyle(YMColor.text)
                     .tint(YMColor.accent)
                     .textInputAutocapitalization(.characters)
@@ -989,13 +991,13 @@ struct CheckoutView: View {
                         appliedCode = nil; codeDiscount = 0; codeFree = false; codeMsg = nil; promoInput = ""
                         refreshPromo()
                     }
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .ymFont(13.5, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
                 } else {
                     Button(checkingCode ? "…" : "Применить") {
                         Task { await applyCode(promoInput) }
                     }
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .ymFont(13.5, weight: .semibold)
                     .foregroundStyle(YMColor.accent)
                     .disabled(checkingCode || promoInput.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
@@ -1016,7 +1018,7 @@ struct CheckoutView: View {
             Image(systemName: "square.and.pencil").font(.system(size: 15)).foregroundStyle(YMColor.muted)
             TextField("Комментарий к заказу…", text: $comment, axis: .vertical)
                 .focused($field, equals: .comment)
-                .font(.system(size: 13.5))
+                .ymFont(13.5)
                 .foregroundStyle(YMColor.text)
                 .tint(YMColor.accent)
                 .onChange(of: comment) { v in CheckoutDraft.shopId = cart.shopId; CheckoutDraft.comment = v }
@@ -1046,14 +1048,14 @@ struct CheckoutView: View {
                     ForEach(applied) { a in
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(a.name).font(.system(size: 13.5)).foregroundStyle(YMColor.text)
+                                Text(a.name).ymFont(13.5).foregroundStyle(YMColor.text)
                                 if let d = a.description, !d.isEmpty {
                                     Text(d).font(YMFont.caption).foregroundStyle(YMColor.muted)
                                 }
                             }
                             Spacer(minLength: 8)
                             Text(promoBadge(a))
-                                .font(.system(size: 13.5, weight: .semibold))
+                                .ymFont(13.5, weight: .semibold)
                                 .foregroundStyle(YMColor.accent)
                         }
                     }
@@ -1063,16 +1065,16 @@ struct CheckoutView: View {
                     ForEach(gifts) { g in
                         HStack {
                             Text((g.name ?? "Подарок") + ((g.qty ?? 1) > 1 ? " ×\(Int(g.qty ?? 1))" : ""))
-                                .font(.system(size: 13.5)).foregroundStyle(YMColor.text)
+                                .ymFont(13.5).foregroundStyle(YMColor.text)
                             Spacer()
-                            Text("бесплатно").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.accent)
+                            Text("бесплатно").ymFont(13.5, weight: .semibold).foregroundStyle(YMColor.accent)
                         }
                     }
                 }
                 if pointsMax > 0 {
                     Toggle(isOn: $spendPoints) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Оплатить баллами").font(.system(size: 13.5)).foregroundStyle(YMColor.text)
+                            Text("Оплатить баллами").ymFont(13.5).foregroundStyle(YMColor.text)
                             Text(spendPoints && pointsSpent > 0
                                  ? "Списываем \(Money.format(pointsSpent))"
                                  : "Доступно до \(Money.format(pointsMax))")
@@ -1135,9 +1137,9 @@ struct CheckoutView: View {
 
     private func totalRow(_ label: String, _ value: String, accent: Bool = false) -> some View {
         HStack {
-            Text(label).font(.system(size: 13.5)).foregroundStyle(accent ? YMColor.accent : YMColor.muted)
+            Text(label).ymFont(13.5).foregroundStyle(accent ? YMColor.accent : YMColor.muted)
             Spacer()
-            Text(value).font(.system(size: 13.5, weight: .semibold))
+            Text(value).ymFont(13.5, weight: .semibold)
                 .foregroundStyle(accent ? YMColor.accent : YMColor.muted)
         }
     }
@@ -1211,20 +1213,20 @@ struct CheckoutView: View {
         HStack {
             Spacer()
             Button("Готово") { field = nil }
-                .font(.system(size: 15, weight: .semibold))
+                .ymFont(15, weight: .semibold)
                 .foregroundStyle(YMColor.accent)
         }
     }
 
     @ViewBuilder private var ctaContent: some View {
         HStack {
-            Text("Итого").font(.system(size: 13.5)).foregroundStyle(YMColor.muted)
+            Text("Итого").ymFont(13.5).foregroundStyle(YMColor.muted)
             Spacer()
-            Text(Money.format(grandTotal)).font(.system(size: 22, weight: .heavy)).foregroundStyle(YMColor.text)
+            Text(Money.format(grandTotal)).ymFont(22, weight: .heavy).foregroundStyle(YMColor.text)
         }
         // AT-2: заметно, прямо над кнопкой — до нажатия «Оформить».
         if let n = priceNote {
-            Text(n).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.text)
+            Text(n).ymFont(13.5, weight: .semibold).foregroundStyle(YMColor.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, YMSpace.md).padding(.vertical, YMSpace.sm)
@@ -1410,7 +1412,20 @@ struct CheckoutView: View {
 
     // MARK: - Создание заказа
 
+    /// Часть оплаты баллами — списание: сначала Face ID / Touch ID / код-пароль (отмена — ничего не списываем).
     private func placeOrder() {
+        guard ctaEnabled else { return }
+        guard spendPoints, pointsSpent > 0, PayConfirm.isRequired else {
+            performPlaceOrder()
+            return
+        }
+        Task {
+            let ok = await PayConfirm.confirm(reason: "Подтвердите оплату части заказа баллами")
+            if ok { performPlaceOrder() }
+        }
+    }
+
+    private func performPlaceOrder() {
         guard ctaEnabled, let shopId = cart.shopId, !cart.isEmpty else { return }
         if fulfillment == .delivery {
             if selectedAddress == nil { errorText = "Выберите адрес доставки"; return }
@@ -1492,6 +1507,10 @@ struct CheckoutView: View {
                 let r: OrderCreateResult = try await API.shared.post("api/v1/orders", body: body)
                 await MainActor.run {
                     Haptics.success()
+                    Track.orderCreated(id: r.resolvedId ?? 0)
+                    // Статус заказа на экране блокировки (Live Activity); без расширения — пустой ход.
+                    OrderLiveActivity.startAfterCheckout(result: r, shopName: cart.shopName,
+                                                         deliveryType: body.deliveryType, isService: shop?.mode == "service")
                     // Корзину чистим, только если это ответ на СВОЮ запись (ключ совпал).
                     if cart.pendingOrder?.key == key {
                         CheckoutDraft.clear()
@@ -1649,10 +1668,12 @@ struct CheckoutView: View {
                         ForEach(po.lines) { l in
                             HStack(alignment: .top) {
                                 Text("\(fmtQty(l.qty, l.unit)) · \(l.name)")
-                                    .font(.system(size: 13.5)).foregroundStyle(YMColor.text)
+                                    .ymFont(13.5).foregroundStyle(YMColor.text)
                                 Spacer(minLength: 8)
                                 Text(Money.format(Wholesale.lineTotal(l, in: po.lines)))
-                                    .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                                    .ymFont(13.5, weight: .semibold).foregroundStyle(YMColor.text)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.75)
                             }
                         }
                         ForEach(Array(po.summary.enumerated()), id: \.offset) { _, line in
@@ -1661,7 +1682,7 @@ struct CheckoutView: View {
                         }
                         if !po.shownTotal.isEmpty {
                             Text("Итого на экране было: " + po.shownTotal)
-                                .font(.system(size: 13.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                                .ymFont(13.5, weight: .semibold).foregroundStyle(YMColor.text)
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1681,7 +1702,7 @@ struct CheckoutView: View {
 
                     Button(action: { Haptics.light(); onOpenOrders() }) {
                         Text("Проверить мои заказы")
-                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(YMColor.text)
+                            .ymFont(15, weight: .semibold).foregroundStyle(YMColor.text)
                             .frame(maxWidth: .infinity, minHeight: 50)
                             .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -1692,7 +1713,7 @@ struct CheckoutView: View {
 
                     Button(action: { askAbandon = true }) {
                         Text("Изменить заказ")
-                            .font(.system(size: 14, weight: .semibold)).foregroundStyle(YMColor.statusCancel)
+                            .ymFont(14, weight: .semibold).foregroundStyle(YMColor.statusCancel)
                             .frame(maxWidth: .infinity, minHeight: 40)
                     }
                     .buttonStyle(.plain)
@@ -1968,7 +1989,7 @@ private struct CheckoutRow: View {
             PhotoPlaceholder(url: API.imageURL(line.photo), label: "ФОТО", radius: 14, tone: line.productId, fit: true)
                 .frame(width: 56, height: 56)
             VStack(alignment: .leading, spacing: 2) {
-                Text(line.name).font(.system(size: 14.5, weight: .bold)).foregroundStyle(YMColor.text).lineLimit(1)
+                Text(line.name).ymFont(14.5, weight: .bold).foregroundStyle(YMColor.text).lineLimit(1)
                 let sub = subtitle
                 if !sub.isEmpty {
                     Text(sub).font(YMFont.caption).foregroundStyle(YMColor.muted).lineLimit(1)
@@ -1976,8 +1997,8 @@ private struct CheckoutRow: View {
                 WholesaleBadge(line: line, lines: lines)
             }
             Spacer(minLength: YMSpace.sm)
-            Text(quantityLabel).font(.system(size: 13, weight: .bold)).foregroundStyle(YMColor.muted)
-            Text(Money.format(lineTotal)).font(.system(size: 14.5, weight: .heavy)).foregroundStyle(YMColor.text).fixedSize()
+            Text(quantityLabel).ymFont(13, weight: .bold).foregroundStyle(YMColor.muted)
+            Text(Money.format(lineTotal)).ymFont(14.5, weight: .heavy).foregroundStyle(YMColor.text).fixedSize()
         }
     }
 
@@ -2209,12 +2230,14 @@ struct WholesaleBadge: View {
         if Wholesale.isWholesale(line, in: lines) {
             HStack(spacing: 6) {
                 Text(Wholesale.optLabel)
-                    .font(.system(size: 11.5, weight: .bold))
+                    .ymFont(11.5, weight: .bold)
                     .foregroundStyle(YMColor.accent)
                 let r = Wholesale.retailUnit(line)
                 if r > Wholesale.lineUnit(line, in: lines) {
                     Text(Money.format(r))
-                        .font(.system(size: 11.5))
+                        .ymFont(11.5)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .strikethrough()
                         .foregroundStyle(YMColor.muted)
                 }
@@ -2260,7 +2283,7 @@ struct WholesaleHintsView: View {
                                 _ = cart.addWholesale(productId: h.productId ?? 0, qty: add)
                             } label: {
                                 Text(Wholesale.addButtonText(add: add, unit: unitOf(h)))
-                                    .font(.system(size: 13.5, weight: .bold))
+                                    .ymFont(13.5, weight: .bold)
                                     .foregroundStyle(YMColor.accent)
                             }
                             .buttonStyle(.plain)

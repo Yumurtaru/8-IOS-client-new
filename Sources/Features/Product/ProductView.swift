@@ -71,6 +71,8 @@ final class ProductViewModel: ObservableObject {
                 detail = d
                 // «Недавно смотрели» во вкладке «Поиск» читает RecentStore, но
                 // записи туда не делал никто — раздел всегда был пустым.
+                SpotlightIndex.indexProduct(id: d.id, name: d.name, shopName: d.shopName)
+                Track.productOpened(id: d.id, name: d.name)
                 RecentStore.add(RecentProduct(id: d.id, name: d.name ?? "",
                                               photo: d.photos?.first?.pathWebp,
                                               price: d.price, shopId: d.shopId, shopName: d.shopName))
@@ -317,7 +319,7 @@ struct ProductView: View {
             // Название + ХАЛЯЛЬ.
             HStack(alignment: .center, spacing: 10) {
                 Text(titleText)
-                    .font(.system(size: 24, weight: .heavy))
+                    .ymFont(24, weight: .heavy)
                     .foregroundStyle(YMColor.text)
                     .lineLimit(3)
                 if isHalal { HalalBadge() }
@@ -332,11 +334,11 @@ struct ProductView: View {
                         Text("★").foregroundStyle(YMColor.accent)
                         Text(String(format: "%.1f", r)).foregroundStyle(YMColor.text)
                     }
-                    .font(.system(size: 13.5, weight: .bold))
+                    .ymFont(13.5, weight: .bold)
                 }
                 if let meta = metaText, !meta.isEmpty {
                     Text(meta)
-                        .font(.system(size: 13.5))
+                        .ymFont(13.5)
                         .foregroundStyle(YMColor.muted)
                 }
             }
@@ -345,7 +347,7 @@ struct ProductView: View {
             // Описание.
             if let desc = descText, !desc.isEmpty {
                 Text(desc)
-                    .font(.system(size: 14))
+                    .ymFont(14)
                     .lineSpacing(4)
                     .foregroundStyle(YMColor.muted)
                     .padding(.top, 12)
@@ -372,11 +374,11 @@ struct ProductView: View {
         if let d = vm.detail, !wholesaleSteps.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Text(Wholesale.blockTitle)
-                    .font(.system(size: 16, weight: .heavy))
+                    .ymFont(16, weight: .heavy)
                     .foregroundStyle(YMColor.text)
                 ForEach(wholesaleSteps, id: \.minQty) { s in
                     Text(Wholesale.tierRow(s, retail: Money.dec(d.price), unit: d.unit))
-                        .font(.system(size: 14, weight: .semibold))
+                        .ymFont(14, weight: .semibold)
                         .foregroundStyle(YMColor.text)
                 }
             }
@@ -404,11 +406,11 @@ struct ProductView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(g.name ?? "Размер порции")
-                        .font(.system(size: 16, weight: .heavy))
+                        .ymFont(16, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                     Spacer()
                     Text((g.isRequired == true ? "Выберите 1" : "Не обязательно").uppercased())
-                        .font(.system(size: 11, weight: .bold))
+                        .ymFont(11, weight: .bold)
                         .tracking(0.5)
                         .foregroundStyle(YMColor.accent)
                 }
@@ -425,13 +427,13 @@ struct ProductView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text(g.name ?? "Добавить к блюду")
-                        .font(.system(size: 16, weight: .heavy))
+                        .ymFont(16, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                     Spacer()
                     if g.isRequired == true {
                         let need = max(1, g.minQty ?? 1)
                         Text((need > 1 ? "Выберите от \(need)" : "Обязательно").uppercased())
-                            .font(.system(size: 11, weight: .bold))
+                            .ymFont(11, weight: .bold)
                             .tracking(0.5)
                             .foregroundStyle(YMColor.accent)
                     }
@@ -495,12 +497,14 @@ struct ProductView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Вес")
-                    .font(.system(size: 16, weight: .heavy))
+                    .ymFont(16, weight: .heavy)
                     .foregroundStyle(YMColor.text)
                 Spacer()
                 // Цена за выбранный вес.
                 Text(Money.format(weightPrice(d, selectedWeight)))
-                    .font(.system(size: 16, weight: .heavy))
+                    .ymFont(16, weight: .heavy)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .foregroundStyle(YMColor.text)
             }
             ScrollView(.horizontal, showsIndicators: false) {
@@ -521,7 +525,7 @@ struct ProductView: View {
             selectedWeight = v
         } label: {
             Text(fmtQty(v, unit))
-                .font(.system(size: 14, weight: .bold))
+                .ymFont(14, weight: .bold)
                 .foregroundStyle(active ? YMColor.accent : YMColor.text)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
@@ -538,7 +542,7 @@ struct ProductView: View {
     private var recommendedSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Похожие товары")
-                .font(.system(size: 16, weight: .heavy))
+                .ymFont(16, weight: .heavy)
                 .foregroundStyle(YMColor.text)
                 .padding(.top, 28)
             ScrollView(.horizontal, showsIndicators: false) {
@@ -559,10 +563,12 @@ struct ProductView: View {
                 PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 16, tone: tone, fit: true)
                     .frame(width: 150, height: 96)
                 Text(p.name ?? "—")
-                    .font(.system(size: 13.5, weight: .bold))
+                    .ymFont(13.5, weight: .bold)
                     .foregroundStyle(YMColor.text).lineLimit(1)
                 Text(Money.format(Money.dec(p.price)))
-                    .font(.system(size: 12, weight: .bold))
+                    .ymFont(12, weight: .bold)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .foregroundStyle(YMColor.accent)
             }
             .frame(width: 150, alignment: .leading)
@@ -582,12 +588,14 @@ struct ProductView: View {
         } label: {
             HStack(spacing: 12) {
                 Text(opt.name ?? "—")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .ymFont(14.5, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                 Spacer(minLength: 8)
                 if let pr = opt.price, pr > 0 {
                     Text(Money.format(Money.dec(pr)))
-                        .font(.system(size: 14, weight: .bold))
+                        .ymFont(14, weight: .bold)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
                         .foregroundStyle(YMColor.muted)
                 }
                 ZStack {
@@ -619,12 +627,12 @@ struct ProductView: View {
         } label: {
             HStack(spacing: 12) {
                 Text(opt.name ?? "—")
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .ymFont(14.5, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                 Spacer(minLength: 8)
                 if let pr = opt.price, pr > 0 {
                     Text("+\(Money.format(Money.dec(pr)))")
-                        .font(.system(size: 14, weight: .bold))
+                        .ymFont(14, weight: .bold)
                         .foregroundStyle(YMColor.muted)
                 }
                 ZStack {
@@ -636,7 +644,7 @@ struct ProductView: View {
                             .fill(YMColor.accent)
                             .frame(width: 22, height: 22)
                         Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .heavy))
+                            .ymFont(12, weight: .heavy)
                             .foregroundStyle(YMColor.onAccent)
                     }
                 }
@@ -655,7 +663,7 @@ struct ProductView: View {
         // Дата записи — горизонтальный пикер дней (из дат слотов или ближайшие 7 дней).
         VStack(alignment: .leading, spacing: 10) {
             Text("Дата записи")
-                .font(.system(size: 16, weight: .heavy))
+                .ymFont(16, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
@@ -670,7 +678,7 @@ struct ProductView: View {
         // Свободное время — сетка 4-в-ряд.
         VStack(alignment: .leading, spacing: 10) {
             Text("Свободное время")
-                .font(.system(size: 16, weight: .heavy))
+                .ymFont(16, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             let cols = Array(repeating: GridItem(.flexible(), spacing: 10), count: 4)
             if slotsForDay.isEmpty {
@@ -690,13 +698,13 @@ struct ProductView: View {
 
         // Плашка «Вызвать специалиста на дом» с тумблером.
         HStack(spacing: 12) {
-            Text("🏠").font(.system(size: 20))
+            Text("🏠").ymFont(20)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Вызвать специалиста на дом")
-                    .font(.system(size: 14, weight: .bold))
+                    .ymFont(14, weight: .bold)
                     .foregroundStyle(YMColor.text)
                 Text("Мастер приедет по вашему адресу")
-                    .font(.system(size: 12))
+                    .ymFont(12)
                     .foregroundStyle(YMColor.muted)
             }
             Spacer(minLength: 8)
@@ -720,10 +728,10 @@ struct ProductView: View {
         } label: {
             VStack(spacing: 3) {
                 Text(day.dow)
-                    .font(.system(size: 11, weight: .semibold))
+                    .ymFont(11, weight: .semibold)
                     .foregroundStyle(active ? YMColor.onAccent.opacity(0.75) : YMColor.muted)
                 Text(day.num)
-                    .font(.system(size: 18, weight: .heavy))
+                    .ymFont(18, weight: .heavy)
                     .foregroundStyle(active ? YMColor.onAccent : YMColor.text)
             }
             .frame(width: 54, height: 60)
@@ -744,7 +752,7 @@ struct ProductView: View {
             selectedSlot = slot.id
         } label: {
             Text(slotLabel(slot))
-                .font(.system(size: 13.5, weight: .bold))
+                .ymFont(13.5, weight: .bold)
                 .foregroundStyle(active ? YMColor.onAccent : YMColor.text)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 11)
@@ -764,7 +772,8 @@ struct ProductView: View {
         HStack {
             Button { Haptics.light(); dismiss() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 16, weight: .semibold))
+                    .accessibilityLabel("Назад")
+                    .ymFont(16, weight: .semibold)
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
                     .background(Color.black.opacity(0.4), in: Circle())
@@ -809,7 +818,7 @@ struct ProductView: View {
     @ViewBuilder private var requiredHint: some View {
         if !isStopped, let g = missingRequiredGroup {
             Text("Выберите «\(g)», чтобы добавить в корзину")
-                .font(.system(size: 13, weight: .semibold))
+                .ymFont(13, weight: .semibold)
                 .foregroundStyle(YMColor.text)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 14)
@@ -832,18 +841,20 @@ struct ProductView: View {
                 HStack(spacing: 4) {
                     Button { decQty() } label: {
                         Image(systemName: "minus")
-                            .font(.system(size: 18, weight: .bold))
+                            .accessibilityLabel("Уменьшить количество")
+                            .ymFont(18, weight: .bold)
                             .foregroundStyle(YMColor.text)
                             .frame(width: 38, height: 38)
                     }
                     .buttonStyle(.plain)
                     Text(qtyLabel)
-                        .font(.system(size: 17, weight: .heavy))
+                        .ymFont(17, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                         .frame(minWidth: 28)
                     Button { incQty() } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 18, weight: .bold))
+                            .accessibilityLabel("Увеличить количество")
+                            .ymFont(18, weight: .bold)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 38, height: 38)
                             .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -928,7 +939,7 @@ struct ProductView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 34, weight: .semibold))
+                .ymFont(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)
@@ -1091,13 +1102,13 @@ struct ProductView: View {
                 let saving = retailTotal - lineTotal
                 if saving > 0 {
                     Text(Wholesale.savingText(saving))
-                        .font(.system(size: 13, weight: .semibold))
+                        .ymFont(13, weight: .semibold)
                         .foregroundStyle(YMColor.accent)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
             } else if let n = Wholesale.next(wholesaleSteps, qtyTotal: cardQtyTotal) {
                 Text(Wholesale.moreText(n, qtyTotal: cardQtyTotal, unit: vm.detail?.unit))
-                    .font(.system(size: 13, weight: .semibold))
+                    .ymFont(13, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
                     .frame(maxWidth: .infinity, alignment: .trailing)
             }

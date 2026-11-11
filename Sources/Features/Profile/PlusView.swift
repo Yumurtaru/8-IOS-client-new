@@ -172,7 +172,7 @@ struct PlusView: View {
             ForEach(Array(benefits.enumerated()), id: \.offset) { _, b in
                 HStack(spacing: YMSpace.sm) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 12, weight: .bold))
+                        .ymFont(12, weight: .bold)
                         .foregroundStyle(YMColor.accent)
                         .frame(width: 22, height: 22)
                         .background(YMColor.accent.opacity(0.16), in: Circle())
@@ -312,7 +312,7 @@ struct ErrorRetryView: View {
     let onRetry: () -> Void
     var body: some View {
         VStack(spacing: YMSpace.md) {
-            Text("😕").font(.system(size: 44))
+            Text("😕").ymFont(44)
             Text(message)
                 .font(YMFont.body)
                 .foregroundStyle(YMColor.muted)

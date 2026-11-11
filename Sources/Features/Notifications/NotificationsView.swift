@@ -314,14 +314,14 @@ private struct NotifRow: View {
         HStack(alignment: .top, spacing: 12) {
             if giveaway {
                 Image(systemName: "gift.fill")
-                    .font(.system(size: 17, weight: .semibold))
+                    .ymFont(17, weight: .semibold)
                     .foregroundStyle(YMColor.onAccent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .accessibilityHidden(true)
             } else {
                 Text(icon)
-                    .font(.system(size: 17))
+                    .ymFont(17)
                     .frame(width: 40, height: 40)
                     .background(item.read ? YMColor.surface2 : YMColor.accent.opacity(0.14),
                                 in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -330,7 +330,7 @@ private struct NotifRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .top, spacing: 8) {
                     Text(item.title ?? "Уведомление")
-                        .font(.system(size: 15, weight: .heavy))
+                        .ymFont(15, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -340,12 +340,12 @@ private struct NotifRow: View {
                 }
                 if let body = item.body, !body.isEmpty {
                     Text(body)
-                        .font(.system(size: 13))
+                        .ymFont(13)
                         .foregroundStyle(giveaway ? YMColor.text : YMColor.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text(DateFmt.short(item.createdAt))
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .ymFont(11.5, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
                     .padding(.top, 1)
             }
@@ -374,7 +374,7 @@ private struct NotifRow: View {
 private struct NotifEmptyState: View {
     var body: some View {
         VStack(spacing: YMSpace.sm) {
-            Text("🔔").font(.system(size: 44))
+            Text("🔔").ymFont(44)
             Text("Уведомлений пока нет")
                 .font(YMFont.title3).foregroundStyle(YMColor.text)
             Text("Здесь появятся статусы заказов, акции и важные события.")
@@ -391,7 +391,7 @@ private struct NotifErrorState: View {
     let onRetry: () -> Void
     var body: some View {
         VStack(spacing: YMSpace.md) {
-            Text("😕").font(.system(size: 44))
+            Text("😕").ymFont(44)
             Text(message)
                 .font(YMFont.callout).foregroundStyle(YMColor.muted)
                 .multilineTextAlignment(.center)

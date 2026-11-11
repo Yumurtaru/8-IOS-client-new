@@ -5,13 +5,15 @@ struct RatingBadge: View {
     let rating: Double
     var body: some View {
         HStack(spacing: 3) {
-            Text("★").font(.system(size: 11))
-            Text(String(format: "%.1f", rating)).font(.system(size: 11, weight: .bold))
+            Text("★").ymFont(11)
+            Text(String(format: "%.1f", rating)).ymFont(11, weight: .bold)
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 8).padding(.vertical, 3)
         .background(.ultraThinMaterial.opacity(0.9), in: Capsule())
         .background(Color.black.opacity(0.35), in: Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Рейтинг " + String(format: "%.1f", rating))
     }
 }
 
@@ -43,6 +45,7 @@ struct HeartButton: View {
                 .scaleEffect(bump ? 1.25 : 1)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(isFav ? "Убрать из избранного" : "Добавить в избранное")
     }
 }
 
@@ -51,7 +54,7 @@ struct BlurInfoBadge: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 12, weight: .semibold))
+            .ymFont(12, weight: .semibold)
             .foregroundStyle(.white)
             .padding(.horizontal, 10).padding(.vertical, 5)
             .background(Color.black.opacity(0.55), in: Capsule())
@@ -78,10 +81,12 @@ struct StatusPill: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11.5, weight: .bold))
+            .ymFont(11.5, weight: .bold)
             .foregroundStyle(solid ? .white : color)
             .padding(.horizontal, 11).padding(.vertical, 5)
             .background(solid ? color : color.opacity(0.15), in: Capsule())
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
     }
 }
 
@@ -97,6 +102,8 @@ struct RatingStars: View {
                     .foregroundStyle(YMColor.accent)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Рейтинг " + String(format: "%.1f", rating) + " из 5")
     }
     private func starName(_ i: Int) -> String {
         let v = rating - Double(i)

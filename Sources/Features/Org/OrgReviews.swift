@@ -34,27 +34,27 @@ struct OrgReviewsSection: View {
             } label: {
                 HStack(alignment: .center, spacing: 8) {
                     Text("Отзывы")
-                        .font(.system(size: 20, weight: .heavy))
+                        .ymFont(20, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                     Spacer(minLength: 8)
                     let cnt = reviewsCount ?? 0
                     if cnt > 0 || (avgRating ?? 0) > 0 {
                         HStack(spacing: 6) {
                             Image(systemName: "star.fill")
-                                .font(.system(size: 14))
+                                .ymFont(14)
                                 .foregroundStyle(YMColor.accent)
                             Text(fmtRating1(avgRating))
-                                .font(.system(size: 16, weight: .heavy))
+                                .ymFont(16, weight: .heavy)
                                 .foregroundStyle(YMColor.text)
                             if cnt > 0 {
                                 Text("· \(pluralReviews(cnt))")
-                                    .font(.system(size: 13))
+                                    .ymFont(13)
                                     .foregroundStyle(YMColor.muted)
                             }
                         }
                     }
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .bold))
+                        .ymFont(13, weight: .bold)
                         .foregroundStyle(YMColor.muted)
                 }
                 .contentShape(Rectangle())
@@ -76,7 +76,7 @@ struct OrgReviewsSection: View {
                         ReviewsNotice(text: "Не удалось загрузить отзывы: \(e)")
                         if let retry = onRetry {
                             Button("Повторить", action: retry)
-                                .font(.system(size: 14.5, weight: .bold))
+                                .ymFont(14.5, weight: .bold)
                                 .foregroundStyle(YMColor.accent)
                         }
                     }
@@ -92,7 +92,7 @@ struct OrgReviewsSection: View {
                             ReviewsScreen(slug: slug, avgRating: avgRating, reviewsCount: reviewsCount)
                         } label: {
                             Text("Все отзывы ›")
-                                .font(.system(size: 14.5, weight: .bold))
+                                .ymFont(14.5, weight: .bold)
                                 .foregroundStyle(YMColor.accent)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 12)
@@ -143,7 +143,7 @@ struct OrgReviewCard: View {
 
             if let t = review.text, !t.isEmpty {
                 Text(t)
-                    .font(.system(size: 14.5))
+                    .ymFont(14.5)
                     .foregroundStyle(YMColor.text)
                     .padding(.top, 8)
             }
@@ -166,12 +166,12 @@ struct OrgReviewCard: View {
             // Автор + дата.
             HStack {
                 Text((review.author?.isEmpty == false ? review.author! : "Гость"))
-                    .font(.system(size: 13, weight: .bold))
+                    .ymFont(13, weight: .bold)
                     .foregroundStyle(YMColor.muted)
                 Spacer(minLength: 8)
                 if let d = review.createdAt, !d.isEmpty {
                     Text(fmtReviewDate(d))
-                        .font(.system(size: 11.5))
+                        .ymFont(11.5)
                         .foregroundStyle(YMColor.muted)
                 }
             }
@@ -181,10 +181,10 @@ struct OrgReviewCard: View {
             if let reply = review.reply, !reply.isEmpty {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Ответ организации")
-                        .font(.system(size: 11, weight: .heavy))
+                        .ymFont(11, weight: .heavy)
                         .foregroundStyle(YMColor.accent)
                     Text(reply)
-                        .font(.system(size: 12))
+                        .ymFont(12)
                         .foregroundStyle(YMColor.text)
                 }
                 .padding(10)
@@ -200,14 +200,14 @@ struct OrgReviewCard: View {
                     Spacer(minLength: 0)
                     if reportSentFor == rid || ReviewComplaints.sent.contains(rid) {
                         Text("Жалоба отправлена")
-                            .font(.system(size: 12, weight: .semibold))
+                            .ymFont(12, weight: .semibold)
                             .foregroundStyle(YMColor.statusDone)
                     } else if reportSending {
                         ProgressView()
                     } else {
                         Button { Haptics.light(); showReport = true } label: {
                             Text("Пожаловаться")
-                                .font(.system(size: 12, weight: .semibold))
+                                .ymFont(12, weight: .semibold)
                                 .foregroundStyle(YMColor.muted)
                         }
                         .buttonStyle(.plain)
@@ -216,7 +216,7 @@ struct OrgReviewCard: View {
                 .padding(.top, 8)
                 if let e = reportError {
                     Text(e)
-                        .font(.system(size: 12))
+                        .ymFont(12)
                         .foregroundStyle(YMColor.statusCancel)
                         .frame(maxWidth: .infinity, alignment: .trailing)
                         .padding(.top, 4)
@@ -283,7 +283,7 @@ struct StarRow: View {
 private struct VerifiedBadge: View {
     var body: some View {
         Text("ПРОВЕРЕННЫЙ")
-            .font(.system(size: 10, weight: .heavy))
+            .ymFont(10, weight: .heavy)
             .tracking(0.3)
             .foregroundStyle(YMColor.statusDone)
             .padding(.horizontal, 6).padding(.vertical, 2)
@@ -297,7 +297,7 @@ private struct ReviewsNotice: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 14.5))
+            .ymFont(14.5)
             .foregroundStyle(YMColor.muted)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 22).padding(.horizontal, 16)

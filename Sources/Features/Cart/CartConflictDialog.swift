@@ -64,11 +64,11 @@ struct CartConflictDialog: View {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(YMColor.accent.opacity(0.14))
                     .frame(width: 64, height: 64)
-                Text("🛒").font(.system(size: 30))
+                Text("🛒").ymFont(30)
             }
 
             Text("Начать новую корзину?")
-                .font(.system(size: 21, weight: .heavy))
+                .ymFont(21, weight: .heavy)
                 .foregroundStyle(YMColor.text)
                 .multilineTextAlignment(.center)
                 .padding(.top, YMSpace.lg)
@@ -79,7 +79,7 @@ struct CartConflictDialog: View {
                 + Text(". Заказ можно оформить только из одного заведения. Очистить корзину и добавить товар из ")
                 + Text(newName).foregroundColor(YMColor.text).bold()
                 + Text("?"))
-                .font(.system(size: 14))
+                .ymFont(14)
                 .foregroundStyle(YMColor.muted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

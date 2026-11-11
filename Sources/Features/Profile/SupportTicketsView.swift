@@ -528,7 +528,7 @@ struct SupportTicketView: View {
                         if vm.sending { ProgressView().tint(YMColor.onAccent) }
                         else {
                             Image(systemName: "paperplane.fill")
-                                .font(.system(size: 17, weight: .semibold)).foregroundStyle(YMColor.onAccent)
+                                .ymFont(17, weight: .semibold).foregroundStyle(YMColor.onAccent)
                         }
                     }
                     .frame(width: 40, height: 40)

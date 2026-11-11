@@ -116,7 +116,7 @@ private struct StoryCircle: View {
                         .clipShape(Circle())
                 }
                 Text(banner.title ?? "")
-                    .font(.system(size: 11, weight: .semibold))
+                    .ymFont(11, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
                     .lineLimit(1)
                     .frame(width: 66)
@@ -167,7 +167,7 @@ private struct StoriesPlayer: View {
                         img.resizable().scaledToFit()
                     case .failure:
                         Image(systemName: "photo")
-                            .font(.system(size: 40)).foregroundStyle(.white.opacity(0.35))
+                            .ymFont(40).foregroundStyle(.white.opacity(0.35))
                     default:
                         ProgressView().tint(.white)
                     }
@@ -199,12 +199,13 @@ private struct StoriesPlayer: View {
 
                 HStack(alignment: .top) {
                     if let t = current?.title, !t.isEmpty {
-                        Text(t).font(.system(size: 15, weight: .bold)).foregroundStyle(.white).lineLimit(2)
+                        Text(t).ymFont(15, weight: .bold).foregroundStyle(.white).lineLimit(2)
                     }
                     Spacer(minLength: 8)
                     Button { close() } label: {
                         Image(systemName: "xmark")
-                            .font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                            .accessibilityLabel("Закрыть")
+                            .ymFont(15, weight: .bold).foregroundStyle(.white)
                             .frame(width: 34, height: 34)
                             .background(Color.black.opacity(0.4), in: Circle())
                     }
@@ -219,7 +220,7 @@ private struct StoriesPlayer: View {
                         close(); openStory(url)
                     } label: {
                         Text("Подробнее")
-                            .font(.system(size: 15, weight: .heavy)).foregroundStyle(.black)
+                            .ymFont(15, weight: .heavy).foregroundStyle(.black)
                             .frame(maxWidth: .infinity).padding(.vertical, 15)
                             .background(.white, in: Capsule())
                     }

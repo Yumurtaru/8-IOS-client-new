@@ -221,6 +221,7 @@ struct HomeView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: []) {
+                    StaleDataBanner()
                     header
                     // Поиск на Главной — витрина (text=nil), тап через собственный onTap
                     // компонента уводит на вкладку «Поиск» (индекс 1).
@@ -258,7 +259,7 @@ struct HomeView: View {
                     // переоценивать список. Раскладка полная (как у рабочей строки), цвет —
                     // прозрачный, поэтому текста на экране не видно.
                     Text("город=\(session.cityId.map(String.init) ?? "нет") · раздел=\(vm.kind.rawValue) · пришло=\(vm.shops.count)\(vm.error.map { " · \($0)" } ?? "")")
-                        .font(.system(size: 11, weight: .semibold))
+                        .ymFont(11, weight: .semibold)
                         .foregroundStyle(.clear)
                         // Строка невидима глазом, но VoiceOver читал её вслух
                         // («город=1 · раздел=all · пришло=12», а при сбое — и
@@ -281,6 +282,7 @@ struct HomeView: View {
 
                     Color.clear.frame(height: 24)
                 }
+                .ymReadableWidth()
             }
             .background(YMColor.bg.ignoresSafeArea())
             .navigationBarHidden(true)
@@ -365,7 +367,7 @@ struct HomeView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Ваш город".uppercased())
-                    .font(.system(size: 11, weight: .semibold))
+                    .ymFont(11, weight: .semibold)
                     .tracking(1.2)
                     .foregroundStyle(YMColor.accent)
                 Button {
@@ -376,10 +378,10 @@ struct HomeView: View {
                         // Город ещё не выбран (первый запуск без сети) — раньше здесь
                         // стояла «Москва», хотя заведения были не московские.
                         Text(session.cityName ?? "Выберите город")
-                            .font(.system(size: 19, weight: .bold))
+                            .ymFont(19, weight: .bold)
                             .foregroundStyle(YMColor.text)
                         Text("▾")
-                            .font(.system(size: 12))
+                            .ymFont(12)
                             .foregroundStyle(YMColor.muted)
                             .offset(y: 1)
                     }
@@ -400,7 +402,8 @@ struct HomeView: View {
             coord.profileOpen = true
         } label: {
             Image(systemName: "person.fill")
-                .font(.system(size: 17, weight: .semibold))
+                .accessibilityLabel("Профиль")
+                .ymFont(17, weight: .semibold)
                 .foregroundStyle(YMColor.accent)
                 .frame(width: 42, height: 42)
                 .background(YMColor.surface2, in: Circle())
@@ -604,7 +607,7 @@ struct HomeView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 34, weight: .semibold))
+                .ymFont(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)
@@ -866,7 +869,7 @@ private struct CityPickerSheet: View {
                 Spacer()
                 if selected {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .bold))
+                        .ymFont(14, weight: .bold)
                         .foregroundStyle(YMColor.accent)
                 }
             }

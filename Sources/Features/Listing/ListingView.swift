@@ -306,6 +306,7 @@ struct ListingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            StaleDataBanner()
             header
             if vm.showCategoryRow && !vm.categories.isEmpty {
                 categoryRow
@@ -377,19 +378,20 @@ struct ListingView: View {
         HStack(alignment: .center, spacing: 12) {
             Button { Haptics.light(); dismiss() } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .semibold))
+                    .accessibilityLabel("Назад")
+                    .ymFont(17, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
             }
             .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 2) {
                 Text(vm.title)
-                    .font(.system(size: 20, weight: .heavy))
+                    .ymFont(20, weight: .heavy)
                     .foregroundStyle(YMColor.text)
                     .lineLimit(1)
                 if let sub = subtitle {
                     Text(sub)
-                        .font(.system(size: 12))
+                        .ymFont(12)
                         .foregroundStyle(YMColor.muted)
                         .lineLimit(1)
                 }
@@ -448,9 +450,9 @@ struct ListingView: View {
                 Button { Haptics.selection(); showSort = true } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.up.arrow.down")
-                            .font(.system(size: 12, weight: .bold))
+                            .ymFont(12, weight: .bold)
                         Text(vm.sort.rawValue)
-                            .font(.system(size: 13, weight: .bold))
+                            .ymFont(13, weight: .bold)
                     }
                     .foregroundStyle(YMColor.text)
                     .padding(.horizontal, 14).padding(.vertical, 8)
@@ -502,7 +504,7 @@ struct ListingView: View {
         } else {
             // shop: 2-в-ряд сетка товаров.
             ScrollView {
-                let cols = Array(repeating: GridItem(.flexible(), spacing: 12), count: 2)
+                let cols = [GridItem(.adaptive(minimum: 130), spacing: 12)]
                 LazyVGrid(columns: cols, spacing: 12) {
                     ForEach(vm.filteredProducts) { p in
                         ProductGridCard(product: p) {
@@ -536,7 +538,7 @@ struct ListingView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 34, weight: .semibold))
+                .ymFont(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)
@@ -597,7 +599,7 @@ struct OrgListRow: View {
                     // приготовления приходит в avg_cook_time — бейдж «N мин».
                     if let t = cookTimeText {
                         Text(t)
-                            .font(.system(size: 10, weight: .bold))
+                            .ymFont(10, weight: .bold)
                             .foregroundStyle(.white)
                             .padding(.horizontal, 7).padding(.vertical, 3)
                             .background(Color.black.opacity(0.55), in: Capsule())
@@ -607,7 +609,7 @@ struct OrgListRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(shop.name ?? "—")
-                            .font(.system(size: 15.5, weight: .heavy))
+                            .ymFont(15.5, weight: .heavy)
                             .foregroundStyle(YMColor.text)
                             .lineLimit(1)
                         Spacer(minLength: 6)
@@ -616,13 +618,13 @@ struct OrgListRow: View {
                                 Text("★").foregroundStyle(YMColor.accent)
                                 Text(String(format: "%.1f", r)).foregroundStyle(YMColor.text)
                             }
-                            .font(.system(size: 13, weight: .bold))
+                            .ymFont(13, weight: .bold)
                         }
                     }
                     // Паритет с Android: category сервер не шлёт — тип заведения словами.
                     if let cat = shop.category ?? orgTypeLabel(shop.type), !cat.isEmpty {
                         Text(cat)
-                            .font(.system(size: 12.5))
+                            .ymFont(12.5)
                             .foregroundStyle(YMColor.muted)
                             .lineLimit(1)
                     }
@@ -633,18 +635,18 @@ struct OrgListRow: View {
                     }
                     HStack(spacing: 8) {
                         Text(isOpen ? "Открыто" : "Закрыто")
-                            .font(.system(size: 11.5, weight: .bold))
+                            .ymFont(11.5, weight: .bold)
                             .foregroundStyle(isOpen ? YMColor.statusDone : YMColor.statusCancel)
                         // Способы получения — готовой строкой с сервера.
                         if let fulfillment = shop.fulfillmentLabel, !fulfillment.isEmpty {
                             Text("· \(fulfillment)")
-                                .font(.system(size: 11.5))
+                                .ymFont(11.5)
                                 .foregroundStyle(YMColor.muted)
                         }
                         // Паритет с Android: адрес заведения в той же строке.
                         if let addr = shop.address, !addr.isEmpty {
                             Text("· \(addr)")
-                                .font(.system(size: 11.5))
+                                .ymFont(11.5)
                                 .foregroundStyle(YMColor.muted)
                                 .lineLimit(1)
                         }
@@ -685,13 +687,13 @@ struct ProductGridCard: View {
                 }
                 VStack(alignment: .leading, spacing: 3) {
                     Text(product.name ?? "—")
-                        .font(.system(size: 14, weight: .bold))
+                        .ymFont(14, weight: .bold)
                         .foregroundStyle(YMColor.text)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let unit = product.unit, !unit.isEmpty {
                         Text(unit)
-                            .font(.system(size: 11.5))
+                            .ymFont(11.5)
                             .foregroundStyle(YMColor.muted)
                             .lineLimit(1)
                     }
@@ -699,10 +701,12 @@ struct ProductGridCard: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(Money.format(Money.dec(product.price)))
-                            .font(.system(size: 15, weight: .heavy))
+                            .ymFont(15, weight: .heavy)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(YMColor.text)
                         if let w = product.wholesaleLabel {
-                            Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
+                            Text(w).ymFont(11).foregroundStyle(YMColor.muted).lineLimit(1)
                         }
                     }
                     Spacer()
@@ -711,7 +715,8 @@ struct ProductGridCard: View {
                         onAdd()
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 15, weight: .heavy))
+                            .accessibilityLabel("Добавить в корзину")
+                            .ymFont(15, weight: .heavy)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 30, height: 30)
                             .background(YMColor.accent, in: Circle())
@@ -726,6 +731,22 @@ struct ProductGridCard: View {
                 .strokeBorder(YMColor.hairline, lineWidth: 1))
         }
         .buttonStyle(CardPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(a11yLabel)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Добавить в корзину") { if product.stopped != true { onAdd() } }
+    }
+
+    /// Название, цена и оптовая цена одной фразой для VoiceOver.
+    private var a11yLabel: String {
+        var parts: [String] = [product.name ?? "Товар"]
+        if product.stopped == true {
+            parts.append("нет в наличии")
+        } else {
+            parts.append(Money.format(Money.dec(product.price)))
+            if let w = product.wholesaleLabel, !w.isEmpty { parts.append("оптовая цена " + w) }
+        }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -750,7 +771,7 @@ struct SortSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             Text("Сортировка")
-                .font(.system(size: 18, weight: .heavy))
+                .ymFont(18, weight: .heavy)
                 .foregroundStyle(YMColor.text)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 20)
@@ -764,7 +785,7 @@ struct SortSheet: View {
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: opt.icon)
-                                .font(.system(size: 15))
+                                .ymFont(15)
                                 .foregroundStyle(draft == opt ? YMColor.accent : YMColor.muted)
                                 .frame(width: 24)
                             Text(opt.rawValue)
@@ -773,7 +794,7 @@ struct SortSheet: View {
                             Spacer()
                             if draft == opt {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 15, weight: .heavy))
+                                    .ymFont(15, weight: .heavy)
                                     .foregroundStyle(YMColor.accent)
                             }
                         }

@@ -264,7 +264,7 @@ struct AdsBoardView: View {
     private enum AfterAuth { case form, my }
     @State private var afterAuth: AfterAuth?
 
-    private let columns = [GridItem(.flexible(), spacing: YMSpace.md), GridItem(.flexible(), spacing: YMSpace.md)]
+    private let columns = [GridItem(.adaptive(minimum: 130), spacing: YMSpace.md)]
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -506,6 +506,7 @@ struct AdsBoardView: View {
             if !vm.query.isEmpty {
                 Button { vm.query = ""; vm.searchChanged() } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(YMColor.muted)
+                        .accessibilityLabel("Очистить поиск")
                 }
             }
         }
@@ -655,7 +656,7 @@ struct AdCatChip: View {
                     ZStack {
                         Circle().fill(selected ? Color.white.opacity(0.22) : YMColor.accent.opacity(0.12))
                         Image(systemName: symbol)
-                            .font(.system(size: 13, weight: .semibold))
+                            .ymFont(13, weight: .semibold)
                             .foregroundStyle(selected ? Color.white : YMColor.accent)
                     }
                     .frame(width: 28, height: 28)

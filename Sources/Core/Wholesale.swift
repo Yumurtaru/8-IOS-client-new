@@ -177,43 +177,59 @@ enum Wholesale {
 
     // MARK: Тексты (дословно, как на Android)
 
-    static func unitName(_ unit: String?) -> String {
+    /// Единица товара; нет/пусто → nil. П-70: `unit = null` — «единица не указана», а не «шт»
+    /// (товар может быть и дробным) — метка без единицы, как на сайте: «от 25 — 37 ₽».
+    static func unitName(_ unit: String?) -> String? {
         let u = (unit ?? "").trimmingCharacters(in: .whitespaces)
-        return u.isEmpty ? "шт" : u
+        return u.isEmpty ? nil : u
     }
 
-    /// «от 25 кг — 37 ₽/кг (−18%)».
+    /// «25 кг» или просто «25», если единица не указана.
+    static func qtyWithUnit(_ q: Double, _ unit: String?) -> String {
+        guard let u = unitName(unit) else { return fmtQty(q) }
+        return "\(fmtQty(q)) \(u)"
+    }
+
+    /// «/кг» к цене или пусто, если единица не указана.
+    static func perUnit(_ unit: String?) -> String {
+        guard let u = unitName(unit) else { return "" }
+        return "/\(u)"
+    }
+
+    /// «от 25 кг — 37 ₽/кг (−18%)»; без единицы — «от 25 — 37 ₽ (−18%)».
     static func tierRow(_ s: Step, retail: Decimal, unit: String?) -> String {
-        let u = unitName(unit)
-        var t = "от \(fmtQty(s.minQty)) \(u) — \(Money.format(s.price))/\(u)"
+        let price = Money.format(s.price)
+        var t = "от \(qtyWithUnit(s.minQty, unit)) — \(price)\(perUnit(unit))"
         let pct = percent(retail: retail, tierPrice: s.price)
         if pct > 0 { t += " (\u{2212}\(pct)%)" }
         return t
     }
 
-    /// Метка в списках: «от 25 кг — 37 ₽» (первая ступень).
+    /// Метка в списках: «от 25 кг — 37 ₽», без единицы — «от 25 — 37 ₽» (первая ступень).
     static func listLabel(_ tiers: [PriceTier]?, retail: Decimal, unit: String?) -> String? {
         guard let s = steps(tiers, retail: retail).first else { return nil }
-        return "от \(fmtQty(s.minQty)) \(unitName(unit)) — \(Money.format(s.price))"
+        return "от \(qtyWithUnit(s.minQty, unit)) — \(Money.format(s.price))"
     }
 
     static func savingText(_ saving: Decimal) -> String { "Экономия \(Money.format(saving))" }
 
-    /// «Ещё 3 кг до оптовой цены».
+    /// «Ещё 3 кг до оптовой цены» (без единицы — «Ещё 3 до оптовой цены»).
     static func moreText(_ s: Step, qtyTotal: Double, unit: String?) -> String {
         let left = max(0, ((s.minQty - qtyTotal) * 1000).rounded() / 1000)
-        return "Ещё \(fmtQty(left)) \(unitName(unit)) до оптовой цены"
+        return "Ещё \(qtyWithUnit(left, unit)) до оптовой цены"
     }
 
-    /// «Добавьте ещё 1 кг — будет по 37 ₽/кг, экономия 200 ₽».
+    /// «Добавьте ещё 1 кг — будет по 37 ₽/кг, экономия 200 ₽» (без единицы — «…ещё 1 — будет по 37 ₽, …»).
     static func hintText(add: Double, price: Decimal, saving: Decimal, unit: String?) -> String {
-        let u = unitName(unit)
-        return "Добавьте ещё \(fmtQty(add)) \(u) — будет по \(Money.format(price))/\(u), экономия \(Money.format(saving))"
+        let q = qtyWithUnit(add, unit)
+        let p = Money.format(price)
+        let sv = Money.format(saving)
+        return "Добавьте ещё \(q) — будет по \(p)\(perUnit(unit)), экономия \(sv)"
     }
 
-    /// «Добавить 1 кг».
+    /// «Добавить 1 кг» (без единицы — «Добавить 1»).
     static func addButtonText(add: Double, unit: String?) -> String {
-        "Добавить \(fmtQty(add)) \(unitName(unit))"
+        "Добавить \(qtyWithUnit(add, unit))"
     }
 
     static let optLabel = "оптовая цена"
@@ -228,10 +244,9 @@ extension Product {
 }
 
 extension CatalogItem {
-    /// /api/v1/catalog не отдаёт unit (снимок контракта): без единицы метку не
-    /// показываем — «шт» по умолчанию у весового товара ввело бы в заблуждение.
+    /// П-69: /api/v1/catalog и /recommendations отдают unit (строка или null) и price_tiers.
+    /// П-70: без unit — метка без единицы («от 25 — 37 ₽»), как на сайте и Android.
     var wholesaleLabel: String? {
-        guard let u = unit?.trimmingCharacters(in: .whitespacesAndNewlines), !u.isEmpty else { return nil }
-        return Wholesale.listLabel(priceTiers, retail: Money.dec(price), unit: u)
+        Wholesale.listLabel(priceTiers, retail: Money.dec(price), unit: unit)
     }
 }

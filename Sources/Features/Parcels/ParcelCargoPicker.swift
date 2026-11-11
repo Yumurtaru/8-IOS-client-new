@@ -258,7 +258,7 @@ struct ParcelCargoPicker: View {
             HStack(alignment: .center, spacing: YMSpace.md) {
                 content()
                 Spacer(minLength: 6)
-                Text(priceText).font(.system(size: 18, weight: .heavy)).foregroundStyle(YMColor.text).lineLimit(1)
+                Text(priceText).ymFont(18, weight: .heavy).foregroundStyle(YMColor.text).lineLimit(1)
             }
             .padding(.horizontal, 12).padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)

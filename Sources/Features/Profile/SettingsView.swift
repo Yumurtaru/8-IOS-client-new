@@ -27,6 +27,8 @@ struct SettingsView: View {
     /// всплывает при первом запуске, и отказ там раньше был навсегда: в
     /// приложении не было ни признака, ни пути включить статусы заказов.
     @State private var notifStatus: UNAuthorizationStatus?
+    /// Подтверждение оплаты Face ID / Touch ID / код-паролем (Core/PayConfirm).
+    @State private var confirmPay = PayConfirm.isEnabled
 
     private var appVersion: String {
         let v = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -39,6 +41,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: YMSpace.lg) {
                 appearanceSection
                 notificationsSection
+                paySection
                 citySection
                 aboutSection
             }
@@ -56,6 +59,23 @@ struct SettingsView: View {
         }
     }
 
+    // ── Подтверждение оплаты кошельком и баллами ──
+    @ViewBuilder
+    private var paySection: some View {
+        if PayConfirm.canConfirm {
+            VStack(alignment: .leading, spacing: 10) {
+                sectionTitle("Оплата")
+                Toggle("Подтверждать оплату Face ID", isOn: $confirmPay)
+                    .onChange(of: confirmPay) { on in PayConfirm.isEnabled = on }
+                Text("Перед списанием из кошелька или баллами телефон попросит Face ID, Touch ID или код-пароль.")
+                    .font(YMFont.caption)
+                    .foregroundStyle(YMColor.muted)
+            }
+            .padding(14)
+            .settingsCard()
+        }
+    }
+
     // ── Уведомления (разрешение iOS) ──
     @ViewBuilder
     private var notificationsSection: some View {
@@ -67,11 +87,11 @@ struct SettingsView: View {
                     .foregroundStyle(st == .denied ? YMColor.statusCancel : YMColor.muted)
                 if st == .denied {
                     Button("Открыть настройки iPhone") { openSystemSettings() }
-                        .font(.system(size: 14.5, weight: .semibold))
+                        .ymFont(14.5, weight: .semibold)
                         .foregroundStyle(YMColor.accent)
                 } else if st == .notDetermined {
                     Button("Включить уведомления") { Push.shared.requestAuthorization() }
-                        .font(.system(size: 14.5, weight: .semibold))
+                        .ymFont(14.5, weight: .semibold)
                         .foregroundStyle(YMColor.accent)
                 }
             }
@@ -124,7 +144,7 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 Text("📍")
                 Text(session.cityName?.isEmpty == false ? session.cityName! : "Не выбран")
-                    .font(.system(size: 15, weight: .semibold))
+                    .ymFont(15, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                 Spacer()
             }
@@ -151,10 +171,10 @@ struct SettingsView: View {
             rowDivider
             HStack {
                 Image(systemName: "info.circle")
-                    .font(.system(size: 15)).foregroundStyle(YMColor.muted).frame(width: 26)
-                Text("Версия").font(.system(size: 14.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                    .ymFont(15).foregroundStyle(YMColor.muted).frame(width: 26)
+                Text("Версия").ymFont(14.5, weight: .semibold).foregroundStyle(YMColor.text)
                 Spacer()
-                Text(appVersion).font(.system(size: 13.5)).foregroundStyle(YMColor.muted)
+                Text(appVersion).ymFont(13.5).foregroundStyle(YMColor.muted)
             }
             .padding(.horizontal, 16).padding(.vertical, 13)
         }
@@ -165,11 +185,11 @@ struct SettingsView: View {
         Link(destination: URL(string: url)!) {
             HStack {
                 Image(systemName: icon)
-                    .font(.system(size: 15)).foregroundStyle(YMColor.accent).frame(width: 26)
-                Text(label).font(.system(size: 14.5, weight: .semibold)).foregroundStyle(YMColor.text)
+                    .ymFont(15).foregroundStyle(YMColor.accent).frame(width: 26)
+                Text(label).ymFont(14.5, weight: .semibold).foregroundStyle(YMColor.text)
                 Spacer()
                 Image(systemName: "arrow.up.right")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(YMColor.muted)
+                    .ymFont(12, weight: .semibold).foregroundStyle(YMColor.muted)
             }
             .padding(.horizontal, 16).padding(.vertical, 13)
             .contentShape(Rectangle())
@@ -181,7 +201,7 @@ struct SettingsView: View {
     }
 
     private func sectionTitle(_ t: String) -> some View {
-        Text(t).font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.text)
+        Text(t).ymFont(13, weight: .heavy).foregroundStyle(YMColor.text)
     }
 }
 

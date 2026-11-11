@@ -86,7 +86,7 @@ struct AdCategoryFieldRow: View {
         Button(action: action) {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: root.map { adCategorySymbol($0.icon, $0.name ?? "") } ?? "square.grid.2x2")
-                    .font(.system(size: 18, weight: .semibold))
+                    .ymFont(18, weight: .semibold)
                     .foregroundStyle(tint)
                     .frame(width: 40, height: 40)
                     .background(tint.opacity(0.14), in: Circle())
@@ -105,7 +105,7 @@ struct AdCategoryFieldRow: View {
                 Spacer(minLength: 0)
                 if enabled {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .ymFont(13, weight: .semibold)
                         .foregroundStyle(YMColor.muted)
                 }
             }
@@ -192,7 +192,7 @@ struct AdCategoryPicker: View {
         } label: {
             VStack(alignment: .leading, spacing: YMSpace.sm) {
                 Image(systemName: adCategorySymbol(root.icon, root.name ?? ""))
-                    .font(.system(size: 22, weight: .semibold))
+                    .ymFont(22, weight: .semibold)
                     .foregroundStyle(tint)
                     .frame(width: 48, height: 48)
                     .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -280,7 +280,7 @@ struct AdCategoryPicker: View {
         if list.isEmpty {
             VStack(spacing: YMSpace.sm) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 36, weight: .regular))
+                    .ymFont(36, weight: .regular)
                     .foregroundStyle(YMColor.muted)
                 Text("Ничего не нашлось").font(YMFont.headline).foregroundStyle(YMColor.text)
                 Text("Попробуйте другое слово или выберите раздел из списка.")
@@ -330,7 +330,7 @@ struct AdCategoryPicker: View {
         Button(action: action) {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .semibold))
+                    .ymFont(16, weight: .semibold)
                     .foregroundStyle(tint)
                     .frame(width: 36, height: 36)
                     .background(tint.opacity(0.14), in: Circle())
@@ -347,7 +347,7 @@ struct AdCategoryPicker: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: selected ? "checkmark" : "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
+                    .ymFont(13, weight: .semibold)
                     .foregroundStyle(selected ? YMColor.accent : YMColor.muted)
             }
             .padding(.horizontal, YMSpace.md)

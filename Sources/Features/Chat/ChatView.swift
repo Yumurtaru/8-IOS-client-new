@@ -217,7 +217,7 @@ private struct ChatListRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Text(dialog.shopName ?? "Заведение")
-                        .font(.system(size: 15.5, weight: .bold)).foregroundStyle(YMColor.text)
+                        .ymFont(15.5, weight: .bold).foregroundStyle(YMColor.text)
                         .lineLimit(1)
                     Spacer(minLength: 6)
                     // Паритет с Android: номер заказа — два заказа в одном заведении
@@ -238,7 +238,7 @@ private struct ChatListRow: View {
                     Spacer(minLength: 6)
                     if unread > 0 {
                         Text("\(unread)")
-                            .font(.system(size: 11, weight: .heavy)).foregroundStyle(YMColor.onAccent)
+                            .ymFont(11, weight: .heavy).foregroundStyle(YMColor.onAccent)
                             .frame(minWidth: 20, minHeight: 20).padding(.horizontal, 5)
                             .background(YMColor.accent, in: Capsule())
                     }
@@ -457,12 +457,12 @@ private struct ChatThreadScreen: View {
                       size: 34)
             VStack(alignment: .leading, spacing: 1) {
                 Text(vm.order?.shopName ?? "Чат")
-                    .font(.system(size: 15.5, weight: .bold)).foregroundStyle(YMColor.text)
+                    .ymFont(15.5, weight: .bold).foregroundStyle(YMColor.text)
                     .lineLimit(1)
                 HStack(spacing: 4) {
-                    Text("●").font(.system(size: 9)).foregroundStyle(YMColor.statusDone)
+                    Text("●").ymFont(9).foregroundStyle(YMColor.statusDone)
                     Text("онлайн · обычно отвечает за 2 мин")
-                        .font(.system(size: 11)).foregroundStyle(YMColor.muted)
+                        .ymFont(11).foregroundStyle(YMColor.muted)
                 }
             }
         }
@@ -486,10 +486,10 @@ private struct ChatThreadScreen: View {
                 // раньше здесь мог показаться код латиницей (как в списке и детали — уже нет).
                 // А107: сначала подпись сервера (знает тип организации и самовывоз), свой словарь — запасной.
                 Text("Заказ №\(vm.order?.dailyNumber ?? orderId) · \(chatStatusText)")
-                    .font(.system(size: 13, weight: .bold)).foregroundStyle(YMColor.text)
+                    .ymFont(13, weight: .bold).foregroundStyle(YMColor.text)
                 if let o = vm.order {
                     Text("\(o.items?.count ?? 0) поз. · \(Money.format(Money.parse(o.total)))")
-                        .font(.system(size: 11.5)).foregroundStyle(YMColor.muted)
+                        .ymFont(11.5).foregroundStyle(YMColor.muted)
                 }
             }
             Spacer()
@@ -546,7 +546,7 @@ private struct ChatThreadScreen: View {
         HStack(spacing: YMSpace.sm) {
             PhotosPicker(selection: $photoItems, maxSelectionCount: 1, matching: .images) {
                 Image(systemName: "plus")
-                    .font(.system(size: 18, weight: .semibold)).foregroundStyle(YMColor.muted)
+                    .ymFont(18, weight: .semibold).foregroundStyle(YMColor.muted)
                     .frame(width: 40, height: 40)
                     .background(YMColor.surface2, in: Circle())
             }
@@ -570,7 +570,7 @@ private struct ChatThreadScreen: View {
                 Task { if !(await vm.send(text)) { draft = draft.isEmpty ? text : text + "\n" + draft } }
             } label: {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 18, weight: .heavy)).foregroundStyle(YMColor.onAccent)
+                    .ymFont(18, weight: .heavy).foregroundStyle(YMColor.onAccent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent, in: Circle())
                     .shadow(color: YMPalette.gold.opacity(0.5), radius: 12, y: 4)
@@ -618,7 +618,7 @@ private struct ChatThreadScreen: View {
 
     private func dateChip(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold)).foregroundStyle(YMColor.muted)
+            .ymFont(11, weight: .semibold).foregroundStyle(YMColor.muted)
             .padding(.horizontal, 12).padding(.vertical, 5)
             .background(YMColor.surface2, in: Capsule())
             .frame(maxWidth: .infinity)
@@ -755,15 +755,15 @@ private struct ChatBubble: View {
                 HStack(spacing: 4) {
                     if mine, message.localState == "failed" {
                         Image(systemName: "exclamationmark.circle.fill")
-                            .font(.system(size: 10)).foregroundStyle(YMColor.statusCancel)
+                            .ymFont(10).foregroundStyle(YMColor.statusCancel)
                     }
                     Text(DateFmt.time(message.createdAt))
-                        .font(.system(size: 10.5)).foregroundStyle(YMColor.muted)
+                        .ymFont(10.5).foregroundStyle(YMColor.muted)
                     if mine, message.localState == "sending" {
                         Image(systemName: "clock").font(.system(size: 9)).foregroundStyle(YMColor.muted)
                     } else if mine, message.localState == nil {
                         Text(message.read == true ? "✓✓" : "✓")
-                            .font(.system(size: 10.5, weight: .bold))
+                            .ymFont(10.5, weight: .bold)
                             .foregroundStyle(message.read == true ? YMColor.accent : YMColor.muted)
                     }
                 }

@@ -250,6 +250,9 @@ final class OrdersViewModel: ObservableObject {
             let first: Page<Order> = try await API.shared.page("api/v1/orders")
             guard myGen == gen else { loading = false; return }
             let fresh = first.items.filter { $0.isAppointment != true }
+            // Spotlight: заказы в поиске iPhone; просьба оценить: сколько заказов выполнено.
+            SpotlightIndex.indexOrders(fresh)
+            ReviewPrompt.noteDone(fresh.filter { OrderFlow.isDone($0.status) }.map { $0.id })
             if page > 1 {
                 // Уже листали дальше первой страницы (возврат в таб, pull-to-refresh):
                 // обновляем первую, а догруженное ниже не выбрасываем.
@@ -259,6 +262,10 @@ final class OrdersViewModel: ObservableObject {
                 orders = fresh
                 hasMore = first.hasMore
             }
+            // Виджеты рабочего стола и Live Activity берут те же данные (без расширения — пустой ход).
+            OrderWidgetBridge.update(orders: orders)
+            OrderLiveActivity.refreshAll()
+            Task { await OrderWidgetBridge.refreshBonuses() }
         } catch is CancellationError {
             // Обновление жестом отменяется самим SwiftUI, когда список
             // перерисовывается. Раньше это показывало экран ошибки вместо
@@ -274,6 +281,8 @@ final class OrdersViewModel: ObservableObject {
     func reset() {
         gen += 1
         orders = []; page = 1; hasMore = false; moreFailed = false; loadingMore = false
+        // Выход / вход другого человека: виджеты и экран блокировки прежнего аккаунта чистим.
+        OrderWidgetBridge.clear()
     }
 
     /// Следующая страница. Зовёт подвал «Истории», когда он виден.
@@ -323,6 +332,7 @@ struct OrdersView: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: YMSpace.md) {
+                    StaleDataBanner()
                     // Табы Активные / История
                     YMSegmented(options: [Tab.active, Tab.history], selection: $tab) {
                         $0 == .active ? "Активные" : "История"
@@ -332,6 +342,7 @@ struct OrdersView: View {
 
                     content
                 }
+                .ymReadableWidth()
                 .padding(.bottom, YMSpace.xxxl)
             }
             .background(YMColor.bg.ignoresSafeArea())

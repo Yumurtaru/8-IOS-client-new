@@ -42,7 +42,7 @@ struct AboutView: View {
                     ForEach(features) { f in
                         HStack(alignment: .top, spacing: YMSpace.md) {
                             Image(systemName: f.icon)
-                                .font(.system(size: 18, weight: .semibold))
+                                .ymFont(18, weight: .semibold)
                                 .foregroundStyle(YMColor.accent)
                                 .frame(width: 40, height: 40)
                                 .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
@@ -78,10 +78,10 @@ struct AboutView: View {
                     .fill(RadialGradient(colors: [YMPalette.gold.opacity(0.28), .clear], center: .topTrailing, startRadius: 8, endRadius: 260))
                 VStack(alignment: .leading, spacing: 6) {
                     Text("YUMURTA")
-                        .font(.system(size: 26, weight: .black)).tracking(2)
+                        .ymFont(26, weight: .black).tracking(2)
                         .foregroundStyle(Color(hex: "#F5EEDE"))
                     Text("Самый большой маркетплейс организаций вашего города")
-                        .font(.system(size: 15, weight: .semibold))
+                        .ymFont(15, weight: .semibold)
                         .foregroundStyle(YMPalette.gold)
                         .fixedSize(horizontal: false, vertical: true)
                 }

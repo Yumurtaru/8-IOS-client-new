@@ -1287,7 +1287,7 @@ struct Slot: Codable, Identifiable {
 }
 
 // ---- Подарочные карты ----
-struct GiftCard: Codable { let code: String?; @LenientDouble var balance: Double?; let status: String?; let expiresAt: String? }
+struct GiftCard: Codable { let code: String?; @LenientDecimal var balance: Decimal?; let status: String?; let expiresAt: String? }
 
 // ---- Заявки / отклики ----
 struct Application: Codable, Identifiable { let id: Int; let status: String?; let title: String?; let shop: String?; let createdAt: String? }
@@ -1414,7 +1414,7 @@ struct LoyaltyLevel: Decodable, Identifiable {
 struct LoyaltyInfo: Decodable {
     let level: LoyaltyLevel?; let next: LoyaltyLevel?
     @LenientInt var doneOrders: Int?; @LenientInt var toNext: Int?
-    @LenientDouble var bonusBalance: Double?
+    @LenientDecimal var bonusBalance: Decimal?
     let levels: [LoyaltyLevel]?
 }
 struct ReorderData: Decodable {

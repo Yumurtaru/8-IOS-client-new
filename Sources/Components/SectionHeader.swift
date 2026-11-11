@@ -14,7 +14,7 @@ struct SectionHeader: View {
             Spacer()
             if let actionTitle, let action {
                 Button(actionTitle, action: action)
-                    .font(.system(size: 13, weight: .semibold))
+                    .ymFont(13, weight: .semibold)
                     .foregroundStyle(YMColor.accent)
             }
         }

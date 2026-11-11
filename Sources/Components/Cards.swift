@@ -88,7 +88,7 @@ struct OrgCard: View {
                     .overlay(alignment: .bottomLeading) {
                         if (shop.isPromoted ?? 0) == 1 {
                             Text("Реклама")
-                                .font(.system(size: 10, weight: .bold))
+                                .ymFont(10, weight: .bold)
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 7).padding(.vertical, 3)
                                 .background(Color.black.opacity(0.55), in: Capsule())
@@ -100,7 +100,7 @@ struct OrgCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(shop.name ?? "—")
-                            .font(.system(size: 17, weight: .heavy))
+                            .ymFont(17, weight: .heavy)
                             .foregroundStyle(YMColor.text)
                             .lineLimit(1)
                         Spacer(minLength: 8)
@@ -109,25 +109,25 @@ struct OrgCard: View {
                                 Text("★").foregroundStyle(YMColor.accent)
                                 Text(String(format: "%.1f", r)).foregroundStyle(YMColor.text)
                             }
-                            .font(.system(size: 13.5, weight: .bold))
+                            .ymFont(13.5, weight: .bold)
                         }
                     }
                     if let cuisine = subtitleText {
                         Text(cuisine)
-                            .font(.system(size: 13))
+                            .ymFont(13)
                             .foregroundStyle(YMColor.muted)
                             .lineLimit(1)
                     }
                     HStack(spacing: 8) {
                         if let price = priceLine {
                             Text(price)
-                                .font(.system(size: 12.5, weight: .bold))
+                                .ymFont(12.5, weight: .bold)
                                 .foregroundStyle(YMColor.accent)
                             Circle().fill(YMColor.muted).frame(width: 3, height: 3)
                         }
                         if let fulfillment = fulfillmentText {
                             Text(fulfillment)
-                                .font(.system(size: 12.5))
+                                .ymFont(12.5)
                                 .foregroundStyle(YMColor.muted)
                         }
                     }
@@ -142,7 +142,19 @@ struct OrgCard: View {
         .buttonStyle(CardPressStyle())
         .ymCard(radius: YMRadius.card)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(shop.name ?? "Организация"), \(isOpen ? "открыто" : "закрыто")")
+        .accessibilityLabel(a11yLabel)
+        .accessibilityHint("Открыть заведение")
+        .accessibilityAction(named: isFav ? "Убрать из избранного" : "Добавить в избранное") { isFav.toggle() }
+    }
+
+    /// Голосовая подпись карточки: название, статус, рейтинг, время, способ получения.
+    private var a11yLabel: String {
+        var parts: [String] = [shop.name ?? "Организация", isOpen ? "открыто" : "закрыто"]
+        if let r = shop.rating, r > 0 { parts.append("рейтинг " + String(format: "%.1f", r)) }
+        if let t = timeText { parts.append(t) }
+        if let f = fulfillmentText { parts.append(f) }
+        if isFav { parts.append("в избранном") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -181,24 +193,24 @@ struct PopularCard: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 14, weight: .bold))
+                        .ymFont(14, weight: .bold)
                         .foregroundStyle(YMColor.text)
                         .lineLimit(1)
                     if let tag, !tag.isEmpty {
                         Text(tag)
-                            .font(.system(size: 12))
+                            .ymFont(12)
                             .foregroundStyle(YMColor.muted)
                             .lineLimit(1)
                     }
                     if let priceText, !priceText.isEmpty {
                         Text(priceText)
-                            .font(.system(size: 13, weight: .bold))
+                            .ymFont(13, weight: .bold)
                             .foregroundStyle(YMColor.accent)
                             .lineLimit(1)
                     }
                     if let wholesaleLabel, !wholesaleLabel.isEmpty {
                         Text(wholesaleLabel)
-                            .font(.system(size: 11))
+                            .ymFont(11)
                             .foregroundStyle(YMColor.muted)
                             .lineLimit(1)
                     }
@@ -209,7 +221,19 @@ struct PopularCard: View {
         }
         .buttonStyle(CardPressStyle())
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(title)
+        .accessibilityLabel(a11yLabel)
+        .accessibilityAction(named: isFav ? "Убрать из избранного" : "Добавить в избранное") { isFav.toggle() }
+    }
+
+    /// Название, цена, оптовая цена, рейтинг — одной фразой для VoiceOver.
+    private var a11yLabel: String {
+        var parts: [String] = [title]
+        if let tag, !tag.isEmpty { parts.append(tag) }
+        if let priceText, !priceText.isEmpty { parts.append("цена " + priceText) }
+        if let wholesaleLabel, !wholesaleLabel.isEmpty { parts.append("оптовая цена " + wholesaleLabel) }
+        if let r = rating, r > 0 { parts.append("рейтинг " + String(format: "%.1f", r)) }
+        if isFav { parts.append("в избранном") }
+        return parts.joined(separator: ", ")
     }
 }
 

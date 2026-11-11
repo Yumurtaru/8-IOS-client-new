@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Короткое сообщение внизу экрана (2,5 с) — для отказов фоновых действий без
 /// своей формы: например ♥ «в избранное». Раньше сердечко молча возвращалось
@@ -19,7 +20,9 @@ private struct ErrorToastModifier: ViewModifier {
                     .padding(.horizontal, YMSpace.lg)
                     .padding(.bottom, bottom)
                     // Свой таймер у каждого текста: новый не гаснет раньше срока.
+                    .accessibilityElement(children: .combine)
                     .task(id: t) {
+                        UIAccessibility.post(notification: .announcement, argument: t)
                         try? await Task.sleep(nanoseconds: 2_500_000_000)
                         if !Task.isCancelled { text = nil }
                     }

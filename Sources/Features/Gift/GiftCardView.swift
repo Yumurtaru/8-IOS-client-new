@@ -56,7 +56,7 @@ struct GiftCardView: View {
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: YMSpace.sm) {
             Image(systemName: "giftcard.fill")
-                .font(.system(size: 32, weight: .semibold))
+                .ymFont(32, weight: .semibold)
                 .foregroundStyle(YMColor.onAccent)
             Text("Подарочная карта")
                 .font(YMFont.title3).foregroundStyle(YMColor.onAccent)
@@ -132,7 +132,7 @@ struct GiftCardView: View {
         let active = isActive(c.status)
         return VStack(alignment: .leading, spacing: YMSpace.md) {
             HStack(spacing: YMSpace.sm) {
-                Text("✅").font(.system(size: 20))
+                Text("✅").ymFont(20)
                 Text("Карта найдена").font(YMFont.headline).foregroundStyle(YMColor.text)
             }
             VStack(alignment: .leading, spacing: YMSpace.xs) {
@@ -192,7 +192,7 @@ struct GiftCardView: View {
 
     private func errorBlock(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
-            Text("😔").font(.system(size: 34))
+            Text("😔").ymFont(34)
             Text(message).font(YMFont.body).foregroundStyle(YMColor.text).multilineTextAlignment(.center)
             Button { Haptics.light(); check() } label: {
                 Text("Повторить").font(YMFont.headline).foregroundStyle(YMColor.accent)

@@ -233,6 +233,7 @@ struct AuthView: View {
 
                     footerLinks.padding(.top, YMSpace.md)
                 }
+                .ymReadableWidth()
                 .padding(.horizontal, YMSpace.xl)
                 .padding(.bottom, YMSpace.xxxl)
             }
@@ -252,7 +253,8 @@ struct AuthView: View {
                 back()
             } label: {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .bold))
+                    .accessibilityLabel("Назад")
+                    .ymFont(17, weight: .bold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
                     .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -275,7 +277,7 @@ struct AuthView: View {
                                  startPoint: .topLeading, endPoint: .bottomTrailing))
             .frame(width: 64, height: 64)
             .overlay(
-                Text("Y").font(.system(size: 34, weight: .heavy))
+                Text("Y").ymFont(34, weight: .heavy)
                     .foregroundStyle(YMPalette.goldInk)
             )
             .shadow(color: YMPalette.gold.opacity(0.45), radius: 20, y: 10)
@@ -286,7 +288,7 @@ struct AuthView: View {
     private var heading: some View {
         VStack(alignment: .leading, spacing: YMSpace.xs) {
             Text(titleText)
-                .font(.system(size: 30, weight: .heavy))
+                .ymFont(30, weight: .heavy)
                 .tracking(-0.6)
                 .foregroundStyle(YMColor.text)
             Text(subtitleText)

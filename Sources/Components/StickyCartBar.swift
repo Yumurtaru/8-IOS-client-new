@@ -33,12 +33,17 @@ struct StickyCartBar: View {
         } label: {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: "bag.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .ymFont(16, weight: .semibold)
+                    .accessibilityHidden(true)
                 Text("Корзина · \(count) \(itemsWord)")
-                    .font(.system(size: 16, weight: .heavy))
+                    .ymFont(16, weight: .heavy)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Spacer(minLength: YMSpace.md)
                 Text(Money.format(total))
-                    .font(.system(size: 15, weight: .heavy))
+                    .ymFont(15, weight: .heavy)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                     .foregroundStyle(Color(hex: "#F5D98A"))
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
@@ -48,7 +53,7 @@ struct StickyCartBar: View {
             .padding(.horizontal, YMSpace.lg)
             .frame(height: 56)
             .frame(maxWidth: .infinity)
-            .background(YMColor.accent, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
+            .ymFloatingSurface(RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous), fill: YMColor.accent)
             .shadow(color: YMPalette.gold.opacity(0.5), radius: 30, y: 8)
             .scaleEffect(pressed && !reduceMotion ? YMMotion.pressScale : 1)
         }
@@ -61,5 +66,7 @@ struct StickyCartBar: View {
         .padding(.horizontal, YMSpace.xl)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Корзина, \(count) \(itemsWord), \(Money.format(total))")
+        .accessibilityHint("Открыть корзину")
+        .accessibilityAddTraits(.isButton)
     }
 }

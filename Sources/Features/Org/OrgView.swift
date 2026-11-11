@@ -88,6 +88,9 @@ final class OrgViewModel: ObservableObject {
             // Первая страница — сразу (карточка не ждёт всё меню), остальные — в фоне.
             async let p = fetchShopMenu(slug: slug, pages: 1...1)
             detail = try await d
+            // Spotlight и воронка: заведение открыто.
+            SpotlightIndex.indexOrg(slug: detail?.slug ?? slug, name: detail?.name, about: detail?.description)
+            Track.shopOpened(slug: slug, name: detail?.name)
             do {
                 let first = try await p
                 products = first.items
@@ -381,7 +384,7 @@ struct OrgView: View {
                 // Название 25/heavy + бейдж «Открыто» — справа от логотипа.
                 VStack(alignment: .leading, spacing: 8) {
                     Text(vm.detail?.name ?? vm.seed?.name ?? "—")
-                        .font(.system(size: 25, weight: .heavy))
+                        .ymFont(25, weight: .heavy)
                         .foregroundStyle(YMColor.text)
                         .lineLimit(2)
                     // Пауза приёма (сервер А719): is_open уже false, но «Закрыто» неверно —
@@ -410,7 +413,7 @@ struct OrgView: View {
             // Подзаголовок «Тип · кухня · теги».
             if let sub = subtitle, !sub.isEmpty {
                 Text(sub)
-                    .font(.system(size: 13.5))
+                    .ymFont(13.5)
                     .foregroundStyle(YMColor.muted)
                     .padding(.top, 6)
             }
@@ -418,7 +421,7 @@ struct OrgView: View {
             // iOS не показывал нигде.
             if let about = vm.detail?.description?.trimmingCharacters(in: .whitespacesAndNewlines), !about.isEmpty {
                 Text(about)
-                    .font(.system(size: 13.5))
+                    .ymFont(13.5)
                     .foregroundStyle(YMColor.muted)
                     .padding(.top, 6)
             }
@@ -435,14 +438,14 @@ struct OrgView: View {
                             Text("· \(rc) \(Self.ratingsWord(rc))").foregroundStyle(YMColor.muted)
                         }
                     }
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .ymFont(13.5, weight: .semibold)
                 }
                 if let t = deliveryTime, !t.isEmpty {
                     HStack(spacing: 4) {
                         Text("🕑")
                         Text(t).foregroundStyle(YMColor.muted)
                     }
-                    .font(.system(size: 13.5))
+                    .ymFont(13.5)
                 }
             }
             .padding(.top, 10)
@@ -583,16 +586,16 @@ struct OrgView: View {
             }
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "mappin.and.ellipse")
-                    .font(.system(size: 18, weight: .semibold))
+                    .ymFont(18, weight: .semibold)
                     .foregroundStyle(YMColor.accent)
                 VStack(alignment: .leading, spacing: 3) {
                     // Пустой адрес из карточки («») давал пустую строку рядом с пином.
                     Text(vm.detail?.address?.isEmpty == false ? (vm.detail?.address ?? "") : "Адрес уточняется")
-                        .font(.system(size: 14.5, weight: .semibold))
+                        .ymFont(14.5, weight: .semibold)
                         .foregroundStyle(YMColor.text)
                     if let city = vm.seed?.category { // fallback; при наличии дистанции — покажется тут
                         Text(city)
-                            .font(.system(size: 12))
+                            .ymFont(12)
                             .foregroundStyle(YMColor.muted)
                     }
                 }
@@ -602,7 +605,7 @@ struct OrgView: View {
                     openRoute()
                 } label: {
                     Text("↗ Маршрут")
-                        .font(.system(size: 12.5, weight: .bold))
+                        .ymFont(12.5, weight: .bold)
                         .foregroundStyle(YMColor.onAccent)
                         .padding(.horizontal, 12).padding(.vertical, 8)
                         .background(YMColor.accent, in: Capsule())
@@ -720,7 +723,7 @@ struct OrgView: View {
     private func circleControl(_ system: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system)
-                .font(.system(size: 16, weight: .semibold))
+                .ymFont(16, weight: .semibold)
                 .foregroundStyle(.white)
                 .frame(width: 38, height: 38)
                 .background(Color.black.opacity(0.4), in: Circle())
@@ -744,7 +747,7 @@ struct OrgView: View {
                     if nested { localChat = true } else { coord.openChatList() }
                 } label: {
                     Text("💬")
-                        .font(.system(size: 22))
+                        .ymFont(22)
                         .frame(width: 52, height: 52)
                         .background(YMColor.surface, in: Circle())
                         .overlay(Circle().strokeBorder(YMColor.hairline, lineWidth: 1))
@@ -812,7 +815,7 @@ struct OrgView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .font(.system(size: 34, weight: .semibold))
+                .ymFont(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)
@@ -928,7 +931,7 @@ struct DishRow: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(spacing: 6) {
                         Text(product.name ?? "—")
-                            .font(.system(size: 15.5, weight: .bold))
+                            .ymFont(15.5, weight: .bold)
                             .foregroundStyle(YMColor.text)
                             .lineLimit(1)
                         if product.isHalal == true {
@@ -937,22 +940,24 @@ struct DishRow: View {
                     }
                     if let d = product.description, !d.isEmpty {
                         Text(d)
-                            .font(.system(size: 12.5))
+                            .ymFont(12.5)
                             .foregroundStyle(YMColor.muted)
                             .lineLimit(2)
                     }
                     if product.stopped == true {
                         Text("Нет в наличии")
-                            .font(.system(size: 13, weight: .semibold))
+                            .ymFont(13, weight: .semibold)
                             .foregroundStyle(YMColor.muted)
                             .padding(.top, 2)
                     } else {
                         Text(Money.format(Money.dec(product.price)))
-                            .font(.system(size: 15, weight: .heavy))
+                            .ymFont(15, weight: .heavy)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(YMColor.text)
                             .padding(.top, 2)
                         if let w = product.wholesaleLabel {
-                            Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
+                            Text(w).ymFont(11).foregroundStyle(YMColor.muted).lineLimit(1)
                         }
                     }
                 }
@@ -968,7 +973,8 @@ struct DishRow: View {
                         onAdd()
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .heavy))
+                            .accessibilityLabel("Добавить в корзину")
+                            .ymFont(16, weight: .heavy)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 30, height: 30)
                             .background(YMColor.accent, in: Circle())
@@ -986,6 +992,22 @@ struct DishRow: View {
                 .strokeBorder(YMColor.hairline, lineWidth: 1))
         }
         .buttonStyle(CardPressStyle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(a11yLabel)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(named: "Добавить в корзину") { if product.stopped != true { onAdd() } }
+    }
+
+    /// Название, цена и оптовая цена одной фразой для VoiceOver.
+    private var a11yLabel: String {
+        var parts: [String] = [product.name ?? "Товар"]
+        if product.stopped == true {
+            parts.append("нет в наличии")
+        } else {
+            parts.append(Money.format(Money.dec(product.price)))
+            if let w = product.wholesaleLabel, !w.isEmpty { parts.append("оптовая цена " + w) }
+        }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -995,7 +1017,7 @@ struct DishRow: View {
 struct HalalBadge: View {
     var body: some View {
         Text("ХАЛЯЛЬ")
-            .font(.system(size: 10, weight: .heavy))
+            .ymFont(10, weight: .heavy)
             .tracking(0.3)
             .foregroundStyle(YMColor.statusDone)
             .padding(.horizontal, 7).padding(.vertical, 3)
@@ -1021,7 +1043,7 @@ struct OrgMiniMap: View {
             annotationItems: [Pin(coord: coord)]) { pin in
             MapAnnotation(coordinate: pin.coord) {
                 Image(systemName: "mappin.circle.fill")
-                    .font(.system(size: 30))
+                    .ymFont(30)
                     .foregroundStyle(YMColor.accent)
                     .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             }
@@ -1043,7 +1065,7 @@ struct ClosedBanner: View {
             HStack(spacing: 8) {
                 Text("🕑")
                 Text(opensLabel != nil ? "Сейчас закрыто. Откроется \(opensLabel!)" : "Сейчас закрыто")
-                    .font(.system(size: 14.5, weight: .bold))
+                    .ymFont(14.5, weight: .bold)
                     .foregroundStyle(YMColor.text)
             }
             // Предзаказ теперь есть (2026-10-13): оформление закрытого заведения
@@ -1052,7 +1074,7 @@ struct ClosedBanner: View {
             // У услуг записи по свободным окнам — про предзаказ не пишем.
             Text(preorder ? "Можно оформить предзаказ — время выберете при оформлении."
                           : "Записаться можно на свободное время.")
-                .font(.system(size: 12.5))
+                .ymFont(12.5)
                 .foregroundStyle(YMColor.muted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

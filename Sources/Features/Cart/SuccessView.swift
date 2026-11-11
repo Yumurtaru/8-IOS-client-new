@@ -97,14 +97,14 @@ struct SuccessView: View {
                         .frame(width: 110, height: 110)
                         .shadow(color: YMPalette.gold.opacity(0.6), radius: 50, y: 20)
                     Image(systemName: "checkmark")
-                        .font(.system(size: 46, weight: .bold))
+                        .ymFont(46, weight: .bold)
                         .foregroundStyle(YMColor.onAccent)
                 }
                 .scaleEffect(checkPopped ? 1 : (reduceMotion ? 1 : 0.4))
                 .opacity(checkPopped || reduceMotion ? 1 : 0)
 
                 Text("Заказ оформлен!")
-                    .font(.system(size: 26, weight: .heavy))
+                    .ymFont(26, weight: .heavy)
                     .foregroundStyle(YMColor.text)
                     .padding(.top, YMSpace.xxl)
 

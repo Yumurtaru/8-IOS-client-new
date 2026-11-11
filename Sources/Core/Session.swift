@@ -14,6 +14,7 @@ final class Session: ObservableObject {
             // уведомления о новых заведениях продолжат приходить по старому
             // городу. Вызов идемпотентен и молча выходит, если вход не сделан.
             guard cityId != oldValue else { return }
+            OfflineCache.shared.clearAll()   // кэш витрины прежнего города не показываем
             Task { await Push.shared.registerIfPossible() }
         }
     }
@@ -77,6 +78,7 @@ final class Session: ObservableObject {
     func signOut(clearLocalData: Bool = false) {
         signedOutExplicitly = true
         let wasLoggedIn = token != nil
+        OfflineCache.shared.clearAll()   // списки и профиль прежнего аккаунта не должны пережить выход
         token = nil
         TokenStore.clear()
         API.clearCookies()   // cookie прежних версий не должны пережить выход
@@ -90,6 +92,9 @@ final class Session: ObservableObject {
         if wasLoggedIn {
             UserDefaults.standard.removeObject(forKey: "plus_pending_payment_id")
             UserDefaults.standard.removeObject(forKey: "plus_pending_payment_at")
+            // Spotlight: заказы, заведения и товары прежнего человека не должны остаться в поиске iPhone.
+            SpotlightIndex.clearAll()
+            ReviewPrompt.clearAccountData()
         }
         if wasLoggedIn && clearLocalData {
             Task { @MainActor in

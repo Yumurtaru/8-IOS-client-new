@@ -91,7 +91,7 @@ struct ParcelsListView: View {
                     ErrorRetryView(message: e) { Task { await load(silent: false, fresh: true) } }.padding(.top, 20)
                 } else if items.isEmpty {
                     VStack(spacing: YMSpace.md) {
-                        Text("📦").font(.system(size: 44))
+                        Text("📦").ymFont(44)
                         Text(filter == "active" ? "Посылок в пути нет." : "Посылок пока не было.")
                             .font(YMFont.callout).foregroundStyle(YMColor.muted)
                         if canSend {
@@ -463,7 +463,7 @@ struct ParcelDetailView: View {
                         if let u = URL(string: "tel://" + c.phone.filter { $0.isNumber || $0 == "+" }) { openURL(u) }
                     } label: {
                         Image(systemName: "phone.fill")
-                            .font(.system(size: 17, weight: .semibold))
+                            .ymFont(17, weight: .semibold)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 44, height: 44)
                             .background(YMColor.accent, in: Circle())
@@ -604,7 +604,7 @@ private struct ParcelRateSheet: View {
                     ForEach(1...5, id: \.self) { n in
                         Button { Haptics.selection(); rating = n } label: {
                             Image(systemName: n <= rating ? "star.fill" : "star")
-                                .font(.system(size: 32)).foregroundStyle(YMColor.accent)
+                                .ymFont(32).foregroundStyle(YMColor.accent)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(n) из 5")

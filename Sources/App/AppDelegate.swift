@@ -10,6 +10,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // AppMetrica (падения и события): без ключа в Info.plist ничего не запускает.
+        Metrica.activate()
+        // Кнопки «Оценить» / «Повторить» в push о доставленном заказе (Orders/OrderNotificationActions.swift).
+        OrderNotificationCategories.register()
         // Фон таб-бара — системный материал (blur), тонкая золотая линия сверху. Один раз на запуск.
         let tabAppearance = UITabBarAppearance()
         tabAppearance.configureWithDefaultBackground()
@@ -31,6 +35,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             handleNotification(remote)
         }
         return true
+    }
+
+    /// Быстрые действия иконки: на холодном старте пункт приходит в options, на запущенном
+    /// приложении — в QuickActionSceneDelegate.
+    func application(_ application: UIApplication,
+                     configurationForConnecting connectingSceneSession: UISceneSession,
+                     options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        if let item = options.shortcutItem { QuickActions.handle(item) }
+        let config = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        config.delegateClass = QuickActionSceneDelegate.self
+        return config
     }
 
     func requestPushAuth() {
@@ -87,7 +102,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        handleNotification(response.notification.request.content.userInfo)
+        let info = response.notification.request.content.userInfo
+        // Нажата кнопка push («Оценить» / «Повторить») — открываем заказ.
+        if OrderNotificationCategories.handle(response, foreign: Self.isForeign(info)) { completionHandler(); return }
+        handleNotification(info)
         completionHandler()
     }
 
@@ -95,6 +113,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
+        // order_status / order_changed с content-available: обновляем Live Activity заказа.
+        if let id = OrderLiveActivity.orderId(fromPush: userInfo), !Self.isForeign(userInfo) {
+            Task {
+                await OrderLiveActivity.refresh(orderId: id)
+                completionHandler(.newData)
+            }
+            return
+        }
         completionHandler(.newData)
     }
 
@@ -224,6 +250,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if type == "new_shop" || type == "shop_reopened", !orgSlug.isEmpty {
             return { nav.openOrg(slug: orgSlug) }
         }
+        // E1: «Вышла новая версия» (type=app_update, url — страница в магазине):
+        // открываем ссылку (только http/https). Нет годной ссылки — обычное уведомление.
+        if type == "app_update", let link = safeWebURL(userInfo["url"]) {
+            return { UIApplication.shared.open(link) }
+        }
         // Push продавцу (владелец вошёл тем же аккаунтом) — заказ не его как
         // покупателя: просто открываем приложение.
         if isSellerSide(type, userInfo) { return nil }
@@ -341,6 +372,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
         return nil
+    }
+
+    /// E1: ссылка из push — только http/https с хостом; иначе nil.
+    private static func safeWebURL(_ v: Any?) -> URL? {
+        guard let raw = (v as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !raw.isEmpty, raw.count <= 2000,
+              let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let host = url.host, !host.isEmpty else { return nil }
+        return url
     }
 
     /// Толерантно достаёт Int из payload (сервер шлёт order_id строкой).

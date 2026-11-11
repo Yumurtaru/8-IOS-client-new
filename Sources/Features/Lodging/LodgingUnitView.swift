@@ -649,14 +649,14 @@ struct LodgingUnitView: View {
                 }
             } label: {
                 Text(vm.sending ? "Бронируем…" : "Повторить бронь")
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(YMColor.text)
+                    .ymFont(15, weight: .semibold).foregroundStyle(YMColor.text)
                     .frame(maxWidth: .infinity, minHeight: 50)
                     .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(vm.sending)
             Button("Забронировать заново") { askRebook = true }
-                .font(.system(size: 14, weight: .semibold))
+                .ymFont(14, weight: .semibold)
                 .foregroundStyle(YMColor.statusCancel)
                 .disabled(vm.sending)
         }

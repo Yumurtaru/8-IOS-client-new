@@ -397,6 +397,8 @@ final class AdFormViewModel: ObservableObject {
         let renew = renewable
         let statusBefore = adStatus
         let tillBefore = expiresAt
+        // Списание из кошелька — сначала Face ID / код-пароль; отмена — ничего не списываем и не сохраняем.
+        if (expected ?? 0) > 0, !(await PayConfirm.confirm(reason: "Подтвердите оплату объявления из кошелька")) { return }
         let id = await save(silent: true)
         guard id > 0 else { return }
         do {
@@ -516,7 +518,7 @@ struct AdFormView: View {
                 Button("Пополнить кошелёк") { vm.shortage = nil; showWallet = true }
                 Button("Позже", role: .cancel) { vm.shortage = nil }
             } message: {
-                Text((vm.shortage ?? "") + "\n\nОбъявление сохранено — пополните кошелёк и опубликуйте его здесь или из «Моих объявлений».")
+                Text("\(vm.shortage ?? "")\n\nОбъявление сохранено — пополните кошелёк и опубликуйте его здесь или из «Моих объявлений».")
             }
             .overlay(alignment: .bottom) {
                 if let t = vm.toast {
@@ -617,7 +619,8 @@ struct AdFormView: View {
                                         Task { await vm.deletePhoto(p) }
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
-                                            .font(.system(size: 20))
+                                            .accessibilityLabel("Удалить фото")
+                                            .ymFont(20)
                                             .foregroundStyle(.white, YMColor.statusCancel)
                                     }
                                     // В строке Form кнопки со стилем по умолчанию

@@ -54,7 +54,7 @@ private struct UpdateBadge: View {
         ZStack {
             Circle().fill(YMColor.accent.opacity(0.14)).frame(width: 64, height: 64)
             Image(systemName: "arrow.down.app.fill")
-                .font(.system(size: 30, weight: .semibold))
+                .ymFont(30, weight: .semibold)
                 .foregroundStyle(YMColor.accent)
         }
         .accessibilityHidden(true)

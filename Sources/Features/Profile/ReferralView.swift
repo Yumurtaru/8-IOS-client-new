@@ -100,7 +100,7 @@ struct ReferralView: View {
     private var guestState: some View {
         let p = (prefillCode ?? "").trimmingCharacters(in: .whitespaces).uppercased()
         return VStack(alignment: .leading, spacing: YMSpace.md) {
-            Text("🎁").font(.system(size: 34))
+            Text("🎁").ymFont(34)
             Text(p.isEmpty
                  ? "Войдите или зарегистрируйтесь — здесь появится ваш код-приглашение."
                  : "Код друга \(p) применится после входа или регистрации.")
@@ -117,7 +117,7 @@ struct ReferralView: View {
 
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
-            Text("😔").font(.system(size: 44))
+            Text("😔").ymFont(44)
             Text(message).font(YMFont.body).foregroundStyle(YMColor.muted).multilineTextAlignment(.center)
             Button { Haptics.light(); Task { await load() } } label: {
                 Text("Повторить").font(YMFont.headline)
@@ -133,7 +133,7 @@ struct ReferralView: View {
 
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: YMSpace.sm) {
-            Text("🎁").font(.system(size: 34))
+            Text("🎁").ymFont(34)
             Text("Приглашайте друзей — получайте по \(rewardText)")
                 .font(YMFont.title3).foregroundStyle(YMColor.onAccent)
             Text("Когда друг сделает первый заказ, \(rewardText) получите и вы, и он.")
@@ -154,7 +154,7 @@ struct ReferralView: View {
         VStack(spacing: YMSpace.md) {
             Text("Ваш код-приглашение").font(YMFont.caption).foregroundStyle(YMColor.muted)
             Text(code.isEmpty ? "———" : code)
-                .font(.system(size: 30, weight: .heavy, design: .monospaced))
+                .ymFont(30, weight: .heavy, design: .monospaced)
                 .tracking(3)
                 .foregroundStyle(YMColor.accent)
                 .frame(maxWidth: .infinity)
@@ -207,7 +207,7 @@ struct ReferralView: View {
 
     private var invitedRow: some View {
         HStack(spacing: YMSpace.md) {
-            Text("👥").font(.system(size: 22))
+            Text("👥").ymFont(22)
             VStack(alignment: .leading, spacing: 2) {
                 Text("Вы уже пригласили").font(YMFont.caption).foregroundStyle(YMColor.muted)
                 Text("\(invited) \(pluralInvited(invited))").font(YMFont.headline).foregroundStyle(YMColor.text)

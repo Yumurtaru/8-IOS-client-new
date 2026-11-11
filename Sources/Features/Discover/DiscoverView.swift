@@ -117,6 +117,12 @@ private struct SearchSection: View {
     // Навигация внутри своего NavigationStack: одно состояние на переход.
     @State private var route: DiscoverRoute?
 
+    /// Голосовой ввод и сканер штрихкодов в строке поиска.
+    @StateObject private var voice = VoiceSearcher()
+    @State private var showScanner = false
+    /// Сообщение про голосовой поиск (нет доступа к микрофону и т.п.).
+    @State private var voiceError: String?
+
     /// Переход с корня таба. Тап по вкладке снимает стек, но SwiftUI не всегда
     /// сбрасывает navigationDestination(isPresented:) — route оставался «висеть»,
     /// и тап по найденному ничего не открывал. Сначала сбрасываем, потом идём.
@@ -199,6 +205,18 @@ private struct SearchSection: View {
         // запросом оставались до следующей буквы. Ищем заново.
         .onChange(of: session.cityId) { _ in scheduleSearch() }
         .errorToast($favError)
+        .onAppear {
+            voice.onText = { text in q = text }
+        }
+        .onDisappear { voice.stop() }
+        // Отказ в доступе к микрофону / распознаванию — понятным сообщением.
+        .onChange(of: voice.message) { text in
+            if let text = text {
+                voiceError = text
+                voice.message = nil
+            }
+        }
+        .errorToast($voiceError, bottom: 70)
         .sheet(isPresented: $showAuth) {
             NavigationStack {
                 AuthView(onAuthed: { showAuth = false })
@@ -226,7 +244,32 @@ private struct SearchSection: View {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 16))
                             .foregroundStyle(YMColor.muted)
-                    }.buttonStyle(.plain)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Очистить")
+                }
+                Button {
+                    focused = false
+                    voice.toggle()
+                } label: {
+                    Image(systemName: voice.listening ? "mic.fill" : "mic")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(voice.listening ? YMColor.statusCancel : YMColor.muted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(voice.listening ? "Остановить голосовой поиск" : "Голосовой поиск")
+                if BarcodeScanner.isAvailable {
+                    Button {
+                        voice.stop()
+                        focused = false
+                        showScanner = true
+                    } label: {
+                        Image(systemName: "barcode.viewfinder")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(YMColor.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Сканировать штрихкод")
                 }
             }
             .padding(.horizontal, 15)
@@ -249,6 +292,14 @@ private struct SearchSection: View {
         .padding(.top, YMSpace.sm)
         .padding(.bottom, YMSpace.md)
         .animation(YMMotion.adaptive(YMMotion.snappy, reduceMotion: reduceMotion), value: focused)
+        // Сканер висит на строке поиска, а не на корне экрана: на корне уже есть шторка входа.
+        .fullScreenCover(isPresented: $showScanner) {
+            BarcodeScannerScreen(onCode: { code in
+                // Серверный поиск ищет по названиям; код подставляется в обычный поиск как есть.
+                q = code
+                recordHistory()
+            })
+        }
     }
 
     // ── Подсказки (совпадение выделено) ──

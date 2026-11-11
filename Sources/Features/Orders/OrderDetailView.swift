@@ -440,9 +440,17 @@ struct OrderDetailView: View {
         .background(YMColor.bg.ignoresSafeArea())
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .task { await vm.load(); if !Task.isCancelled { vm.startTrackingIfActive(); vm.resumePaymentCheckIfNeeded() } }   // экран успели закрыть — опрос не запускаем
+        .task {
+            await vm.load()
+            if !Task.isCancelled { vm.startTrackingIfActive(); vm.resumePaymentCheckIfNeeded() }   // экран успели закрыть — опрос не запускаем
+            // Кнопка «Повторить» из push или виджета (yumurta://order/<id>?repeat=1).
+            if !Task.isCancelled, vm.order != nil, OrderRepeatIntent.take(id) { await vm.repeatOrder(cart: cart) }
+        }
         .onDisappear { visible = false; vm.stopTracking() }
         .onAppear { visible = true }
+        // Просьба оценить приложение: заказ получен и отзыв 4–5 или возврат к доставленному заказу.
+        .reviewPrompt(orderId: id, isDone: OrderFlow.isDone(vm.order?.status),
+                      goodReview: vm.reviewSent && reviewRating >= 4)
         // Вернулись в приложение — статус и курьер могли смениться, пока оно
         // было свёрнуто: перечитываем сразу и снова включаем опрос (он
         // останавливается сам, когда заказ завершён).

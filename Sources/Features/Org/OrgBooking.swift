@@ -295,7 +295,7 @@ struct OrgBookingSection: View {
             // У ресторана или магазина это не «запись к мастеру», а бронь
             // игрового зала или кинозала — заголовок должен это отражать.
             Text(serviceOrg ? "Запись на услугу" : "Услуги и бронирование")
-                .font(.system(size: 20, weight: .heavy))
+                .ymFont(20, weight: .heavy)
                 .foregroundStyle(YMColor.text)
 
             Group {
@@ -311,7 +311,7 @@ struct OrgBookingSection: View {
                     VStack(spacing: 8) {
                         BookingNotice(text: e)
                         Button("Повторить") { Task { await loadServices() } }
-                            .font(.system(size: 14.5, weight: .bold))
+                            .ymFont(14.5, weight: .bold)
                             .foregroundStyle(YMColor.accent)
                     }
                 } else if services.isEmpty {
@@ -324,7 +324,7 @@ struct OrgBookingSection: View {
                             if let g = sv.groupName, !g.isEmpty,
                                idx == 0 || services[idx - 1].groupName != g {
                                 Text(g)
-                                    .font(.system(size: 13, weight: .heavy))
+                                    .ymFont(13, weight: .heavy)
                                     .foregroundStyle(YMColor.muted)
                                     .padding(.top, idx == 0 ? 0 : 6)
                             }
@@ -336,7 +336,7 @@ struct OrgBookingSection: View {
 
             if let msg = actionMessage {
                 Text(msg)
-                    .font(.system(size: 13, weight: .semibold))
+                    .ymFont(13, weight: .semibold)
                     .foregroundStyle(YMColor.statusCancel)
                     .padding(.vertical, 2)
             }
@@ -418,7 +418,7 @@ struct OrgBookingSection: View {
                         // А115: услугу сняли — без ленты, с повтором обзора по нажатию.
                         Button { startDayScan(force: true) } label: {
                             Text("Запись на эту услугу сейчас недоступна\nНажмите, чтобы повторить")
-                                .font(.system(size: 14.5)).foregroundStyle(YMColor.muted)
+                                .ymFont(14.5).foregroundStyle(YMColor.muted)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .buttonStyle(.plain)
@@ -428,7 +428,7 @@ struct OrgBookingSection: View {
                             .padding(.vertical, 14)
                     } else if shownDays.isEmpty {
                         Text("Свободных окон пока нет — загляните позже")
-                            .font(.system(size: 14.5)).foregroundStyle(YMColor.muted)
+                            .ymFont(14.5).foregroundStyle(YMColor.muted)
                             .padding(.vertical, 8)
                     } else {
                         DaySelector(days: shownDays, selected: selectedDate, free: dayFree ?? [:]) { d in
@@ -454,7 +454,7 @@ struct OrgBookingSection: View {
                         if sv.needsGuests || sv.needsHours {
                             HStack {
                                 Text("Стоимость брони")
-                                    .font(.system(size: 13, weight: .bold))
+                                    .ymFont(13, weight: .bold)
                                     .foregroundStyle(YMColor.muted)
                                 Spacer()
                                 // Длину берём у первого доступного времени: сетка
@@ -463,12 +463,12 @@ struct OrgBookingSection: View {
                                 // подтверждения и с чеком.
                                 Text(Money.format(sv.quote(guests: guests, slots: hours,
                                     minutesTotal: Self.previewMinutes(sv, slots, guests: guests, hours: hours))))
-                                    .font(.system(size: 15, weight: .heavy))
+                                    .ymFont(15, weight: .heavy)
                                     .foregroundStyle(YMColor.text)
                             }
                         }
                         Text("Свободное время")
-                            .font(.system(size: 13, weight: .bold))
+                            .ymFont(13, weight: .bold)
                             .foregroundStyle(YMColor.muted)
                         slotsView
                     }
@@ -507,20 +507,20 @@ struct OrgBookingSection: View {
             // день туда-обратно.
             Button { Task { await loadSlots(force: true) } } label: {
                 Text("\(e). Нажмите, чтобы повторить")
-                    .font(.system(size: 14.5)).foregroundStyle(YMColor.statusCancel)
+                    .ymFont(14.5).foregroundStyle(YMColor.statusCancel)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .buttonStyle(.plain)
         } else if slots.isEmpty {
             Text("На эту дату нет свободных слотов")
-                .font(.system(size: 14.5)).foregroundStyle(YMColor.muted)
+                .ymFont(14.5).foregroundStyle(YMColor.muted)
         } else {
             // Начать бронь можно только с окна, за которым идёт нужное число
             // окон подряд и в каждом хватает мест. Сервер проверит это ещё раз
             // под блокировкой — здесь мы просто не показываем занятое.
             if startableSlots.isEmpty {
                 Text("На эту дату нет подходящего времени — попробуйте меньше часов или человек")
-                    .font(.system(size: 14.5)).foregroundStyle(YMColor.muted)
+                    .ymFont(14.5).foregroundStyle(YMColor.muted)
             } else {
                 SlotGrid(slots: startableSlots, showFree: (selected?.capacityValue ?? 1) > 1) { slot in
                     // Отказ прошлой попытки («окно занято») не висит над новой.
@@ -1120,13 +1120,13 @@ private struct CountStepper: View {
     var body: some View {
         HStack(spacing: 10) {
             VStack(alignment: .leading, spacing: 1) {
-                Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(YMColor.text)
-                Text(hint).font(.system(size: 11)).foregroundStyle(YMColor.muted)
+                Text(label).ymFont(13, weight: .bold).foregroundStyle(YMColor.text)
+                Text(hint).ymFont(11).foregroundStyle(YMColor.muted)
             }
             Spacer()
             stepButton("minus", enabled: value > min) { value = Swift.max(min, value - 1) }
             Text("\(value)")
-                .font(.system(size: 17, weight: .heavy))
+                .ymFont(17, weight: .heavy)
                 .foregroundStyle(YMColor.text)
                 .frame(width: 40)
             stepButton("plus", enabled: value < max) { value = Swift.min(max, value + 1) }
@@ -1140,7 +1140,7 @@ private struct CountStepper: View {
             action()
         } label: {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .heavy))
+                .ymFont(14, weight: .heavy)
                 .foregroundStyle(enabled ? YMColor.text : YMColor.muted)
                 .frame(width: 36, height: 36)
                 .background(enabled ? YMColor.surface2 : YMColor.surface, in: Circle())
@@ -1174,12 +1174,12 @@ private struct ServiceRow: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 6) {
                             Text(service.name ?? "—")
-                                .font(.system(size: 15.5, weight: .bold))
+                                .ymFont(15.5, weight: .bold)
                                 .foregroundStyle(YMColor.text)
                                 .lineLimit(2)
                             if service.isAtClient {
                                 Text("Выезд к вам")
-                                    .font(.system(size: 10.5, weight: .heavy))
+                                    .ymFont(10.5, weight: .heavy)
                                     .foregroundStyle(YMColor.accent)
                                     .padding(.horizontal, 7).padding(.vertical, 3)
                                     .background(YMColor.accent.opacity(0.14), in: Capsule())
@@ -1187,45 +1187,47 @@ private struct ServiceRow: View {
                         }
                         if let d = service.description, !d.isEmpty {
                             Text(d)
-                                .font(.system(size: 12))
+                                .ymFont(12)
                                 .foregroundStyle(YMColor.muted)
                                 .lineLimit(2)
                         }
                         if let dm = service.durationMin, dm > 0 {
                             Text("🕑 \(dm) мин")
-                                .font(.system(size: 12))
+                                .ymFont(12)
                                 .foregroundStyle(YMColor.muted)
                         }
                         // Игровой зал: «до 8 чел. одновременно · до 6 ч».
                         // У обычной услуги (1 место, 1 окно) строки нет.
                         if let note = Self.capacityNote(service) {
                             Text(note)
-                                .font(.system(size: 12))
+                                .ymFont(12)
                                 .foregroundStyle(YMColor.muted)
                         }
                         // Кто оказывает услугу: «мастер Анна» / «мастера: Анна, Ольга».
                         if let who = service.mastersLabel {
                             Text(who)
-                                .font(.system(size: 12, weight: .semibold))
+                                .ymFont(12, weight: .semibold)
                                 .foregroundStyle(YMColor.accent)
                         }
                     }
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 2) {
                         Text(Money.format(Money.dec(service.price)))
-                            .font(.system(size: 15.5, weight: .heavy))
+                            .ymFont(15.5, weight: .heavy)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                             .foregroundStyle(YMColor.text)
                         // «за человека в час» — подпись готовит сервер (price_unit).
                         if let unit = service.priceUnit, !unit.isEmpty, unit != "за услугу" {
                             Text(unit)
-                                .font(.system(size: 11))
+                                .ymFont(11)
                                 .foregroundStyle(YMColor.muted)
                         }
                         // Стоимость выезда показываем отдельной строкой: гость
                         // должен видеть её до выбора времени, а не в чеке.
                         if service.isAtClient, Money.dec(service.travelFee) > 0 {
                             Text("+ \(Money.format(Money.dec(service.travelFee))) выезд")
-                                .font(.system(size: 11.5, weight: .semibold))
+                                .ymFont(11.5, weight: .semibold)
                                 .foregroundStyle(YMColor.accent)
                         }
                     }
@@ -1233,10 +1235,12 @@ private struct ServiceRow: View {
                 if selected && fee > 0 {
                     HStack {
                         Text("Сервисный сбор")
-                            .font(.system(size: 12)).foregroundStyle(YMColor.muted)
+                            .ymFont(12).foregroundStyle(YMColor.muted)
                         Spacer()
                         Text(Money.format(fee))
-                            .font(.system(size: 12)).foregroundStyle(YMColor.text)
+                            .ymFont(12).foregroundStyle(YMColor.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
                     }
                     .padding(.top, 8)
                 }
@@ -1279,15 +1283,15 @@ private struct DaySelector: View {
                     Button { onSelect(d.value) } label: {
                         VStack(spacing: 2) {
                             Text(d.weekday)
-                                .font(.system(size: 11, weight: .bold))
+                                .ymFont(11, weight: .bold)
                                 .foregroundStyle(active ? YMColor.onAccent : YMColor.muted)
                             Text(d.dayNum)
-                                .font(.system(size: 16, weight: .heavy))
+                                .ymFont(16, weight: .heavy)
                                 .foregroundStyle(active ? YMColor.onAccent : YMColor.text)
                             if !free.isEmpty {
                                 // Пустая строка у даты без числа — чипы одной высоты.
                                 Text((free[d.value] ?? 0) > 0 ? freeLabel(free[d.value] ?? 0) : " ")
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .ymFont(10, weight: .semibold)
                                     .foregroundStyle(active ? YMColor.onAccent.opacity(0.85) : YMColor.muted)
                                     .lineLimit(1)
                             }
@@ -1321,11 +1325,11 @@ private struct SlotGrid: View {
                 Button { Haptics.light(); onPick(slot) } label: {
                     VStack(spacing: 0) {
                         Text(String((slot.timeStart ?? "").prefix(5)))
-                            .font(.system(size: 13, weight: .bold))
+                            .ymFont(13, weight: .bold)
                             .foregroundStyle(YMColor.text)
                         if showFree {
                             Text("\(slot.freeValue) св.")
-                                .font(.system(size: 11))
+                                .ymFont(11)
                                 .foregroundStyle(YMColor.muted)
                         }
                     }
@@ -1345,7 +1349,7 @@ private struct BookingNotice: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 14.5))
+            .ymFont(14.5)
             .foregroundStyle(YMColor.muted)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 22).padding(.horizontal, 16)
@@ -1393,21 +1397,21 @@ private struct ConfirmBookingSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 Text("Подтверждение записи")
-                    .font(.system(size: 20, weight: .heavy))
+                    .ymFont(20, weight: .heavy)
                     .foregroundStyle(YMColor.text)
                 if !serviceName.isEmpty {
                     Text(serviceName)
-                        .font(.system(size: 15))
+                        .ymFont(15)
                         .foregroundStyle(YMColor.muted)
                         .padding(.top, 4)
                 }
 
                 HStack {
                     Text("Дата и время")
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(YMColor.muted)
+                        .ymFont(13, weight: .semibold).foregroundStyle(YMColor.muted)
                     Spacer()
                     Text("\(dateLabel) · \(timeLabel)")
-                        .font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.text)
+                        .ymFont(13, weight: .heavy).foregroundStyle(YMColor.text)
                 }
                 .padding(14)
                 .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -1417,10 +1421,10 @@ private struct ConfirmBookingSheet: View {
                 if let comp = composition {
                     HStack {
                         Text("Бронь")
-                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(YMColor.muted)
+                            .ymFont(13, weight: .semibold).foregroundStyle(YMColor.muted)
                         Spacer()
                         Text(comp)
-                            .font(.system(size: 13, weight: .heavy)).foregroundStyle(YMColor.text)
+                            .ymFont(13, weight: .heavy).foregroundStyle(YMColor.text)
                     }
                     .padding(14)
                     .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -1438,7 +1442,7 @@ private struct ConfirmBookingSheet: View {
 
                 if let e = error, !e.isEmpty {
                     Text(e)
-                        .font(.system(size: 13, weight: .semibold))
+                        .ymFont(13, weight: .semibold)
                         .foregroundStyle(YMColor.statusCancel)
                         .padding(.top, 18)
                 }
@@ -1454,14 +1458,14 @@ private struct ConfirmBookingSheet: View {
 
                 if atClient && !address.isComplete {
                     Text("Укажите улицу и номер дома — мастер приедет по этому адресу")
-                        .font(.system(size: 12.5))
+                        .ymFont(12.5)
                         .foregroundStyle(YMColor.muted)
                         .padding(.top, 8)
                 }
 
                 if locked && !confirming {
                     Text("Запись могла уйти — проверьте «Мои записи»")
-                        .font(.system(size: 12.5))
+                        .ymFont(12.5)
                         .foregroundStyle(YMColor.muted)
                         .padding(.top, 8)
                 }
@@ -1496,10 +1500,10 @@ private struct ConfirmBookingSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "location.fill")
-                    .font(.system(size: 12, weight: .bold))
+                    .ymFont(12, weight: .bold)
                     .foregroundStyle(YMColor.accent)
                 Text("Куда приехать")
-                    .font(.system(size: 13, weight: .heavy))
+                    .ymFont(13, weight: .heavy)
                     .foregroundStyle(YMColor.text)
             }
 
@@ -1512,7 +1516,7 @@ private struct ConfirmBookingSheet: View {
                                 onPickSaved(a)
                             } label: {
                                 Text(a.label?.isEmpty == false ? (a.label ?? "") : a.display)
-                                    .font(.system(size: 12.5, weight: .bold))
+                                    .ymFont(12.5, weight: .bold)
                                     .lineLimit(1)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 7)
@@ -1550,11 +1554,11 @@ private struct ConfirmBookingSheet: View {
     private var commentBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Комментарий мастеру")
-                .font(.system(size: 13, weight: .heavy))
+                .ymFont(13, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             TextField("Пожелания, важные детали", text: $comment, axis: .vertical)
                 .lineLimit(1...4)
-                .font(.system(size: 14.5))
+                .ymFont(14.5)
                 .foregroundStyle(YMColor.text)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -1562,7 +1566,7 @@ private struct ConfirmBookingSheet: View {
                 .disabled(!editable)
                 .ymMaxLength($comment, 300)
             Text("Необязательно · до 300 знаков")
-                .font(.system(size: 11.5))
+                .ymFont(11.5)
                 .foregroundStyle(YMColor.muted)
         }
         .padding(14)
@@ -1574,7 +1578,7 @@ private struct ConfirmBookingSheet: View {
         TextField(placeholder, text: text)
             .ymMaxLength(text, limit)
             .keyboardType(numeric ? .numbersAndPunctuation : .default)
-            .font(.system(size: 14.5))
+            .ymFont(14.5)
             .foregroundStyle(YMColor.text)
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -1641,28 +1645,28 @@ private struct SuccessBookingSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 56))
+                .ymFont(56)
                 .foregroundStyle(YMColor.statusDone)
                 .padding(.bottom, 6)
             Text("Вы записаны!")
-                .font(.system(size: 20, weight: .heavy))
+                .ymFont(20, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             // П-28.11: есть номер записи за день — показываем его (по нему
             // запись находят в заведении); нет — прежний номер заказа.
             if let n = info?.dailyNumber, n > 0 {
                 Text("Номер записи №\(n)")
-                    .font(.system(size: 15))
+                    .ymFont(15)
                     .foregroundStyle(YMColor.muted)
                     .padding(.top, 4)
             } else if orderId > 0 {
                 Text("Заказ №\(orderId)")
-                    .font(.system(size: 15))
+                    .ymFont(15)
                     .foregroundStyle(YMColor.muted)
                     .padding(.top, 4)
             }
             if let sum = summary {
                 Text(sum)
-                    .font(.system(size: 14, weight: .bold))
+                    .ymFont(14, weight: .bold)
                     .foregroundStyle(YMColor.text)
                     .multilineTextAlignment(.center)
                     .padding(.top, 4)

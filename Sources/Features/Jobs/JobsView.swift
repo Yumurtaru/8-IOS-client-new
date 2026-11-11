@@ -169,7 +169,7 @@ struct JobCard: View {
                 .lineLimit(2).multilineTextAlignment(.leading)
 
             Text(JobFormat.salary(job.salaryFrom, job.salaryTo))
-                .font(.system(size: 15, weight: .heavy)).foregroundStyle(YMColor.accent)
+                .ymFont(15, weight: .heavy).foregroundStyle(YMColor.accent)
 
             if let shop = job.shop, !shop.isEmpty {
                 Label(shop, systemImage: "storefront")
@@ -491,7 +491,7 @@ struct JobsEmptyState: View {
     let hint: String
     var body: some View {
         VStack(spacing: YMSpace.sm) {
-            Text(emoji).font(.system(size: 44))
+            Text(emoji).ymFont(44)
             Text(title).font(YMFont.title3).foregroundStyle(YMColor.text)
             Text(hint)
                 .font(YMFont.callout).foregroundStyle(YMColor.muted)
@@ -506,7 +506,7 @@ struct JobsErrorState: View {
     var onRetry: () -> Void
     var body: some View {
         VStack(spacing: YMSpace.md) {
-            Text("⚠️").font(.system(size: 44))
+            Text("⚠️").ymFont(44)
             Text("Не удалось загрузить").font(YMFont.title3).foregroundStyle(YMColor.text)
             // На «вы», как во всём приложении.
             Text("Проверьте соединение и попробуйте снова.")

@@ -142,6 +142,7 @@ struct ProfileView: View {
                         guestMenu
                     }
                 }
+                .ymReadableWidth()
                 .padding(.bottom, YMSpace.xxxl)
             }
             .background(YMColor.bg.ignoresSafeArea())
@@ -311,7 +312,7 @@ struct ProfileView: View {
                     .frame(width: 72, height: 72)
                     .shadow(color: YMPalette.gold.opacity(0.5), radius: 24, y: 10)
                 Text(avatarLetter)
-                    .font(.system(size: 28, weight: .heavy))
+                    .ymFont(28, weight: .heavy)
                     .foregroundStyle(YMPalette.goldInk)
                 // Паритет с Android: фото профиля (поле avatar, путь от корня сайта).
                 // Не загрузилось или его нет — остаётся буква на золотом круге.
@@ -329,15 +330,15 @@ struct ProfileView: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 Text(displayName)
-                    .font(.system(size: 22, weight: .heavy)).tracking(-0.4)
+                    .ymFont(22, weight: .heavy).tracking(-0.4)
                     .foregroundStyle(YMColor.text).lineLimit(1)
                 if let phone = profile?.phone, !phone.isEmpty {
-                    Text(phone).font(.system(size: 13.5)).foregroundStyle(YMColor.muted)
+                    Text(phone).ymFont(13.5).foregroundStyle(YMColor.muted)
                 }
                 if let city = session.cityName, !city.isEmpty {
                     HStack(spacing: 5) {
                         Text("📍")
-                        Text(city).font(.system(size: 12.5, weight: .bold))
+                        Text(city).ymFont(12.5, weight: .bold)
                     }
                     .foregroundStyle(YMColor.accent)
                     .padding(.top, 3)
@@ -374,7 +375,7 @@ struct ProfileView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .semibold))
+                    .ymFont(12, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
             }
             .padding(.horizontal, YMSpace.lg).padding(.vertical, YMSpace.md)
@@ -400,10 +401,10 @@ struct ProfileView: View {
     private func statCard(value: Int, label: String) -> some View {
         VStack(spacing: 2) {
             Text("\(value)")
-                .font(.system(size: 22, weight: .heavy))
+                .ymFont(22, weight: .heavy)
                 .foregroundStyle(YMColor.accent)
             Text(label)
-                .font(.system(size: 11.5))
+                .ymFont(11.5)
                 .foregroundStyle(YMColor.muted)
                 .multilineTextAlignment(.center)
         }
@@ -417,7 +418,7 @@ struct ProfileView: View {
     private var themeSwitcher: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Оформление")
-                .font(.system(size: 13, weight: .heavy))
+                .ymFont(13, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             YMSegmentedControl(options: ThemeOption.allCases.map { $0.title },
                                index: Binding(
@@ -521,16 +522,16 @@ struct ProfileView: View {
         Button(action: { Haptics.light(); action() }) {
             HStack(spacing: YMSpace.lg) {
                 Text(icon)
-                    .font(.system(size: 16))
+                    .ymFont(16)
                     .frame(width: 34, height: 34)
                     .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 Text(label)
-                    .font(.system(size: 14.5, weight: .semibold))
+                    .ymFont(14.5, weight: .semibold)
                     .foregroundStyle(danger ? YMColor.statusCancel : YMColor.text)
                 Spacer(minLength: 8)
                 if let badge {
                     Text(badge)
-                        .font(.system(size: 11, weight: .heavy))
+                        .ymFont(11, weight: .heavy)
                         .foregroundStyle(YMPalette.goldInk)
                         .frame(minWidth: 20, minHeight: 20)
                         .padding(.horizontal, 6)
@@ -538,7 +539,7 @@ struct ProfileView: View {
                 }
                 if chevron {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 13, weight: .semibold))
+                        .ymFont(13, weight: .semibold)
                         .foregroundStyle(YMColor.muted)
                 }
             }
@@ -581,7 +582,7 @@ struct ProfileView: View {
         Button { if !deleting { askDeleteAccount() } } label: {
             // Пока читаем баланс (до 4 с) — «Проверяем…», чтобы не жали второй раз.
             Text(deleting ? "Удаляем аккаунт…" : (checkingWallet ? "Проверяем…" : "Удалить аккаунт"))
-                .font(.system(size: 13, weight: .semibold))
+                .ymFont(13, weight: .semibold)
                 .foregroundStyle(YMColor.statusCancel)
         }
         .disabled(deleting || checkingWallet)
@@ -591,7 +592,7 @@ struct ProfileView: View {
     // ── Не залогинен ──
     private var loggedOut: some View {
         VStack(spacing: YMSpace.lg) {
-            Text("👤").font(.system(size: 48))
+            Text("👤").ymFont(48)
             Text("Вы не вошли").font(YMFont.title3).foregroundStyle(YMColor.text)
             Text("Войдите, чтобы видеть профиль, записи и избранное.")
                 .font(YMFont.callout).foregroundStyle(YMColor.muted).multilineTextAlignment(.center)

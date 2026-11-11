@@ -105,7 +105,7 @@ struct Chip: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 13.5, weight: .semibold))
+                .ymFont(13.5, weight: .semibold)
                 .foregroundStyle(active ? YMColor.onAccent : YMColor.text)
                 .padding(.horizontal, 15).padding(.vertical, 8)
                 .background(active ? YMColor.accent : YMColor.surface,

@@ -183,14 +183,14 @@ struct ReturnsView: View {
 
     private var errorState: some View {
         VStack(spacing: YMSpace.lg) {
-            Text("⚠️").font(.system(size: 44))
+            Text("⚠️").ymFont(44)
             Text("Не удалось загрузить возвраты")
                 .font(YMFont.title3).foregroundStyle(YMColor.text)
             Text("Проверьте соединение и попробуйте ещё раз.")
                 .font(YMFont.callout).foregroundStyle(YMColor.muted)
                 .multilineTextAlignment(.center)
             Button { Task { await vm.load() } } label: {
-                Text("Повторить").font(.system(size: 14.5, weight: .heavy)).foregroundStyle(YMColor.accent)
+                Text("Повторить").ymFont(14.5, weight: .heavy).foregroundStyle(YMColor.accent)
                     .padding(.horizontal, YMSpace.xxl).padding(.vertical, 12)
                     .background(YMColor.accent.opacity(0.14), in: Capsule())
             }
@@ -207,7 +207,7 @@ struct ReturnsView: View {
                 RoundedRectangle(cornerRadius: YMRadius.card, style: .continuous)
                     .fill(YMColor.surface2).frame(width: 96, height: 96)
                 Image(systemName: icon)
-                    .font(.system(size: 38, weight: .semibold))
+                    .ymFont(38, weight: .semibold)
                     .foregroundStyle(YMColor.accent)
             }
             Text(title).font(YMFont.title3).foregroundStyle(YMColor.text)
@@ -623,7 +623,7 @@ struct ReturnCreateView: View {
             ZStack {
                 Circle().fill(YMColor.statusDone.opacity(0.16)).frame(width: 96, height: 96)
                 Image(systemName: "checkmark")
-                    .font(.system(size: 40, weight: .heavy)).foregroundStyle(YMColor.statusDone)
+                    .ymFont(40, weight: .heavy).foregroundStyle(YMColor.statusDone)
             }
             Text("Заявка отправлена").font(YMFont.title3).foregroundStyle(YMColor.text)
             Text("Продавец рассмотрит возврат. Статус появится в списке возвратов.")
@@ -839,7 +839,7 @@ private struct ReturnQtyRow: View {
     @ViewBuilder private func stepper(canMinus: Bool, canPlus: Bool) -> some View {
         Button { Haptics.light(); onQty(snap(max(0, qty - step))) } label: {
             Image(systemName: "minus")
-                .font(.system(size: 14, weight: .bold))
+                .ymFont(14, weight: .bold)
                 .foregroundStyle(canMinus ? YMColor.accent : YMColor.muted)
                 .frame(width: 32, height: 32)
         }
@@ -851,7 +851,7 @@ private struct ReturnQtyRow: View {
             .frame(minWidth: 52)
         Button { Haptics.light(); onQty(snap(min(maxQty, qty + step))) } label: {
             Image(systemName: "plus")
-                .font(.system(size: 14, weight: .bold))
+                .ymFont(14, weight: .bold)
                 .foregroundStyle(canPlus ? YMColor.accent : YMColor.muted)
                 .frame(width: 32, height: 32)
         }
