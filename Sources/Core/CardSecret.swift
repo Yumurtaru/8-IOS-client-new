@@ -218,10 +218,12 @@ enum CardBarcode {
     private static let context = CIContext()
 
     /// QR, уровень коррекции M. Масштаб целым числом, на экране — .interpolation(.none).
-    static func qr(_ s: String) -> UIImage? {
+    /// `level` — уровень коррекции: "M" по умолчанию; "H" — когда в центр QR кладём значок
+    /// (закрытые ~20 % центра восстанавливаются; проверено декодированием в тесте Android).
+    static func qr(_ s: String, level: String = "M") -> UIImage? {
         let f = CIFilter.qrCodeGenerator()
         f.message = Data(s.utf8)
-        f.correctionLevel = "M"
+        f.correctionLevel = level
         return render(f.outputImage, scale: 10)
     }
     static func code128(_ s: String) -> UIImage? {
