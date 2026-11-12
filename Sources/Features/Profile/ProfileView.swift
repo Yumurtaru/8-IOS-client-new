@@ -63,6 +63,8 @@ struct ProfileView: View {
     @State private var favCount = 0
     @State private var bookingsCount = 0
     @State private var unreadNotifs = 0
+    /// Последние заказы для миниатюр в строке «Мои заказы» (из уже загружаемого списка, без нового запроса).
+    @State private var recentOrders: [Order] = []
     /// «Отправить посылку» (А79): кнопка — только если quote отвечает 200;
     /// «Мои посылки» — ещё и когда посылки уже были (раздел могли выключить).
     @State private var parcelCanSend = false
@@ -113,43 +115,65 @@ struct ProfileView: View {
                 VStack(spacing: 0) {
                     if session.isLoggedIn {
                         header
-                        if profileFailed && profile == nil {
-                            HStack(spacing: YMSpace.sm) {
-                                Text("Не удалось загрузить профиль. Проверьте связь.")
-                                    .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
-                                Spacer(minLength: 0)
-                                Button("Повторить") { Task { await load() } }
-                                    .font(YMFont.caption)
+                        // Светлый лист со скруглением сверху 38; пункты — белыми карточками.
+                        VStack(spacing: YMForm.cardGap) {
+                            if profileFailed && profile == nil {
+                                HStack(spacing: YMSpace.sm) {
+                                    Text("Не удалось загрузить профиль. Проверьте связь.")
+                                        .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                                    Spacer(minLength: 0)
+                                    Button("Повторить") { Task { await load() } }
+                                        .font(YMFont.caption)
+                                }
+                                .padding(.top, YMSpace.xs)
                             }
-                            .padding(.horizontal, YMSpace.xl)
-                            .padding(.top, YMSpace.xs)
+                            if let note = emailNote { emailNoteRow(note) }
+                            ordersCard
+                            // Карта клиента: тап открывает лист «Код для бонусов». Блок сам
+                            // ничего не рисует, если код не пришёл.
+                            if let code = profile?.clientCode {
+                                ClientCardBlock(code: code, balance: profile?.bonusBalance)
+                                LoyaltySpendDefaultToggle()
+                            }
+                            menu
+                            themeSwitcher
+                            deleteAccountButton
                         }
-                        if let note = emailNote { emailNoteRow(note) }
-                        // Карта клиента: штрихкод для кассы магазина. Блок сам
-                        // ничего не рисует, если код не пришёл или невалиден.
-                        if let code = profile?.clientCode {
-                            ClientCardBlock(code: code)
-                            LoyaltySpendDefaultToggle()
-                        }
-                        stats
-                        themeSwitcher
-                        menu
-                        deleteAccountButton
+                        .padding(.horizontal, YMForm.screenPadding)
+                        .padding(.top, 22)
+                        .padding(.bottom, YMSpace.xxxl)
+                        .frame(maxWidth: .infinity)
+                        .background(YMUi.screenBg, in: RoundedCorner(tl: YMForm.sheetRadius, tr: YMForm.sheetRadius))
                     } else {
                         loggedOut
                         // Паритет с Android: гостю доступны разделы, которым вход не
                         // нужен (оформление, подарочная карта, вакансии, избранное,
                         // настройки, поддержка). Раньше профиль гостя был тупиком.
-                        themeSwitcher
-                        guestMenu
+                        VStack(spacing: YMForm.cardGap) {
+                            themeSwitcher
+                            guestMenu
+                        }
+                        .padding(.horizontal, YMForm.screenPadding)
+                        .padding(.top, 22)
+                        .padding(.bottom, YMSpace.xxxl)
+                        .frame(maxWidth: .infinity)
+                        .background(YMUi.screenBg, in: RoundedCorner(tl: YMForm.sheetRadius, tr: YMForm.sheetRadius))
                     }
                 }
                 .ymReadableWidth()
-                .padding(.bottom, YMSpace.xxxl)
             }
-            .background(YMColor.bg.ignoresSafeArea())
+            // Чёрная шапка уходит под строку навигации; ниже — светлый фон.
+            .background(
+                ZStack(alignment: .top) {
+                    YMUi.screenBg
+                    YMUi.header.frame(height: 340)
+                }
+                .ignoresSafeArea()
+            )
             .navigationTitle("Профиль")
             .navigationBarTitleDisplayMode(.inline)
+            // Заголовок строки навигации скрыт: имя уже в шапке (на чёрном он был бы нечитаем).
+            .toolbar { ToolbarItem(placement: .principal) { Text("").accessibilityHidden(true) } }
             .navigationDestination(for: ProfileRoute.self) { route in
                 profileDestination(route)
             }
@@ -215,7 +239,7 @@ struct ProfileView: View {
                 profile = nil
                 // Счётчики прежнего аккаунта не должны показываться следующему,
                 // пока у него грузится профиль.
-                ordersCount = 0; favCount = 0; bookingsCount = 0; unreadNotifs = 0
+                ordersCount = 0; favCount = 0; bookingsCount = 0; unreadNotifs = 0; recentOrders = []
                 parcelCanSend = false; hasParcels = false
                 ParcelGate.reset()
                 courierHasRecord = false
@@ -304,17 +328,16 @@ struct ProfileView: View {
         }
     }
 
-    // ── Шапка: аватар 72 (золотой градиент), имя, телефон, город ──
+    // ── Шапка (редизайн, ТЗ 5.11): чёрная, аватар, бонусы плашкой, имя, телефон, карандаш ──
     private var header: some View {
-        HStack(spacing: YMSpace.lg) {
+        HStack(alignment: .center, spacing: YMSpace.lg) {
             ZStack {
                 Circle()
                     .fill(LinearGradient(colors: [YMPalette.gold, YMPalette.goldDeep],
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
-                    .frame(width: 72, height: 72)
-                    .shadow(color: YMPalette.gold.opacity(0.5), radius: 24, y: 10)
+                    .frame(width: 68, height: 68)
                 Text(avatarLetter)
-                    .ymFont(28, weight: .heavy)
+                    .ymFont(26, weight: .heavy)
                     .foregroundStyle(YMPalette.goldInk)
                 // Паритет с Android: фото профиля (поле avatar, путь от корня сайта).
                 // Не загрузилось или его нет — остаётся буква на золотом круге.
@@ -326,31 +349,45 @@ struct ProfileView: View {
                             Color.clear
                         }
                     }
-                    .frame(width: 72, height: 72)
+                    .frame(width: 68, height: 68)
                     .clipShape(Circle())
                 }
             }
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
+                if let b = profile?.bonusBalance {
+                    HStack(spacing: 4) {
+                        Image(systemName: "star.circle.fill").ymIcon(12, weight: .semibold)
+                        Text("\(Int(truncating: b as NSDecimalNumber)) бонусов").ymText(YMText.badge)
+                    }
+                    .foregroundStyle(YMPalette.goldInk)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(YMUi.accentFill, in: Capsule())
+                }
                 Text(displayName)
-                    .ymFont(22, weight: .heavy).tracking(-0.4)
-                    .foregroundStyle(YMColor.text).lineLimit(1)
+                    .ymText(YMText.sectionTitle)
+                    .foregroundStyle(YMUi.onHeader).lineLimit(1)
                 if let phone = profile?.phone, !phone.isEmpty {
-                    Text(phone).ymFont(13.5).foregroundStyle(YMColor.muted)
+                    Text(phone).ymText(YMText.description).foregroundStyle(YMUi.onHeader.opacity(0.7))
                 }
                 if let city = session.cityName, !city.isEmpty {
-                    HStack(spacing: 5) {
-                        Text("📍")
-                        Text(city).ymFont(12.5, weight: .bold)
-                    }
-                    .foregroundStyle(YMColor.accent)
-                    .padding(.top, 3)
+                    Text("📍 \(city)").ymText(YMText.caption).foregroundStyle(YMUi.onHeader.opacity(0.7))
                 }
             }
             Spacer(minLength: 0)
+            // Карандаш — то же действие, что строка «Редактировать профиль».
+            Button { Haptics.light(); path.append(ProfileRoute.editProfile) } label: {
+                Image(systemName: "pencil")
+                    .ymIcon(15, weight: .semibold)
+                    .foregroundStyle(YMUi.onHeader)
+                    .frame(width: YMForm.closeButton, height: YMForm.closeButton)
+                    .background(YMUi.onHeader.opacity(0.14), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Редактировать профиль")
         }
-        .padding(.horizontal, YMSpace.xl)
+        .padding(.horizontal, YMForm.screenPadding)
         .padding(.top, YMSpace.md)
-        .padding(.bottom, YMSpace.xs)
+        .padding(.bottom, 30)
     }
 
     // ── А114: почта не подтверждена / письма не доходят ──
@@ -381,15 +418,12 @@ struct ProfileView: View {
                     .foregroundStyle(YMColor.muted)
             }
             .padding(.horizontal, YMSpace.lg).padding(.vertical, YMSpace.md)
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+            .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, YMSpace.xl)
-        .padding(.top, YMSpace.sm)
     }
 
-    // ── Быстрые статы ──
+    // ── Быстрые статы (до редизайна; не используются — удалить на этапе 14) ──
     private var stats: some View {
         HStack(spacing: 10) {
             statCard(value: ordersCount, label: pluralOrders(ordersCount))
@@ -420,166 +454,209 @@ struct ProfileView: View {
     private var themeSwitcher: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Оформление")
-                .ymFont(13, weight: .heavy)
-                .foregroundStyle(YMColor.text)
+                .ymText(YMText.sectionTitle)
+                .foregroundStyle(YMUi.text)
             YMSegmentedControl(options: ThemeOption.allCases.map { $0.title },
                                index: Binding(
                                    get: { ThemeOption(storage: theme).index },
                                    set: { theme = ThemeOption(index: $0).storage }
                                ))
             Toggle("Новый вид корзины и оформления", isOn: $newOrderLook)
-                .ymFont(13.5)
+                .ymText(YMText.body)
                 .tint(YMColor.accent)
         }
-        .padding(14)
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
-        .padding(.horizontal, YMSpace.xl)
-        .padding(.top, YMSpace.lg)
+        .padding(YMForm.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+    }
+
+    // ── «Мои заказы»: строка + миниатюры последних заказов (логотипы заведений из уже загруженного списка) ──
+    private var ordersCard: some View {
+        card {
+            menuRow(icon: "bag", label: "Мои заказы", detail: ordersCount > 0 ? "\(ordersCount)" : nil) {
+                NavCoordinator.shared.revealForPush(closeAll: true) { DeepLinkRouter.shared.requestedTab = 3 }
+            }
+            if !recentOrders.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(recentOrders) { o in
+                        LogoBadge(url: API.imageURL(o.shopLogo),
+                                  letter: (o.shopName ?? "?").prefix(1).uppercased(), size: 44)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16).padding(.bottom, 14)
+                .accessibilityHidden(true)
+            }
+        }
     }
 
     // ── Программы и бонусы ──
     private var loyaltyMenu: some View {
-        VStack(spacing: 0) {
+        card {
             // Yumurta Plus и «Уровень лояльности» временно скрыты по требованию.
-            menuRow(icon: "👛", label: "Кошелёк") { path.append(ProfileRoute.wallet) }
+            menuRow(icon: "wallet.pass", label: "Кошелёк") { path.append(ProfileRoute.wallet) }
             divider
-            menuRow(icon: "📣", label: "Мои объявления") { path.append(ProfileRoute.myAds) }
+            menuRow(icon: "megaphone", label: "Мои объявления") { path.append(ProfileRoute.myAds) }
             divider
-            menuRow(icon: "💰", label: "Бонусы") { path.append(ProfileRoute.bonuses) }
+            menuRow(icon: "star.circle", label: "Бонусы") { path.append(ProfileRoute.bonuses) }
             divider
-            menuRow(icon: "🎁", label: "Подарочная карта") { path.append(ProfileRoute.gift) }
+            menuRow(icon: "gift", label: "Подарочная карта") { path.append(ProfileRoute.gift) }
             divider
-            menuRow(icon: "🤝", label: "Пригласить друга") { path.append(ProfileRoute.referral) }
+            menuRow(icon: "person.2", label: "Пригласить друга") { path.append(ProfileRoute.referral) }
             divider
-            menuRow(icon: "↩️", label: "Возвраты") { path.append(ProfileRoute.returns) }
+            menuRow(icon: "arrow.uturn.backward", label: "Возвраты") { path.append(ProfileRoute.returns) }
             divider
-            menuRow(icon: "💼", label: "Вакансии") { path.append(ProfileRoute.jobs) }
+            menuRow(icon: "briefcase", label: "Вакансии") { path.append(ProfileRoute.jobs) }
             divider
-            menuRow(icon: "📝", label: "Мои отклики") { path.append(ProfileRoute.applications) }
+            menuRow(icon: "doc.text", label: "Мои отклики") { path.append(ProfileRoute.applications) }
         }
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
-        .padding(.horizontal, YMSpace.xl)
-        .padding(.top, YMSpace.lg)
     }
 
     // ── Меню ──
     private var menu: some View {
-        VStack(spacing: YMSpace.lg) {
-            loyaltyMenu
-            if parcelSendShown || parcelCanSend || hasParcels || courierShown { parcelMenu }
-            VStack(spacing: 0) {
-                menuRow(icon: "✏️", label: "Редактировать профиль") { path.append(ProfileRoute.editProfile) }
+        VStack(spacing: YMForm.cardGap) {
+            card {
+                menuRow(icon: "mappin.and.ellipse", label: "Адреса доставки", action: { openAddresses() }, trailing: {
+                    Button { Haptics.light(); openAddresses() } label: {
+                        Text("Добавить").ymText(YMText.badge)
+                            .foregroundStyle(YMUi.text)
+                            .padding(.horizontal, 10).padding(.vertical, 5)
+                            .background(YMUi.segmentBg, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                })
                 divider
-                menuRow(icon: "📍", label: "Адреса доставки") { openAddresses() }
-                divider
-                menuRow(icon: "🔔", label: "Уведомления", badge: unreadNotifs > 0 ? "\(unreadNotifs)" : nil) {
+                menuRow(icon: "bell", label: "Уведомления", badge: unreadNotifs > 0 ? "\(unreadNotifs)" : nil) {
                     path.append(ProfileRoute.notifications)
                 }
                 divider
-                menuRow(icon: "📅", label: "Мои записи") { openBookings() }
+                menuRow(icon: "calendar", label: "Мои записи", detail: bookingsCount > 0 ? "\(bookingsCount)" : nil) { openBookings() }
                 divider
                 // «Избранное» переехало сюда из нижней вкладки: её место занял
                 // раздел объявлений.
-                menuRow(icon: "❤️", label: "Избранное") { path.append(ProfileRoute.favorites) }
-                divider
-                menuRow(icon: "⚙️", label: "Настройки") { path.append(ProfileRoute.settings) }
-                divider
-                menuRow(icon: "🛟", label: "Поддержка") { path.append(ProfileRoute.support) }
-                divider
-                menuRow(icon: "🚪", label: "Выйти", danger: true, chevron: false) { showLogoutConfirm = true }
+                menuRow(icon: "heart", label: "Избранное", detail: favCount > 0 ? "\(favCount)" : nil) { path.append(ProfileRoute.favorites) }
             }
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
-            .padding(.horizontal, YMSpace.xl)
+            loyaltyMenu
+            if parcelSendShown || parcelCanSend || hasParcels || courierShown { parcelMenu }
+            card {
+                menuRow(icon: "questionmark.circle", label: "Частые вопросы") { path.append(ProfileRoute.support) }
+                divider
+                menuRow(icon: "doc.plaintext", label: "Правовые документы") { path.append(ProfileRoute.settings) }
+                divider
+                menuRow(icon: "pencil", label: "Редактировать профиль") { path.append(ProfileRoute.editProfile) }
+                divider
+                menuRow(icon: "gearshape", label: "Настройки") { path.append(ProfileRoute.settings) }
+                divider
+                menuRow(icon: "lifepreserver", label: "Поддержка") { path.append(ProfileRoute.support) }
+                divider
+                menuRow(icon: "rectangle.portrait.and.arrow.right", label: "Выйти", danger: true, chevron: false) { showLogoutConfirm = true }
+            }
         }
     }
 
     // ── Посылки (А79): видно, только если раздел включён или посылки уже были ──
     // А97: здесь же «Стать курьером»; «Отправить посылку» — по features.parcels (неизвестно — как раньше).
     private var parcelMenu: some View {
-        VStack(spacing: 0) {
+        card {
             if parcelSendShown {
-                menuRow(icon: "📦", label: "Отправить посылку") { path.append(ParcelRoute.send(nil)) }
+                menuRow(icon: "shippingbox", label: "Отправить посылку") { path.append(ParcelRoute.send(nil)) }
             }
             if parcelCanSend || hasParcels || parcelSendShown {
                 if parcelSendShown { divider }
-                menuRow(icon: "🚚", label: "Мои посылки") { path.append(ParcelRoute.list(canSend: parcelSendShown)) }
+                menuRow(icon: "truck.box", label: "Мои посылки") { path.append(ParcelRoute.list(canSend: parcelSendShown)) }
             }
             if courierShown {
                 if parcelSendShown || parcelCanSend || hasParcels { divider }
-                menuRow(icon: "🛵", label: "Стать курьером") { path.append(ProfileRoute.courier) }
+                menuRow(icon: "bicycle", label: "Стать курьером") { path.append(ProfileRoute.courier) }
             }
         }
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
-        .padding(.horizontal, YMSpace.xl)
+    }
+
+    /// Белая карточка со строками.
+    private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(spacing: 0) { content() }
+            .frame(maxWidth: .infinity)
+            .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
     }
 
     private var divider: some View {
-        Rectangle().fill(YMColor.hairline).frame(height: 1).padding(.leading, 64)
+        Rectangle().fill(YMColor.hairline).frame(height: 1).padding(.leading, 62)
     }
 
-    private func menuRow(icon: String, label: String, badge: String? = nil,
+    private func menuRow(icon: String, label: String, badge: String? = nil, detail: String? = nil,
                          danger: Bool = false, chevron: Bool = true,
                          action: @escaping () -> Void) -> some View {
-        Button(action: { Haptics.light(); action() }) {
-            HStack(spacing: YMSpace.lg) {
-                Text(icon)
-                    .ymFont(16)
-                    .frame(width: 34, height: 34)
-                    .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                Text(label)
-                    .ymFont(14.5, weight: .semibold)
-                    .foregroundStyle(danger ? YMColor.statusCancel : YMColor.text)
-                Spacer(minLength: 8)
-                if let badge {
-                    Text(badge)
-                        .ymFont(11, weight: .heavy)
-                        .foregroundStyle(YMPalette.goldInk)
-                        .frame(minWidth: 20, minHeight: 20)
-                        .padding(.horizontal, 6)
-                        .background(YMColor.accent, in: Capsule())
+        menuRow(icon: icon, label: label, badge: badge, detail: detail, danger: danger, chevron: chevron,
+                action: action, trailing: { EmptyView() })
+    }
+
+    private func menuRow<Trailing: View>(icon: String, label: String, badge: String? = nil, detail: String? = nil,
+                                         danger: Bool = false, chevron: Bool = true,
+                                         action: @escaping () -> Void,
+                                         @ViewBuilder trailing: () -> Trailing) -> some View {
+        HStack(spacing: 0) {
+            Button(action: { Haptics.light(); action() }) {
+                HStack(spacing: YMSpace.md) {
+                    Image(systemName: icon)
+                        .ymIcon(17, weight: .regular)
+                        .foregroundStyle(danger ? YMColor.statusCancel : YMUi.text)
+                        .frame(width: 30, height: 30)
+                    Text(label)
+                        .ymText(YMText.body)
+                        .foregroundStyle(danger ? YMColor.statusCancel : YMUi.text)
+                    Spacer(minLength: 8)
+                    if let detail {
+                        Text(detail).ymText(YMText.description).foregroundStyle(YMUi.textSecondary)
+                    }
+                    if let badge {
+                        Text(badge)
+                            .ymText(YMText.badge)
+                            .foregroundStyle(YMPalette.goldInk)
+                            .frame(minWidth: 20, minHeight: 20)
+                            .padding(.horizontal, 6)
+                            .background(YMColor.accent, in: Capsule())
+                    }
                 }
-                if chevron {
-                    Image(systemName: "chevron.right")
-                        .ymIcon(13, weight: .semibold)
-                        .foregroundStyle(YMColor.muted)
-                }
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 16).padding(.vertical, 13)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            trailing()
+            if chevron {
+                Image(systemName: "chevron.right")
+                    .ymIcon(13, weight: .semibold)
+                    .foregroundStyle(YMUi.textSecondary)
+                    .padding(.leading, 8)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 16).padding(.vertical, 13)
     }
 
     // ── Меню гостя: разделы без входа (как в Android) ──
     private var guestMenu: some View {
-        VStack(spacing: 0) {
+        card {
             // А97: «Отправить посылку» и «Стать курьером» — когда сервер их включил; сначала вход.
             if features.current.parcels == true {
-                menuRow(icon: "📦", label: "Отправить посылку") { afterAuth = .parcel; path.append(ProfileRoute.auth) }
+                menuRow(icon: "shippingbox", label: "Отправить посылку") { afterAuth = .parcel; path.append(ProfileRoute.auth) }
                 divider
             }
             if features.current.courierSignup == true {
-                menuRow(icon: "🛵", label: "Стать курьером") { afterAuth = .courier; path.append(ProfileRoute.auth) }
+                menuRow(icon: "bicycle", label: "Стать курьером") { afterAuth = .courier; path.append(ProfileRoute.auth) }
                 divider
             }
-            menuRow(icon: "🎁", label: "Подарочная карта") { path.append(ProfileRoute.gift) }
+            menuRow(icon: "gift", label: "Подарочная карта") { path.append(ProfileRoute.gift) }
             divider
-            menuRow(icon: "💼", label: "Вакансии") { path.append(ProfileRoute.jobs) }
+            menuRow(icon: "briefcase", label: "Вакансии") { path.append(ProfileRoute.jobs) }
             divider
-            menuRow(icon: "❤️", label: "Избранное") { path.append(ProfileRoute.favorites) }
+            menuRow(icon: "heart", label: "Избранное") { path.append(ProfileRoute.favorites) }
             divider
-            menuRow(icon: "⚙️", label: "Настройки") { path.append(ProfileRoute.settings) }
+            menuRow(icon: "questionmark.circle", label: "Частые вопросы") { path.append(ProfileRoute.support) }
             divider
-            menuRow(icon: "🛟", label: "Поддержка") { path.append(ProfileRoute.support) }
+            menuRow(icon: "doc.plaintext", label: "Правовые документы") { path.append(ProfileRoute.settings) }
+            divider
+            menuRow(icon: "gearshape", label: "Настройки") { path.append(ProfileRoute.settings) }
+            divider
+            menuRow(icon: "lifepreserver", label: "Поддержка") { path.append(ProfileRoute.support) }
         }
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
-        .padding(.horizontal, YMSpace.xl)
-        .padding(.top, YMSpace.lg)
     }
 
     // ── Удаление аккаунта ──
@@ -591,16 +668,16 @@ struct ProfileView: View {
                 .foregroundStyle(YMColor.statusCancel)
         }
         .disabled(deleting || checkingWallet)
-        .padding(.top, YMSpace.xl)
+        .padding(.top, YMSpace.md)
     }
 
     // ── Не залогинен ──
     private var loggedOut: some View {
         VStack(spacing: YMSpace.lg) {
             Text("👤").ymFont(48)
-            Text("Вы не вошли").font(YMFont.title3).foregroundStyle(YMColor.text)
+            Text("Вы не вошли").ymText(YMText.sectionTitle).foregroundStyle(YMUi.onHeader)
             Text("Войдите, чтобы видеть профиль, записи и избранное.")
-                .font(YMFont.callout).foregroundStyle(YMColor.muted).multilineTextAlignment(.center)
+                .ymText(YMText.description).foregroundStyle(YMUi.onHeader.opacity(0.7)).multilineTextAlignment(.center)
                 .padding(.horizontal, YMSpace.xxxl)
             Button { Haptics.light(); path.append(ProfileRoute.auth) } label: {
                 Text("Войти в аккаунт").frame(maxWidth: .infinity)
@@ -610,7 +687,8 @@ struct ProfileView: View {
             .padding(.top, YMSpace.md)
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 40)
+        .padding(.top, 24)
+        .padding(.bottom, 34)
     }
 
     // ── Actions ──
@@ -748,6 +826,7 @@ struct ProfileView: View {
             bookingsCount = appts.count
         }
         if let ordersPage {
+            recentOrders = Array(ordersPage.items.filter { $0.isAppointment != true }.prefix(5))
             ordersCount = Self.ordersTotal(ordersPage, appointments: appts?.count)
         }
         let notifPage = await notifReq

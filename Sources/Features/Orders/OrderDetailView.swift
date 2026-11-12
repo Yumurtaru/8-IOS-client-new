@@ -460,7 +460,7 @@ struct OrderDetailView: View {
         // Комментарий к отзыву многострочный: «Ввод» — новая строка, клавиатуру
         // было не убрать, и она закрывала «Отправить отзыв» и оценку. Теперь жестом.
         .scrollDismissesKeyboard(.interactively)
-        .background(YMColor.bg.ignoresSafeArea())
+        .background(YMUi.screenBg.ignoresSafeArea())
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -615,7 +615,7 @@ struct OrderDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
     }
 
     /// Онлайн-оплата: тип оплаты online, заказ не отменён/не завершён.
@@ -739,7 +739,7 @@ struct OrderDetailView: View {
             }
         }
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
     }
 
     private var etaLine: String {
@@ -808,7 +808,7 @@ struct OrderDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
     }
 
     /// Шаги таймлайна с их номером в OrderFlow.steps (номер нужен для времени и
@@ -906,7 +906,7 @@ struct OrderDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
     }
 
     /// Строка про сдачу: число → «Сдача с N ₽», иной текст → «Сдача: …», пусто → nil.
@@ -958,7 +958,7 @@ struct OrderDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
     }
 
     private func changeLineText(_ l: OrderChangeLine) -> String {
@@ -1017,7 +1017,7 @@ struct OrderDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
         .overlay(RoundedRectangle(cornerRadius: YMRadius.card, style: .continuous)
             .strokeBorder(YMColor.accent.opacity(0.35), lineWidth: 1))
     }
@@ -1087,7 +1087,7 @@ struct OrderDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
     }
 
     /// Блюда заказа для «понравилось» (без повторов по product_id).
@@ -1151,7 +1151,7 @@ struct OrderDetailView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
-        .ymCard(radius: YMRadius.card)
+        .ymCard(radius: YMForm.cardRadius)
     }
 
     // MARK: Кнопки действий

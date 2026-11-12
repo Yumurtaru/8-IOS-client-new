@@ -345,7 +345,7 @@ struct OrdersView: View {
                 .ymReadableWidth()
                 .padding(.bottom, YMSpace.xxxl)
             }
-            .background(YMColor.bg.ignoresSafeArea())
+            .background(YMUi.screenBg.ignoresSafeArea())
             .navigationTitle("Заказы")
             .navigationBarTitleDisplayMode(.large)
             // Гость: обновление жестом слало запрос без входа (401).
@@ -462,7 +462,7 @@ struct OrdersView: View {
                                 : "Завершённые заказы будут храниться здесь.")
                 // Новый покупатель (заказов ещё нет вовсе): раньше экран советовал
                 // «оформите заказ», но вёл в никуда — даём путь в каталог.
-                if vm.orders.isEmpty && !vm.loadFailed {
+                if !vm.loadFailed {
                     Button { Haptics.light(); DeepLinkRouter.shared.requestedTab = 0 } label: {
                         Text("Перейти в каталог")
                     }
@@ -587,7 +587,12 @@ private struct OrderCard: View {
     var body: some View {
         Button(action: { Haptics.light(); onTap() }) {
             VStack(alignment: .leading, spacing: YMSpace.md) {
-                // ── Верх: лого + название/№ + сумма ──
+                // ── Дата и время заказа (редизайн, этап 11) ──
+                let when = Self.formatOrderWhen(order.createdAt)
+                if !when.isEmpty {
+                    Text(when).ymText(YMText.caption).foregroundStyle(YMUi.textSecondary)
+                }
+                // ── Верх: лого (миниатюра заведения; фото состава в списке не приходят) + название/№ + сумма ──
                 HStack(spacing: YMSpace.md) {
                     LogoBadge(url: API.imageURL(order.shopLogo),
                               letter: (order.shopName ?? "?").prefix(1).uppercased(),
@@ -631,7 +636,7 @@ private struct OrderCard: View {
             .padding(YMSpace.lg)
         }
         .buttonStyle(CardPressStyle())
-        .ymCard(radius: YMRadius.card)
+        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(a11yText)
     }
