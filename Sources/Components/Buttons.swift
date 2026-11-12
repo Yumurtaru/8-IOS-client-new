@@ -3,23 +3,24 @@ import SwiftUI
 // Primary кнопка — YMPrimaryButtonStyle уже в DesignSystem.swift.
 // Здесь — secondary (обводка) и ghost (текст) в едином стиле токенов.
 
-/// Вторичная кнопка: поверхность surface2 + hairline, текст акцентом.
+/// Вторичная кнопка (редизайн, этап 3): светло-серая, тёмный текст, круглые края, высота 48.
+/// В паре стоит слева от главной.
 struct YMSecondaryButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(YMFont.headline)
+            .font(YMFont.golos(15, .semibold, relativeTo: .subheadline).monospacedDigit())
             .lineLimit(2)
             .minimumScaleFactor(0.8)
-            .foregroundStyle(YMColor.accent)
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous)
-                    .strokeBorder(YMColor.accent.opacity(0.35), lineWidth: 1)
-            )
-            .scaleEffect(configuration.isPressed && !reduceMotion ? YMMotion.pressScale : 1)
-            .animation(YMMotion.adaptive(YMMotion.snappy, reduceMotion: reduceMotion), value: configuration.isPressed)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(isEnabled ? YMUi.text : YMUi.disabledText)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, minHeight: YMForm.buttonHeight)
+            .background(isEnabled ? YMUi.segmentBg : YMUi.disabledBg, in: Capsule())
+            .contentShape(Capsule())
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: YMDur.press), value: configuration.isPressed)
     }
 }
 

@@ -336,19 +336,26 @@ struct YMCard: ViewModifier {
 }
 
 /// Золотая кнопка действия с лёгким scale при нажатии и haptic.
+/// Главная кнопка (редизайн, этап 3 — ТЗ 12.11.2026, раздел 4): фирменное золото, полностью круглые
+/// края, высота 48 (растёт при крупном тексте), текст Golos 15 с цифрами одной ширины (суммы).
+/// Без свечения — тень по ТЗ только под фото и плавающей кнопкой. Нажатие — короткое сжатие (0,1 с).
+/// Неактивная (`.disabled`) — серая с серым текстом. Подпись и действие задаёт экран, как и раньше.
 struct YMPrimaryButtonStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(YMFont.headline)
+            .font(YMFont.golos(15, .semibold, relativeTo: .subheadline).monospacedDigit())
             .lineLimit(2)
             .minimumScaleFactor(0.8)
-            .foregroundStyle(YMColor.onAccent)
-            .frame(maxWidth: .infinity, minHeight: 54)
-            .background(YMColor.accent, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
-            .shadow(color: YMPalette.gold.opacity(0.5), radius: 30, y: 8)
-            .scaleEffect(configuration.isPressed && !reduceMotion ? YMMotion.pressScale : 1)
-            .animation(YMMotion.adaptive(YMMotion.snappy, reduceMotion: reduceMotion), value: configuration.isPressed)
+            .multilineTextAlignment(.center)
+            .foregroundStyle(isEnabled ? YMColor.onAccent : YMUi.disabledText)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, minHeight: YMForm.buttonHeight)
+            .background(isEnabled ? YMUi.accentFill : YMUi.disabledBg, in: Capsule())
+            .contentShape(Capsule())
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .animation(reduceMotion ? nil : .easeOut(duration: YMDur.press), value: configuration.isPressed)
     }
 }
 

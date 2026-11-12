@@ -124,6 +124,7 @@ struct YMSegmentedControl: View {
     let options: [String]
     @Binding var index: Int
     @Namespace private var ns
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 4) {
@@ -131,24 +132,29 @@ struct YMSegmentedControl: View {
                 let active = i == index
                 Button {
                     Haptics.selection()
-                    withAnimation(YMMotion.snappy) { index = i }
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: YMDur.tabSwitch)) { index = i }
                 } label: {
+                    // Редизайн, этап 3: серая подложка, выбранное — на белой плашке (как YMSegmented).
                     Text(options[i])
-                        .font(YMFont.subhead)
-                        .foregroundStyle(active ? YMColor.text : YMColor.muted)
+                        .font(YMFont.styled(.subhead, active ? .semibold : .medium))
+                        .foregroundStyle(YMUi.text)
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity, minHeight: 38)
                         .background {
                             if active {
-                                RoundedRectangle(cornerRadius: YMRadius.control - 3, style: .continuous)
-                                    .fill(YMColor.surface)
+                                Capsule()
+                                    .fill(YMUi.segmentSelected)
+                                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
                                     .matchedGeometryEffect(id: "seg", in: ns)
                             }
                         }
+                        .contentShape(Capsule())
+                        .accessibilityAddTraits(active ? .isSelected : [])
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(4)
-        .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
+        .background(YMUi.segmentBg, in: Capsule())
     }
 }

@@ -22,27 +22,32 @@ struct YMSegmented<Option: Hashable>: View {
                 let active = opt == selection
                 Button {
                     Haptics.selection()
-                    withAnimation(YMMotion.adaptive(YMMotion.snappy, reduceMotion: reduceMotion)) {
+                    withAnimation(reduceMotion ? nil : .easeInOut(duration: YMDur.tabSwitch)) {
                         selection = opt
                     }
                 } label: {
+                    // Редизайн, этап 3 (ТЗ, раздел 4): серая подложка, выбранное — на белой плашке,
+                    // плашка плавно переезжает (0,2 с). Подписи и выбор — прежние.
                     Text(title(opt))
-                        .font(YMFont.subhead)
-                        .foregroundStyle(active ? YMColor.onAccent : YMColor.muted)
+                        .font(YMFont.styled(.subhead, active ? .semibold : .medium))
+                        .foregroundStyle(YMUi.text)
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity, minHeight: 38)
                         .background {
                             if active {
-                                RoundedRectangle(cornerRadius: YMRadius.control - 3, style: .continuous)
-                                    .fill(YMColor.accent)
+                                Capsule()
+                                    .fill(YMUi.segmentSelected)
+                                    .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
                                     .matchedGeometryEffect(id: "ymseg", in: ns)
                             }
                         }
-                        .contentShape(Rectangle())
+                        .contentShape(Capsule())
+                        .accessibilityAddTraits(active ? .isSelected : [])
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(4)
-        .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
+        .background(YMUi.segmentBg, in: Capsule())
     }
 }

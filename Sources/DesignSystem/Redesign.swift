@@ -76,6 +76,9 @@ extension View {
 /// Цвета редизайна. Акцент — фирменное золото Yumurta (решение владельца 12.11.2026):
 /// `YMColor.accent` / `YMColor.onAccent` (на золоте — тёмный текст). Тёмная тема сохранена.
 enum YMUi {
+    /// Заливка главной кнопки: фирменное золото в обеих темах (тёмный текст `YMColor.onAccent` поверх,
+    /// контраст ≈ 10:1). Для золотого ТЕКСТА на светлом фоне остаётся более тёмный `YMColor.accent`.
+    static var accentFill: Color      { YMPalette.gold }
     static var screenBg: Color        { .init(light: Color(hex: "#F2F2F4"), dark: Color(hex: "#0E0E10")) }
     static var card: Color            { .init(light: Color(hex: "#FFFFFF"), dark: Color(hex: "#1A1A1D")) }
     /// Шапка и профиль — чёрные в обеих темах.
