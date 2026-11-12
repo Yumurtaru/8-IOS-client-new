@@ -56,7 +56,7 @@ extension View {
             .scaleEffect(active && !reduceMotion ? 0.94 : 1)
             .clipShape(YMBehindClip(radius: active && !reduceMotion ? YMForm.sheetRadius : 0,
                                     outset: active && !reduceMotion ? 0 : 2000))
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: active)
+            .animation(reduceMotion ? nil : .easeInOut(duration: YMDur.sheet), value: active)
     }
 }
 

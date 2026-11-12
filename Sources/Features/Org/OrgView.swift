@@ -312,6 +312,9 @@ struct OrgView: View {
     @Environment(\.ymNestedPresentation) private var nested
     @State private var localCart = false
     @State private var localChat = false
+    /// Кнопка «Наверх»: прокручено дальше экрана / счётчик нажатий.
+    @State private var showTop = false
+    @State private var topTick = 0
 
     private let heroHeight: CGFloat = 308
 
@@ -370,6 +373,7 @@ struct OrgView: View {
     // MARK: Content (parallax hero + sheet)
 
     private var content: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(spacing: 0) {
                 // Параллакс-hero: тянется при оттягивании вниз, уезжает вверх при скролле.
@@ -396,13 +400,19 @@ struct OrgView: View {
                     .offset(y: reduceMotion ? -min(0, minY) : (minY > 0 ? -minY : -minY * 0.5))
                 }
                 .frame(height: heroHeight)
+                .id("orgTop")
 
                 sheet
                     .padding(.top, -34)   // sheet поднимается на hero (нахлёст r28)
             }
+            .ymTrackScrollFar(space: "scroll", isFar: $showTop)
         }
         .coordinateSpace(name: "scroll")
         .ignoresSafeArea(edges: .top)
+        .onChange(of: topTick) { _ in
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { proxy.scrollTo("orgTop", anchor: .top) }
+        }
+        }
     }
 
     private var seedCover: String? { vm.seed?.cover ?? vm.seed?.banner ?? vm.seed?.logo }
@@ -845,13 +855,35 @@ struct OrgView: View {
             }
             .padding(.horizontal, YMSpace.xl)
 
-            if cart.count > 0 {
-                StickyCartBar(count: cart.count, total: cart.total) {
-                    // Открыть глобальный флоу корзины (Корзина → Оформление → Успех).
-                    if nested { localCart = true } else { coord.openCart() }
+            // Плавающая корзина-пилюля по центру; «Наверх» справа на её линии (ниже чат-FAB).
+            let narrow = UIScreen.main.bounds.width < 360
+            VStack(alignment: .trailing, spacing: 12) {
+                if showTop && narrow {
+                    // Узкий экран: «Наверх» над пилюлей, как чат.
+                    ScrollTopButton { topTick += 1 }
+                        .padding(.trailing, YMSpace.xl)
+                        .transition(.opacity)
                 }
-                .padding(.bottom, 8)
+            ZStack(alignment: .trailing) {
+                if cart.count > 0 {
+                    StickyCartBar(count: cart.count, total: cart.total, lines: cart.lines) {
+                        // Открыть глобальный флоу корзины (Корзина → Оформление → Успех).
+                        if nested { localCart = true } else { coord.openCart() }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+                }
+                if showTop && !narrow {
+                    ScrollTopButton { topTick += 1 }
+                        .padding(.trailing, YMSpace.xl)
+                        .transition(.opacity)
+                }
             }
+            .frame(maxWidth: .infinity)
+            }
+            .padding(.bottom, 8)
+            .animation(reduceMotion ? nil : .easeOut(duration: YMDur.floatingCart), value: cart.count > 0)
+            .animation(reduceMotion ? nil : .easeOut(duration: YMDur.floatingCart), value: showTop)
         }
         // Корзина и чаты, когда заведение открыто в шторке (см. nested).
         // Висят на нижней панели, а не на корне: там уже шторка входа.

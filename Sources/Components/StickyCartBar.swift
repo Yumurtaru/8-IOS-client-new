@@ -1,19 +1,26 @@
 import SwiftUI
 
-/// Плавающая золотая корзина внизу экрана организации (56pt):
-/// «Корзина · N блюд» слева, сумма на тёмной плашке справа. Золотое свечение,
-/// лёгкий scale при нажатии. Деньги — Decimal через Money.format.
+/// Плавающая корзина (ТЗ 5.7): золотая капсула по центру внизу, не на всю ширину.
+/// Слева — до трёх круглых миниатюр последних добавленных товаров стопкой (30 pt, белая
+/// обводка 2, перекрытие −10), справа — «Корзина · N» и сумма. Деньги — Decimal.
 ///
-/// Появляется только когда в корзине есть позиции (count > 0).
+/// Появляется только когда в корзине есть позиции (решает вызывающий: count > 0).
+/// Появление/исчезновение (снизу, 0,3 с) задаёт вызывающий через `.transition`.
 struct StickyCartBar: View {
     /// Количество позиций (Cart.count).
     let count: Int
     /// Сумма корзины (Decimal — деньги только Decimal).
     let total: Decimal
+    /// Позиции корзины (для миниатюр; берутся последние три). Пусто — миниатюр нет.
+    var lines: [CartLine] = []
     var action: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var pressed = false
+    @State private var myCenter: CGPoint?
+
+    private let thumb: CGFloat = 30
+    private let overlap: CGFloat = 10
 
     // Склонение «товар / товара / товаров». Паритет с Android: «блюд» было
     // неверно у магазина, аптеки или цветочного — плашка одна на все заведения.
@@ -26,50 +33,89 @@ struct StickyCartBar: View {
         return "товаров"
     }
 
+    private var recent: [CartLine] { Array(lines.suffix(3)) }
+
     var body: some View {
         Button {
             Haptics.medium()
             action()
         } label: {
-            HStack(spacing: YMSpace.md) {
-                Image(systemName: "bag.fill")
-                    .ymIcon(16, weight: .semibold)
-                    .accessibilityHidden(true)
-                Text("Корзина · \(count) \(itemsWord)")
-                    .ymFont(16, weight: .heavy)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .ymNumeric(count)
-                Spacer(minLength: YMSpace.md)
-                Text(Money.format(total))
-                    .ymFont(15, weight: .heavy)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                    .foregroundStyle(Color(hex: "#F5D98A"))
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Color(hex: "#1A1206"), in: Capsule())
-                    .ymNumeric(total)
+            HStack(spacing: 10) {
+                if recent.isEmpty {
+                    Image(systemName: "bag.fill")
+                        .ymIcon(18, weight: .semibold)
+                        .accessibilityHidden(true)
+                } else {
+                    thumbs
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Корзина · \(count)")
+                        .ymFont(11, weight: .semibold)
+                        .lineLimit(1)
+                        .opacity(0.7)
+                        .ymNumeric(count)
+                    Text(Money.format(total))
+                        .ymText(YMText.button)
+                        .lineLimit(1)
+                        .ymNumeric(total)
+                }
             }
             .foregroundStyle(YMColor.onAccent)
-            .padding(.horizontal, YMSpace.lg)
-            .frame(height: 56)
-            .frame(maxWidth: .infinity)
-            .ymFloatingSurface(RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous), fill: YMColor.accent)
-            .shadow(color: YMPalette.gold.opacity(0.5), radius: 30, y: 8)
-            .ymBumpGloss(trigger: total, radius: YMRadius.control)
+            .padding(.leading, 10)
+            .padding(.trailing, 18)
+            .frame(height: 52)
+            .background(YMUi.accentFill, in: Capsule())
+            .shadow(color: Color.black.opacity(0.18), radius: 14, y: 5)
+            .ymBumpGloss(trigger: total, radius: 26)
             .scaleEffect(pressed && !reduceMotion ? YMMotion.pressScale : 1)
+            .background(
+                GeometryReader { g in
+                    Color.clear
+                        .onAppear { let c = Self.center(g); myCenter = c; YMFlightHost.cartPillCenter = c }
+                        .onChange(of: g.size) { _ in let c = Self.center(g); myCenter = c; YMFlightHost.cartPillCenter = c }
+                }
+            )
+            .onDisappear {
+                // Сбрасываем только свой центр: центр новой пилюли не трогаем.
+                if YMFlightHost.cartPillCenter == myCenter { YMFlightHost.cartPillCenter = nil }
+            }
         }
         .buttonStyle(.plain)
         .simultaneousGesture(
             DragGesture(minimumDistance: 0)
-                .onChanged { _ in if !pressed { withAnimation(YMMotion.snappy) { pressed = true } } }
-                .onEnded   { _ in withAnimation(YMMotion.snappy) { pressed = false } }
+                .onChanged { _ in if !pressed { withAnimation(.easeOut(duration: YMDur.press)) { pressed = true } } }
+                .onEnded   { _ in withAnimation(.easeOut(duration: YMDur.press)) { pressed = false } }
         )
-        .padding(.horizontal, YMSpace.xl)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Корзина, \(count) \(itemsWord), \(Money.format(total))")
+        .accessibilityLabel("Корзина: \(count) \(itemsWord) на сумму \(Money.format(total))")
         .accessibilityHint("Открыть корзину")
         .accessibilityAddTraits(.isButton)
+    }
+
+    private static func center(_ g: GeometryProxy) -> CGPoint {
+        let f = g.frame(in: .global)
+        return CGPoint(x: f.midX, y: f.midY)
+    }
+
+    /// Стопка миниатюр: новая — справа и сверху; появляется масштабом (при Reduce Motion — без анимации).
+    private var thumbs: some View {
+        let items = recent
+        let width = thumb + CGFloat(max(0, items.count - 1)) * (thumb - overlap)
+        return ZStack(alignment: .leading) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { i, line in
+                PhotoPlaceholder(url: API.imageURL(line.photo), label: "",
+                                 radius: thumb / 2, tone: line.productId, fit: true)
+                    .frame(width: thumb, height: thumb)
+                    .background(YMUi.photoBg)
+                    .clipShape(Circle())
+                    .overlay(Circle().strokeBorder(Color.white, lineWidth: 2))
+                    .offset(x: CGFloat(i) * (thumb - overlap))
+                    .zIndex(Double(i))
+                    .transition(reduceMotion ? .identity : .scale(scale: 0.4).combined(with: .opacity))
+            }
+        }
+        .frame(width: width, height: thumb, alignment: .leading)
+        .animation(reduceMotion ? nil : .easeOut(duration: YMDur.plusToStepper), value: items.map { $0.id })
+        .accessibilityHidden(true)
     }
 }

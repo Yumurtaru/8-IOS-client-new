@@ -344,7 +344,7 @@ struct ProductView: View {
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
-                        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: photoIndex)
+                        .animation(reduceMotion ? nil : .easeOut(duration: YMDur.photoFade), value: photoIndex)
                     } else {
                         photoPage(photos.first ?? "", 0)
                     }
@@ -372,7 +372,7 @@ struct ProductView: View {
                     .frame(width: i == photoIndex ? 18 : 6, height: 6)
             }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: photoIndex)
+        .animation(reduceMotion ? nil : .easeOut(duration: YMDur.sizeSwitch), value: photoIndex)
         .accessibilityHidden(true)
     }
 

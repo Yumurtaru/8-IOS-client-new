@@ -217,6 +217,8 @@ struct YMFlightView: View {
 enum YMFlightHost {
     static let cartTabIndex = 2
     static let tabCount = 5
+    /// Центр плавающей корзины-пилюли (координаты окна), пока она на экране; иначе nil.
+    static var cartPillCenter: CGPoint?
 
     static func fly(from: CGPoint) {
         guard let window = YMTouchTracker.keyWindow() else { return }
@@ -224,7 +226,8 @@ enum YMFlightHost {
         if window.traitCollection.horizontalSizeClass == .regular { return }
         let b = window.bounds
         let tab = (CGFloat(cartTabIndex) + 0.5) / CGFloat(tabCount)
-        let target = CGPoint(x: b.width * tab, y: b.height - window.safeAreaInsets.bottom - 29)
+        let target = cartPillCenter
+            ?? CGPoint(x: b.width * tab, y: b.height - window.safeAreaInsets.bottom - 29)
         let host = UIHostingController(rootView: YMFlightView(from: from, to: target, start: Date()))
         host.view.backgroundColor = .clear
         host.view.isUserInteractionEnabled = false

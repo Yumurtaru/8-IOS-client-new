@@ -220,14 +220,20 @@ struct HomeView: View {
 
     // Смена города с шапки Главной.
     @State private var showCitySheet = false
+    // Кнопка «Наверх»: прокручено дальше экрана / счётчик нажатий.
+    @State private var showTop = false
+    @State private var topTick = 0
+    @Environment(\.accessibilityReduceMotion) private var ymReduceMotion
     // Профиль открывается из шапки (кнопка в правом углу) — модально.
     // Флаг живёт в NavCoordinator (profileOpen): пуш и ссылка закрывают
     // шторку перед переходом, иначе заказ/чат открывались под ней.
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 0, pinnedViews: []) {
+                    Color.clear.frame(height: 0).id("homeTop")
                     StaleDataBanner()
                     header
                     // Поиск на Главной — витрина (text=nil), тап через собственный onTap
@@ -290,9 +296,24 @@ struct HomeView: View {
                     Color.clear.frame(height: 24)
                 }
                 .ymReadableWidth()
+                .ymTrackScrollFar(space: "homeScroll", isFar: $showTop)
+            }
+            .coordinateSpace(name: "homeScroll")
+            .onChange(of: topTick) { _ in
+                withAnimation(ymReduceMotion ? nil : .easeInOut(duration: 0.4)) { proxy.scrollTo("homeTop", anchor: .top) }
+            }
             }
             .background(YMColor.bg.ignoresSafeArea())
             .navigationBarHidden(true)
+            .overlay(alignment: .bottomTrailing) {
+                if showTop {
+                    ScrollTopButton { topTick += 1 }
+                        .padding(.trailing, YMForm.screenPadding)
+                        .padding(.bottom, 16)
+                        .transition(.opacity)
+                }
+            }
+            .animation(ymReduceMotion ? nil : .easeOut(duration: YMDur.floatingCart), value: showTop)
             // Отдельная задача: отмена задачи экрана (переход на другую вкладку
             // по push при холодном старте, жест обновления) раньше обрывала
             // загрузку, все try? давали [] — и главная оставалась пустой до
