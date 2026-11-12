@@ -312,7 +312,7 @@ final class OrderDetailViewModel: ObservableObject {
             var line = CartLine(key: "reorder-\(pid)-\(mods.map(String.init).joined(separator: "."))-\(idx)",
                                 productId: pid,
                                 name: it.name ?? "Товар",
-                                unitPrice: Money.toDouble(it.unitPrice ?? it.price) ?? 0,
+                                unitPrice: it.unitPrice ?? it.price ?? 0,
                                 qty: it.qty ?? 1,
                                 modifierIds: mods,
                                 modsLabel: it.modifiersLabel ?? "",

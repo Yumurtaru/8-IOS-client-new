@@ -9,9 +9,9 @@ import SwiftUI
 //      onTrack — «Следить за заказом» (родитель открывает трекинг).
 //      onHome  — «На главную».
 //
-//  Конфетти — падающие частицы (золото/зелёный/белый) через TimelineView + Canvas,
-//  с учётом Reduce Motion (при включённом — статичный экран без анимации).
-//  Золотой круг 110×110 с ✓ и pop-анимацией. Токены — YM*.
+//  Эффекты (Sources/DesignSystem/Effects.swift, YMSuccessBadge): разовый взрыв конфетти
+//  (Canvas на ~2,2 с), ударная волна, свечение, галочка рисуется линией.
+//  При Reduce Motion — статичный экран без анимации (хаптика остаётся). Токены — YM*.
 //
 //  API: экран ничего не запрашивает — принимает готовый OrderCreateResult.
 //  ETA берётся из TODO(API): в OrderCreateResult нет поля eta — показываем
@@ -23,11 +23,6 @@ struct SuccessView: View {
     var onTrack: () -> Void = {}
     var onHome: () -> Void = {}
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var checkPopped = false
-    /// Конфетти крутилось без конца (TimelineView .animation — перерисовка каждый
-    /// кадр), пока экран открыт: батарея и нагрев. Гасим через несколько секунд.
-    @State private var confettiOn = true
 
     // Номер заказа: dailyNumber (виден клиенту) → id → 0.
     // Сервер отдаёт номер заказа в order_id, а не в id: без daily_number было «№0».
@@ -82,26 +77,11 @@ struct SuccessView: View {
         ZStack {
             YMColor.bg.ignoresSafeArea()
 
-            if !reduceMotion && confettiOn {
-                ConfettiView().ignoresSafeArea().allowsHitTesting(false)
-                    .transition(.opacity)
-            }
-
             VStack(spacing: 0) {
                 Spacer()
 
-                // Золотой круг 110×110 с pop-анимацией.
-                ZStack {
-                    Circle()
-                        .fill(YMColor.accent)
-                        .frame(width: 110, height: 110)
-                        .shadow(color: YMPalette.gold.opacity(0.6), radius: 50, y: 20)
-                    Image(systemName: "checkmark")
-                        .ymFont(46, weight: .bold)
-                        .foregroundStyle(YMColor.onAccent)
-                }
-                .scaleEffect(checkPopped ? 1 : (reduceMotion ? 1 : 0.4))
-                .opacity(checkPopped || reduceMotion ? 1 : 0)
+                // Золотой круг 110×110: поп, галочка линией, ударная волна, свечение, взрыв конфетти.
+                YMSuccessBadge()
 
                 Text("Заказ оформлен!")
                     .ymFont(26, weight: .heavy)
@@ -162,77 +142,6 @@ struct SuccessView: View {
             }
         }
         .navigationBarHidden(true)
-        .onAppear {
-            Haptics.success()
-            if reduceMotion {
-                checkPopped = true
-            } else {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.6)) { checkPopped = true }
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 6) {
-                withAnimation(.easeOut(duration: 0.6)) { confettiOn = false }
-            }
-        }
-    }
-}
-
-// MARK: - Конфетти (падающие частицы, TimelineView + Canvas)
-
-/// Частицы золото/зелёный/белый падают сверху с вращением. Рендер — Canvas в
-/// TimelineView (эффективно, без per-particle View). Вызывается только при
-/// выключенном Reduce Motion (родитель это проверяет).
-private struct ConfettiView: View {
-    private struct Particle {
-        let x: CGFloat          // 0..1 по ширине
-        let size: CGFloat
-        let color: Color
-        let delay: Double
-        let duration: Double
-        let spin: Double        // оборотов за падение
-    }
-
-    private let particles: [Particle]
-
-    init() {
-        let colors: [Color] = [
-            YMPalette.gold, YMPalette.goldBright,
-            YMColor.statusDone, YMPalette.inkLight, YMPalette.goldDeep
-        ]
-        self.particles = (0..<24).map { i in
-            Particle(
-                x: CGFloat(Double.random(in: 0.04...0.96)),
-                size: CGFloat.random(in: 6...11),
-                color: colors[i % colors.count],
-                delay: Double.random(in: 0...1.4),
-                duration: Double.random(in: 2.2...3.6),
-                spin: Double.random(in: 1.2...3.0)
-            )
-        }
-    }
-
-    var body: some View {
-        TimelineView(.animation) { timeline in
-            Canvas { ctx, size in
-                let now = timeline.date.timeIntervalSinceReferenceDate
-                for p in particles {
-                    // Прогресс падения в цикле (учёт задержки).
-                    let t = (now - p.delay).truncatingRemainder(dividingBy: p.duration)
-                    guard t >= 0 else { continue }
-                    let progress = t / p.duration
-                    let y = -20 + CGFloat(progress) * (size.height + 40)
-                    let x = p.x * size.width
-                    // Плавный fade-in / fade-out.
-                    let alpha: Double = progress < 0.2 ? progress / 0.2
-                                       : progress > 0.85 ? max(0, (1 - progress) / 0.15) : 1
-                    let angle = Angle(degrees: progress * 360 * p.spin)
-
-                    var rect = Path(roundedRect: CGRect(x: -p.size / 2, y: -p.size / 2, width: p.size, height: p.size * 0.6),
-                                    cornerRadius: 1.5)
-                    rect = rect.applying(CGAffineTransform(rotationAngle: CGFloat(angle.radians)))
-                    rect = rect.applying(CGAffineTransform(translationX: x, y: y))
-                    ctx.fill(rect, with: .color(p.color.opacity(alpha)))
-                }
-            }
-        }
+        .onAppear { Haptics.success() }
     }
 }

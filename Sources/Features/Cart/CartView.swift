@@ -31,8 +31,8 @@ struct CartView: View {
     /// итог был без него и на оформлении вдруг вырастал).
     @State private var feeShop: ShopDetail?
 
-    private var serviceFee: Decimal { Money.parse(Fees.service(subtotal: cart.total, shop: feeShop)) }
-    private var cartGrand: Decimal { Money.parse(cart.total) + serviceFee }
+    private var serviceFee: Decimal { Fees.service(subtotal: cart.total, shop: feeShop) }
+    private var cartGrand: Decimal { cart.total + serviceFee }
 
     private func loadFeeShop() async {
         guard let slug = cart.shopSlug, !slug.isEmpty else {
@@ -246,7 +246,7 @@ struct CartView: View {
     // Блок итогов (на корзине — Товары + Доставка «рассчитается при оформлении»).
     private var totalsCard: some View {
         VStack(spacing: 9) {
-            totalRow("Товары (\(cart.count))", Money.format(Money.parse(cart.total)), bold: true)
+            totalRow("Товары (\(cart.count))", Money.format(cart.total), bold: true)
             totalRow("Доставка", "рассчитается при оформлении")
             if serviceFee > 0 {
                 totalRow("Сервисный сбор", Money.format(serviceFee))
@@ -264,6 +264,7 @@ struct CartView: View {
             Text(value)
                 .font(.system(size: 13.5, weight: bold ? .heavy : .semibold))
                 .foregroundStyle(bold ? YMColor.text : YMColor.muted)
+                .ymNumeric(value)
         }
     }
 
@@ -298,6 +299,7 @@ struct CartView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
                     .foregroundStyle(YMColor.text)
+                    .ymNumeric(cartGrand)
             }
             Button(action: { Haptics.medium(); onCheckout() }) {
                 Text("Перейти к оформлению")

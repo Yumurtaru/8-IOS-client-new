@@ -75,7 +75,7 @@ final class ProductViewModel: ObservableObject {
                 Track.productOpened(id: d.id, name: d.name)
                 RecentStore.add(RecentProduct(id: d.id, name: d.name ?? "",
                                               photo: d.photos?.first?.pathWebp,
-                                              price: Money.toDouble(d.price), shopId: d.shopId, shopName: d.shopName))
+                                              price: d.price, shopId: d.shopId, shopName: d.shopName))
             } catch is CancellationError {
             } catch {
                 self.error = error.localizedDescription

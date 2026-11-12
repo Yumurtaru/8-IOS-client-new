@@ -113,6 +113,8 @@ struct RootTabView: View {
             }
         }
         .tint(YMColor.accent)
+        // Полёт золотого шарика к вкладке «Корзина» (Effects.swift): не на самой корзине/оформлении.
+        .ymCartFlight(count: cart.count, suppressed: tab == 2 || coord.showCart)
         .animation(.easeInOut, value: net.online)
         .onChange(of: router.requestedTab) { newTab in
             if let t = newTab { tab = t; router.requestedTab = nil }

@@ -108,9 +108,19 @@ private struct QuoteAddressBody: Encodable {
     let street: String?
     let house: String?
 }
-private struct QuoteBody: Encodable { let shopId: Int; let lat: Double; let lng: Double; let subtotal: Double
+private struct QuoteBody: Encodable { let shopId: Int; let lat: Double; let lng: Double; let subtotal: Decimal
     var address: QuoteAddressBody? = nil
-    enum CodingKeys: String, CodingKey { case shopId = "shop_id", lat, lng, subtotal, address } }
+    enum CodingKeys: String, CodingKey { case shopId = "shop_id", lat, lng, subtotal, address }
+    /// Провод прежний: subtotal JSON-числом (Decimal → Double от суммы в копейках).
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(shopId, forKey: .shopId)
+        try c.encode(lat, forKey: .lat)
+        try c.encode(lng, forKey: .lng)
+        try c.encode(Money.wireNumber(subtotal), forKey: .subtotal)
+        try c.encodeIfPresent(address, forKey: .address)
+    }
+}
 
 // Тело создания адреса (POST api/v1/profile/addresses). camelCase → snake_case автоматически.
 // Совпадает 1:1 с AddressBody профиля и AddressReq Android.
@@ -198,7 +208,7 @@ struct CheckoutView: View {
     @State private var shopLoadError: String?
     @State private var quote: DeliveryQuote?
     /// Сумма товаров, по которой считан quote (после скидок и баллов).
-    @State private var quotedGoods: Double?
+    @State private var quotedGoods: Decimal?
     @State private var comment = ""
     /// «Когда»: как можно скорее (false) или ко времени (true), как на сайте.
     /// У закрытого заведения — только ко времени (предзаказ).
@@ -263,11 +273,11 @@ struct CheckoutView: View {
     /// ТЕКУЩИМ ценам магазина (routes/promotions.php → cartRecompute), а корзина
     /// хранит цену с момента добавления, иногда сутками: кнопка показывала одну
     /// сумму, а заказ создавался на другую. Нет ответа предпросмотра — как раньше.
-    private var serverGoods: Double? {
+    private var serverGoods: Decimal? {
         if let s = promo?.subtotal, s > 0 { return s }
         return nil
     }
-    private var subtotal: Decimal { Money.parse(serverGoods ?? cart.total) }
+    private var subtotal: Decimal { serverGoods ?? cart.total }
 
     /// Состав корзины без цен: «ключ строки × количество».
     private var cartSig: String { cart.lines.map { "\($0.key)x\($0.qty)" }.joined(separator: ";") }
@@ -280,7 +290,7 @@ struct CheckoutView: View {
     private var expectedSubtotalWire: String? {
         guard !promoPending, let p = promo, promoFor == cartSig, p.cartHasIssues != true,
               let s = p.subtotal, s > 0 else { return nil }
-        return Money.wire(Money.parse(s))
+        return Money.wire(s)
     }
 
     // Стоимость доставки — ТОЛЬКО из серверного расчёта по адресу. До адреса / при
@@ -289,7 +299,7 @@ struct CheckoutView: View {
         guard fulfillment == .delivery, let q = quote, q.available else { return 0 }
         return Money.parse(q.deliveryPrice ?? 0)
     }
-    private var serviceFee: Decimal { Money.parse(Fees.service(subtotal: serverGoods ?? cart.total, shop: shop)) }
+    private var serviceFee: Decimal { Fees.service(subtotal: serverGoods ?? cart.total, shop: shop) }
 
     // Итоги: если сервер посчитал акции — используем ЕГО числа, иначе прежний
     // локальный расчёт (старый сервер, обрыв связи — оформление не блокируем).
@@ -313,10 +323,9 @@ struct CheckoutView: View {
         let code = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, let sid = cart.shopId else { return }
         await MainActor.run { checkingCode = true; if !silent { codeMsg = nil } }
-        let subtotalD = NSDecimalNumber(decimal: subtotal).doubleValue
         do {
             let r: PromoCheckResult = try await API.shared.post(
-                "api/v1/promo/check", body: PromoCheckBody(code: code, subtotal: subtotalD, shopId: sid))
+                "api/v1/promo/check", body: PromoCheckBody(code: code, subtotal: subtotal, shopId: sid))
             await MainActor.run {
                 checkingCode = false
                 // Тихая перепроверка, а код за это время убрали («Убрать») или
@@ -392,7 +401,7 @@ struct CheckoutView: View {
                 if (r?.pointsSpendMax ?? 0) <= 0 { spendPoints = false }
                 // Скидка/баллы изменили оплачиваемую сумму — пересчитываем доставку:
                 // «бесплатно от» и минимум считаются от неё (как на сервере).
-                if fulfillment == .delivery, quote != nil, let qg = quotedGoods, abs(qg - goodsForQuote) >= 0.01 {
+                if fulfillment == .delivery, quote != nil, let qg = quotedGoods, abs(qg - goodsForQuote) >= Decimal(sign: .plus, exponent: -2, significand: 1) {
                     Task { await quoteDelivery() }
                 }
             }
@@ -1141,6 +1150,7 @@ struct CheckoutView: View {
             Spacer()
             Text(value).ymFont(13.5, weight: .semibold)
                 .foregroundStyle(accent ? YMColor.accent : YMColor.muted)
+                .ymNumeric(value)
         }
     }
 
@@ -1223,6 +1233,7 @@ struct CheckoutView: View {
             Text("Итого").ymFont(13.5).foregroundStyle(YMColor.muted)
             Spacer()
             Text(Money.format(grandTotal)).ymFont(22, weight: .heavy).foregroundStyle(YMColor.text)
+                .ymNumeric(grandTotal)
         }
         // AT-2: заметно, прямо над кнопкой — до нажатия «Оформить».
         if let n = priceNote {
@@ -1362,18 +1373,17 @@ struct CheckoutView: View {
         guard fulfillment == .delivery, !freeDelivery, let q = quote, q.available else { return nil }
         let price = Money.parse(q.deliveryPrice ?? 0)
         let from = Money.parse(q.freeFrom ?? 0)
-        let goods = Money.parse(quotedGoods ?? goodsForQuote)
+        let goods = quotedGoods ?? goodsForQuote
         guard price > 0, from > 0, goods < from else { return nil }
         return "Добавьте на " + Money.format(from - goods) + " до бесплатной доставки"
     }
 
     /// Что клиент платит за товары: корзина минус скидка и баллы (не меньше 0).
-    private var goodsForQuote: Double {
+    private var goodsForQuote: Decimal {
         // AT-2: от той же суммы товаров, что и итог (серверной, если она есть):
         // «бесплатно от» и минимум сервер считает по своим ценам.
         let paid = subtotal - promoDiscount - codeOff - pointsSpent
-        let v = NSDecimalNumber(decimal: max(0, paid)).doubleValue
-        return (v * 100).rounded() / 100
+        return Wholesale.round2(max(0, paid))
     }
 
     /// Адрес доставки объектом — его читают и панель продавца, и курьер.
@@ -1584,8 +1594,8 @@ struct CheckoutView: View {
     private func reconcilePrices(_ p: PromoPreview?) {
         guard let srv = p?.subtotal, srv > 0, cart.pendingOrder == nil, !cart.isEmpty,
               let sid = cart.shopId else { return }
-        let local = Money.parse(cart.total)
-        let server = Money.parse(srv)
+        let local = cart.total
+        let server = srv
         guard local != server else { return }
         let sent = cart.lines
         let sig = sent.map { "\($0.key)x\($0.qty)" }.joined(separator: ";")
@@ -1621,7 +1631,7 @@ struct CheckoutView: View {
                     prices[line.key] = ServerLinePrice(unit: lp, retail: row.retailLinePrice, wholesale: row.wholesale)
                 }
                 let changed = v != nil && cart.applyPrices(prices)
-                let now = Money.parse(cart.total)
+                let now = cart.total
                 // Причину называем точно: недоступная позиция или урезанные добавки —
                 // это не «цены изменились».
                 var parts: [String] = []

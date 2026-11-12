@@ -71,7 +71,7 @@ struct PromoPreview: Codable {
     @LenientDouble var pointsEarned: Double?
     @LenientDouble var pointsSpendMax: Double?
     @LenientDouble var pointsSpent: Double?
-    @LenientDouble var subtotal: Double?
+    @LenientDecimal var subtotal: Decimal?
     @LenientDouble var deliveryPrice: Double?
     @LenientDouble var total: Double?
     /// А113: в корзине есть строки, которые нельзя заказать (нет в наличии,
@@ -99,14 +99,14 @@ struct CartValidateLine: Decodable {
     @LenientInt var row: Int?
     @LenientInt var productId: Int?
     @LenientDouble var basePrice: Double?
-    @LenientDouble var linePrice: Double?
+    @LenientDecimal var linePrice: Decimal?
     @LenientDouble var qty: Double?
     let modifiers: [CartValidateMod]?
     @LenientBool var available: Bool?
     /// O1: строка по оптовой цене; linePrice уже по опту, retailLinePrice — розница единицы с добавками.
     @LenientBool var wholesale: Bool?
     @LenientDouble var tierMinQty: Double?
-    @LenientDouble var retailLinePrice: Double?
+    @LenientDecimal var retailLinePrice: Decimal?
 }
 struct CartValidateResult: Decodable {
     let items: [CartValidateLine]?

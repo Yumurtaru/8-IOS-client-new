@@ -5,7 +5,9 @@ struct CartLine: Codable, Identifiable {
     let key: String
     let productId: Int
     var name: String
-    var unitPrice: Double
+    /// Деньги — Decimal. С диска читаются терпимо (см. extension CartLine ниже):
+    /// старые сохранения хранили Double-числа (490.0, 150.65).
+    var unitPrice: Decimal
     var qty: Double
     let modifierIds: [Int]
     let modsLabel: String
@@ -23,8 +25,8 @@ struct CartLine: Codable, Identifiable {
     /// «по опту» из прошлого ответа сервера (только для строк без ступеней).
     /// nil у старых сохранений — читаются как раньше.
     var priceTiers: [PriceTier]? = nil
-    var retailBase: Double? = nil
-    var retailUnit: Double? = nil
+    var retailBase: Decimal? = nil
+    var retailUnit: Decimal? = nil
     var serverWholesale: Bool? = nil
     var id: String { key }
 
@@ -42,6 +44,62 @@ struct CartLine: Codable, Identifiable {
         guard isFractional else { return 1.0 }
         if let s = qtyStep, s > 0 { return s }
         return 0.1
+    }
+}
+
+/// Хранение корзины на диске (UserDefaults "cart_lines", JSON). Деньги читаются через
+/// LenientDecimal: старые сохранения (Double-числа 490.0 / 150.65) и новые (строка
+/// "150.65") дают точный Decimal — у числа с дробью берётся кратчайшая строковая запись
+/// Double (150.65, а не 150.6499999…). Пишем деньги СТРОКОЙ ("150.65"): строка читается
+/// без потерь. Остальные поля — те же ключи, что у прежнего синтезированного кодека,
+/// так что корзина после обновления не теряется.
+extension CartLine {
+    enum CodingKeys: String, CodingKey {
+        case key, productId, name, unitPrice, qty, modifierIds, modsLabel, photo, unit,
+             qtyFractional, qtyPresets, qtyStep, priceTiers, retailBase, retailUnit, serverWholesale
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        func money(_ k: CodingKeys) -> Decimal? {
+            (try? c.decodeIfPresent(LenientDecimal.self, forKey: k))?.wrappedValue
+        }
+        self.key = try c.decode(String.self, forKey: .key)
+        self.productId = try c.decode(Int.self, forKey: .productId)
+        self.name = (try? c.decodeIfPresent(String.self, forKey: .name)) ?? ""
+        self.unitPrice = money(.unitPrice) ?? 0
+        self.qty = (try? c.decode(Double.self, forKey: .qty)) ?? 1
+        self.modifierIds = (try? c.decodeIfPresent([Int].self, forKey: .modifierIds)) ?? []
+        self.modsLabel = (try? c.decodeIfPresent(String.self, forKey: .modsLabel)) ?? ""
+        self.photo = try? c.decodeIfPresent(String.self, forKey: .photo)
+        self.unit = try? c.decodeIfPresent(String.self, forKey: .unit)
+        self.qtyFractional = try? c.decodeIfPresent(Bool.self, forKey: .qtyFractional)
+        self.qtyPresets = try? c.decodeIfPresent(String.self, forKey: .qtyPresets)
+        self.qtyStep = try? c.decodeIfPresent(Double.self, forKey: .qtyStep)
+        self.priceTiers = try? c.decodeIfPresent([PriceTier].self, forKey: .priceTiers)
+        self.retailBase = money(.retailBase)
+        self.retailUnit = money(.retailUnit)
+        self.serverWholesale = try? c.decodeIfPresent(Bool.self, forKey: .serverWholesale)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(key, forKey: .key)
+        try c.encode(productId, forKey: .productId)
+        try c.encode(name, forKey: .name)
+        try c.encode(LenientDecimal(wrappedValue: unitPrice), forKey: .unitPrice)
+        try c.encode(qty, forKey: .qty)
+        try c.encode(modifierIds, forKey: .modifierIds)
+        try c.encode(modsLabel, forKey: .modsLabel)
+        try c.encodeIfPresent(photo, forKey: .photo)
+        try c.encodeIfPresent(unit, forKey: .unit)
+        try c.encodeIfPresent(qtyFractional, forKey: .qtyFractional)
+        try c.encodeIfPresent(qtyPresets, forKey: .qtyPresets)
+        try c.encodeIfPresent(qtyStep, forKey: .qtyStep)
+        try c.encodeIfPresent(priceTiers, forKey: .priceTiers)
+        if let v = retailBase { try c.encode(LenientDecimal(wrappedValue: v), forKey: .retailBase) }
+        if let v = retailUnit { try c.encode(LenientDecimal(wrappedValue: v), forKey: .retailUnit) }
+        try c.encodeIfPresent(serverWholesale, forKey: .serverWholesale)
     }
 }
 
@@ -86,8 +144,8 @@ struct PendingOrder: Codable {
 /// O1: цена строки из ответа cart/validate. wholesale == true — unit уже по опту,
 /// retail — retail_line_price (розница единицы с добавками, может быть nil).
 struct ServerLinePrice {
-    let unit: Double
-    let retail: Double?
+    let unit: Decimal
+    let retail: Decimal?
     let wholesale: Bool?
 }
 
@@ -103,9 +161,9 @@ final class Cart: ObservableObject {
     /// округлённые — ровно так считает сервер (round(unit*qty, 2) по строке).
     /// Раньше складывались неокруглённые: на дробных количествах кнопка
     /// обещала 150,65 ₽, а в заказе оказывалось 150,66 ₽.
-    var total: Double {
+    var total: Decimal {
         // O1: по формуле опта (qtyTotal по товару), каждая строка округляется до копейки.
-        NSDecimalNumber(decimal: Wholesale.cartTotal(lines)).doubleValue
+        Wholesale.cartTotal(lines)
     }
     var isEmpty: Bool { lines.isEmpty }
     private var snapshotTask: Task<Void, Never>?
@@ -121,6 +179,8 @@ final class Cart: ObservableObject {
     /// AT-3: неотвеченное оформление старше суток снято при открытии — корзина
     /// показывает «проверьте „Мои заказы“» (CartView), пока человек не закроет.
     @Published var pendingExpired = false
+    /// 0,005 ₽ — порог «цена изменилась» (Decimal без Double-литерала).
+    private static let halfCent = Decimal(sign: .plus, exponent: -3, significand: 5)
     private static let pendingStore = "cart_pending_order"
     /// Срок записи — как у ключа корзины.
     static let pendingTTL: TimeInterval = 24 * 60 * 60
@@ -202,11 +262,11 @@ final class Cart: ObservableObject {
             var line = old
             let hasTiers = !Wholesale.steps(for: old).isEmpty
             // Розничная цена единицы: при опте — retail_line_price, иначе сама цена.
-            var retail: Double? = sp.retail
+            var retail: Decimal? = sp.retail
             if retail == nil && sp.wholesale != true { retail = sp.unit }
             if hasTiers {
                 if let r = retail {
-                    let oldR: Double = old.retailUnit ?? old.unitPrice
+                    let oldR: Decimal = old.retailUnit ?? old.unitPrice
                     line.retailUnit = r
                     if let b = old.retailBase { line.retailBase = b + (r - oldR) }
                     line.unitPrice = r
@@ -216,8 +276,8 @@ final class Cart: ObservableObject {
                 if let r = retail { line.retailUnit = r }
             }
             line.serverWholesale = sp.wholesale
-            if abs(line.unitPrice - old.unitPrice) >= 0.005
-                || abs((line.retailUnit ?? 0) - (old.retailUnit ?? 0)) >= 0.005
+            if abs(line.unitPrice - old.unitPrice) >= Cart.halfCent
+                || abs((line.retailUnit ?? 0) - (old.retailUnit ?? 0)) >= Cart.halfCent
                 || line.serverWholesale != old.serverWholesale { changed = true }
             return line
         }
@@ -259,7 +319,7 @@ final class Cart: ObservableObject {
         if self.shopId != nil && self.shopId != shopId { lines = [] } // корзина из одного заведения
         self.shopId = shopId; self.shopName = shopName; self.shopSlug = product.shopSlug
         let chosen = options.filter { modifierIds.contains($0.id) }
-        let modPrice = chosen.reduce(0.0) { $0 + (Money.toDouble($1.price) ?? 0) }
+        let modPrice: Decimal = chosen.reduce(Decimal(0)) { $0 + ($1.price ?? 0) }
         let key = "\(product.id)-\(modifierIds.sorted().map(String.init).joined(separator: ","))"
         if let idx = lines.firstIndex(where: { $0.key == key }) {
             // Паритет с Android: количество суммируем, а цену, название и фото
@@ -267,8 +327,8 @@ final class Cart: ObservableObject {
             // добавление оставляло старую цену — итог расходился с сервером.
             let old = lines[idx]
             let newQty: Double = ((old.qty + qty) * 1000).rounded() / 1000   // суммируем
-            var freshPrice: Double = old.unitPrice
-            if let p = Money.toDouble(product.price) { freshPrice = p + modPrice }
+            var freshPrice: Decimal = old.unitPrice
+            if let p = product.price { freshPrice = p + modPrice }
             var line = old
             line.unitPrice = freshPrice
             line.qty = newQty
@@ -276,19 +336,20 @@ final class Cart: ObservableObject {
             line.photo = product.photos?.first?.pathWebp ?? old.photo
             line.serverWholesale = nil
             line.priceTiers = product.priceTiers
-            line.retailBase = Money.toDouble(product.price)
+            line.retailBase = product.price
             line.retailUnit = freshPrice
             lines[idx] = line
         } else {
             lines.append(CartLine(key: key, productId: product.id, name: product.name ?? "",
-                unitPrice: (Money.toDouble(product.price) ?? 0) + modPrice, qty: qty, modifierIds: modifierIds,
+                unitPrice: (product.price ?? 0) + modPrice, qty: qty, modifierIds: modifierIds,
                 modsLabel: chosen.compactMap { $0.name }.joined(separator: ", "),
                 photo: product.photos?.first?.pathWebp,
                 unit: product.unit, qtyFractional: (product.qtyFractional ?? 0) == 1, qtyPresets: product.qtyPresets,
                 qtyStep: product.qtyStep,
-                priceTiers: product.priceTiers, retailBase: Money.toDouble(product.price),
-                retailUnit: (Money.toDouble(product.price) ?? 0) + modPrice))
+                priceTiers: product.priceTiers, retailBase: product.price,
+                retailUnit: (product.price ?? 0) + modPrice))
         }
+        // Аналитика (AppMetrica) — не расчёт денег: Double допустим только здесь.
         Track.addToCart(id: product.id, name: product.name, price: Money.toDouble(product.price), qty: 1)
         save()
         return true
@@ -383,19 +444,30 @@ struct CartSnapshotBody: Encodable {
     let shopSlug: String?
     let shopName: String?
     let itemsCount: Int
-    let subtotal: Double
+    let subtotal: Decimal
+    enum CodingKeys: String, CodingKey { case shopId, shopSlug, shopName, itemsCount, subtotal }
+    /// Формат на проводе прежний (JSON-число с копейками): Decimal пишем как Double
+    /// от суммы, округлённой до копеек, — без хвоста вида 150.64999….
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(shopId, forKey: .shopId)
+        try c.encodeIfPresent(shopSlug, forKey: .shopSlug)
+        try c.encodeIfPresent(shopName, forKey: .shopName)
+        try c.encode(itemsCount, forKey: .itemsCount)
+        try c.encode(Money.wireNumber(subtotal), forKey: .subtotal)
+    }
 }
 
 /// Расчёт сервисного сбора (как на сервере): с клиента — при любом payer, кроме "shop".
 enum Fees {
-    static func service(subtotal: Double, shop: ShopDetail?) -> Double {
+    static func service(subtotal: Decimal, shop: ShopDetail?) -> Decimal {
         // Как на сервере (api_v1.php: payer === 'shop' ? 'shop' : 'client'): сбор не берётся
         // только при payer == "shop". Пустое поле раньше давало 0 в приложении, а сервер сбор брал.
         guard let shop, (shop.serviceFeePayer ?? "") != "shop" else { return 0 }
-        if (shop.serviceFeeType ?? "percent") == "fixed" { return Money.toDouble(shop.serviceFeeFixed) ?? 0 }
+        if (shop.serviceFeeType ?? "percent") == "fixed" { return shop.serviceFeeFixed ?? 0 }
         // В Decimal: 1234,50 × 3 % в Double = 37,0349… → 37,03, сервер — 37,04.
-        var v = Money.parse(subtotal) * Money.parse(shop.serviceFeePercent ?? 0) / 100
+        var v: Decimal = subtotal * Money.parse(shop.serviceFeePercent ?? 0) / 100
         var r = Decimal(); NSDecimalRound(&r, &v, 2, .plain)
-        return NSDecimalNumber(decimal: r).doubleValue
+        return r
     }
 }

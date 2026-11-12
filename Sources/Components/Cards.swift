@@ -245,7 +245,7 @@ struct CardPressStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
             .animation(YMMotion.adaptive(YMMotion.snappy, reduceMotion: reduceMotion),
                        value: configuration.isPressed)
     }

@@ -1443,6 +1443,13 @@ struct ReorderItem: Decodable {
     let qtyPresets: String?
 }
 struct PromoCheckBody: Encodable {
-    let code: String; let subtotal: Double; let shopId: Int?
+    let code: String; let subtotal: Decimal; let shopId: Int?
     enum CodingKeys: String, CodingKey { case code, subtotal, shopId = "shop_id" }
+    /// Провод прежний: subtotal JSON-числом (Decimal → Double от суммы в копейках).
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(code, forKey: .code)
+        try c.encode(Money.wireNumber(subtotal), forKey: .subtotal)
+        try c.encodeIfPresent(shopId, forKey: .shopId)
+    }
 }

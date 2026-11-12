@@ -758,7 +758,7 @@ struct OrgView: View {
             .padding(.horizontal, YMSpace.xl)
 
             if cart.count > 0 {
-                StickyCartBar(count: cart.count, total: Money.dec(cart.total)) {
+                StickyCartBar(count: cart.count, total: cart.total) {
                     // Открыть глобальный флоу корзины (Корзина → Оформление → Успех).
                     if nested { localCart = true } else { coord.openCart() }
                 }

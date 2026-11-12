@@ -83,10 +83,17 @@ enum Money {
         return f
     }()
 
-    /// Мост к Double ТОЛЬКО для мест, где остался Double-контур (корзина CartLine,
-    /// аналитика Track). Для расчётов и показа денег не использовать.
+    /// Мост к Double ТОЛЬКО для аналитики (Track.addToCart, RecentProduct на диске).
+    /// Корзина и расчёты — Decimal. Для расчётов и показа денег не использовать.
     static func toDouble(_ v: Decimal?) -> Double? {
         v.map { NSDecimalNumber(decimal: $0).doubleValue }
+    }
+
+    /// Деньги на провод ЧИСЛОМ JSON (тела promo/check, cart/snapshot, delivery/quote,
+    /// формат прежний): сумма, округлённая до копеек, как Double — без хвоста
+    /// Decimal→Double вида 150.64999…. Только для кодирования, не для расчётов.
+    static func wireNumber(_ value: Decimal) -> Double {
+        Double(wire(value)) ?? 0
     }
 
     /// Деньги НА ПРОВОД: всегда "0.00" — точка разделителем, два знака, без

@@ -39,6 +39,7 @@ struct StickyCartBar: View {
                     .ymFont(16, weight: .heavy)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
+                    .ymNumeric(count)
                 Spacer(minLength: YMSpace.md)
                 Text(Money.format(total))
                     .ymFont(15, weight: .heavy)
@@ -48,6 +49,7 @@ struct StickyCartBar: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
                     .background(Color(hex: "#1A1206"), in: Capsule())
+                    .ymNumeric(total)
             }
             .foregroundStyle(YMColor.onAccent)
             .padding(.horizontal, YMSpace.lg)
@@ -55,6 +57,7 @@ struct StickyCartBar: View {
             .frame(maxWidth: .infinity)
             .ymFloatingSurface(RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous), fill: YMColor.accent)
             .shadow(color: YMPalette.gold.opacity(0.5), radius: 30, y: 8)
+            .ymBumpGloss(trigger: total, radius: YMRadius.control)
             .scaleEffect(pressed && !reduceMotion ? YMMotion.pressScale : 1)
         }
         .buttonStyle(.plain)

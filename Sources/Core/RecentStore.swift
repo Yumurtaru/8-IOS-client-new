@@ -1,7 +1,8 @@
 import Foundation
 
 struct RecentProduct: Codable, Identifiable, Hashable {
-    let id: Int; let name: String; let photo: String?; let price: Double?
+    // price — Decimal; старые записи на диске (Double-число) читает LenientDecimal.
+    let id: Int; let name: String; let photo: String?; @LenientDecimal var price: Decimal?
     let shopId: Int?; let shopName: String?
 }
 

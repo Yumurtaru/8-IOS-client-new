@@ -15,7 +15,7 @@
 //    • FavoritesScreen()   == DiscoverView(mode: .favorites)
 //
 //  ПРИВЯЗКА К API (как в старом Search/Profile):
-//    • Поиск:        GET  api/v1/search/smart?q=&price_min=&price_max=&rating=&sort=  → {shops, products}
+//    • Поиск:        GET  api/v1/search/smart?q=&city_id=&facets=1[&category_id=]  → {shops, products, facets?}
 //    • Категории:    GET  api/v1/org-categories/with-counts?type=store|service|restaurant → [OrgCategory]
 //    • Избранное:    GET  api/v1/favorites → [Shop]  ·  GET api/v1/product-favorites → [Product]
 //    • Toggle fav:   POST/DELETE api/v1/favorites/{id}  ·  POST/DELETE api/v1/product-favorites/{id}
@@ -52,7 +52,48 @@ struct DiscoverView: View {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Ответ /search/smart (как в старом клиенте): {shops, products}.
-private struct SearchSmartResult: Decodable { let shops: [Shop]?; let products: [Product]? }
+private struct SearchSmartResult: Decodable {
+    let shops: [Shop]?
+    let products: [Product]?
+    /// Фасеты (запрос с facets=1, сайт Т22). Старый сервер поля не шлёт — nil, ряда чипов нет.
+    let facets: SearchFacets?
+    enum CodingKeys: String, CodingKey { case shops, products, facets }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        shops = try c.decodeIfPresent([Shop].self, forKey: .shops)
+        products = try c.decodeIfPresent([Product].self, forKey: .products)
+        // Битые фасеты не должны ронять сам поиск.
+        facets = (try? c.decodeIfPresent(SearchFacets.self, forKey: .facets)) ?? nil
+    }
+}
+
+/// data.facets: {"categories":[{"id":3,"name":"Пицца","count":12}],
+/// "price":{"min":"490.00","max":"950.00"}}; price = null при пустой выдаче.
+private struct SearchFacets: Decodable {
+    @LossyList var categories: [SearchFacetCategory]?
+    let price: SearchFacetPrice?
+}
+
+private struct SearchFacetCategory: Codable, Hashable, Identifiable {
+    let id: Int
+    let name: String
+    let count: Int
+    enum CodingKeys: String, CodingKey { case id, name, count }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        // id/count — int, но терпимо к строкам; нет id (0) — чип не показываем.
+        id = (try? c.decode(LenientInt.self, forKey: .id))?.wrappedValue ?? 0
+        name = ((try? c.decodeIfPresent(String.self, forKey: .name)) ?? nil) ?? ""
+        count = (try? c.decode(LenientInt.self, forKey: .count))?.wrappedValue ?? 0
+    }
+}
+
+/// Деньги строкой ("490.00") — только Decimal. В экране поиска полей цены (price_min/
+/// price_max) нет, поэтому плейсхолдеры «от 490» / «до 950» пока негде показать.
+private struct SearchFacetPrice: Codable, Hashable {
+    @LenientDecimal var min: Decimal?
+    @LenientDecimal var max: Decimal?
+}
 
 /// Единый маршрут перехода для всех секций вкладки (поиск / категории / избранное).
 ///
@@ -96,6 +137,11 @@ private struct SearchSection: View {
     /// Обрезанный текст последнего запущенного поиска: пробел в конце или в
     /// начале не меняет запрос — раньше он отменял идущий поиск и слал тот же заново.
     @State private var searchedKey = ""
+    /// Фасеты поиска (сайт Т22): категории выдачи. Держим фасеты ЗАПРОСА БЕЗ фильтра
+    /// категории — при выбранной категории ряд чипов не исчезает и можно переключиться.
+    @State private var facets: SearchFacets?
+    /// Выбранная категория (category_id); nil — «Все».
+    @State private var categoryId: Int?
     // Пустые на старте — заполняет .onAppear ниже. Начальное значение @State
     // вычисляется при КАЖДОЙ пересборке экрана (а она идёт с корня вкладок при
     // любом изменении корзины, сети, сессии): чтение настроек и разбор JSON
@@ -135,6 +181,14 @@ private struct SearchSection: View {
     private var trimmed: String { q.trimmingCharacters(in: .whitespaces) }
     private var showResults: Bool { !shops.isEmpty || !products.isEmpty }
     private var showSuggestState: Bool { trimmed.count < 2 }
+    /// Категории для чипов: без пустых/без названия.
+    private var facetCategories: [SearchFacetCategory] {
+        (facets?.categories ?? []).filter { $0.id > 0 && !$0.name.isEmpty }
+    }
+    private var selectedCategoryName: String? {
+        guard let id = categoryId else { return nil }
+        return facetCategories.first(where: { $0.id == id })?.name
+    }
 
     // Живые подсказки из истории + недавних (совпадение выделяется жирным).
     private var suggestions: [String] {
@@ -155,6 +209,7 @@ private struct SearchSection: View {
         NavigationStack {
             VStack(spacing: 0) {
                 searchBar
+                if !facetCategories.isEmpty && trimmed.count >= 2 { facetChips }
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         if !suggestions.isEmpty {
@@ -200,10 +255,14 @@ private struct SearchSection: View {
         .onAppear { history = SearchHistoryStore.load(); recent = RecentStore.load() }
         // Тот же запрос без пробелов по краям — новый поиск не нужен (после
         // ошибки — ищем снова, как раньше).
-        .onChange(of: q) { _ in if trimmed != searchedKey || searchFailed { scheduleSearch() } }
+        // Новый текст запроса — категория сбрасывается (фасеты прежнего запроса не годятся).
+        .onChange(of: q) { _ in
+            if trimmed != searchedKey { categoryId = nil; facets = nil }
+            if trimmed != searchedKey || searchFailed { scheduleSearch() }
+        }
         // Сменили город на Главной — результаты прежнего города под тем же
         // запросом оставались до следующей буквы. Ищем заново.
-        .onChange(of: session.cityId) { _ in scheduleSearch() }
+        .onChange(of: session.cityId) { _ in categoryId = nil; facets = nil; scheduleSearch() }
         .errorToast($favError)
         .onAppear {
             voice.onText = { text in q = text }
@@ -489,11 +548,77 @@ private struct SearchSection: View {
 
     private var emptyResults: some View {
         VStack(spacing: YMSpace.sm) {
-            Text("Ничего не найдено").font(YMFont.title3).foregroundStyle(YMColor.text)
-            Text("Попробуйте изменить запрос.").font(YMFont.callout).foregroundStyle(YMColor.muted)
+            if categoryId != nil {
+                Text("Ничего не нашли в категории «\(selectedCategoryName ?? "")»")
+                    .font(YMFont.title3).foregroundStyle(YMColor.text)
+                    .multilineTextAlignment(.center)
+                Button("Искать во всех категориях") { selectCategory(nil) }
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(YMColor.accent)
+                    .padding(.top, YMSpace.xs)
+            } else {
+                Text("Ничего не найдено").font(YMFont.title3).foregroundStyle(YMColor.text)
+                Text("Попробуйте изменить запрос.").font(YMFont.callout).foregroundStyle(YMColor.muted)
+            }
         }
         .frame(maxWidth: .infinity)
+        .padding(.horizontal, YMSpace.xl)
         .padding(.top, 60)
+    }
+
+    // ── Фасеты: чипы категорий «Пицца · 12» ──
+    private var facetChips: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: YMSpace.sm) {
+                facetChip("Все", selected: categoryId == nil, a11y: "Все категории") { selectCategory(nil) }
+                ForEach(facetCategories) { cat in
+                    facetChip("\(cat.name) · \(cat.count)", selected: categoryId == cat.id,
+                              a11y: "\(cat.name), \(Self.goodsText(cat.count))") {
+                        // Повторный тап по выбранной снимает выбор.
+                        selectCategory(categoryId == cat.id ? nil : cat.id)
+                    }
+                }
+            }
+            .padding(.horizontal, YMSpace.xl)
+        }
+        .padding(.bottom, YMSpace.sm)
+    }
+
+    private func facetChip(_ title: String, selected: Bool, a11y: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                .foregroundStyle(selected ? YMColor.onAccent : YMColor.text)
+                .padding(.horizontal, 13).padding(.vertical, 8)
+                .background(selected ? YMColor.accent : YMColor.surface,
+                            in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous)
+                    .strokeBorder(selected ? Color.clear : YMColor.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(a11y)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// «1 товар», «2 товара», «12 товаров».
+    private static func goodsText(_ n: Int) -> String {
+        let m100 = n % 100, m10 = n % 10
+        let w: String
+        if m100 >= 11 && m100 <= 14 { w = "товаров" }
+        else if m10 == 1 { w = "товар" }
+        else if m10 >= 2 && m10 <= 4 { w = "товара" }
+        else { w = "товаров" }
+        return "\(n) \(w)"
+    }
+
+    /// Выбор категории — сразу перезапрос с category_id (без дебаунса: это тап, а не набор).
+    private func selectCategory(_ id: Int?) {
+        guard categoryId != id else { return }
+        categoryId = id
+        let query = trimmed
+        guard query.count >= 2 else { return }
+        searchTask?.cancel()
+        searchTask = Task { await runSearch(query) }
     }
 
     // ── helpers ──
@@ -548,15 +673,21 @@ private struct SearchSection: View {
     private func runSearch(_ query: String) async {
         loading = true
         searchFailed = false
-        var params: [String: String] = ["q": query]
+        var params: [String: String] = ["q": query, "facets": "1"]
         if let cid = session.cityId { params["city_id"] = String(cid) }   // глобально по городу
+        let cat: Int? = categoryId
+        if let c = cat { params["category_id"] = String(c) }
         do {
             let r: SearchSmartResult = try await API.shared.get("api/v1/search/smart", query: params)
             // Ответ пришёл, а запрос уже сменили (набрали букву, стёрли поле):
             // отмена не успела оборвать запрос, и результаты прежнего запроса
             // ложились под новый текст. Новый поиск сам выставит свои.
-            if Task.isCancelled || query != trimmed { return }
+            if Task.isCancelled || query != trimmed || cat != categoryId { return }
             shops = r.shops ?? []; products = r.products ?? []
+            // Фасеты берём только из ответа БЕЗ категории: с категорией сервер вернул бы
+            // чипы одной выбранной категории, и переключиться было бы некуда.
+            // Нет поля (старый сервер) — ряда нет.
+            if cat == nil { facets = r.facets }
         } catch {
             // Отмена (набрали следующую букву) — не «ничего не найдено».
             // Но и вечную крутилку не оставляем: ушли с экрана посреди поиска —
@@ -575,7 +706,10 @@ private struct SearchSection: View {
         scheduleSearch()
     }
 
-    private func clearResults() { shops = []; products = []; loading = false; searchFailed = false }
+    private func clearResults() {
+        shops = []; products = []; loading = false; searchFailed = false
+        facets = nil; categoryId = nil
+    }
 
     private func loadFavIds() async {
         // Гость: сердечки прошлого аккаунта не показываем.

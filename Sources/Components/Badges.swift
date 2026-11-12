@@ -26,14 +26,20 @@ struct HeartButton: View {
     var favColor: Color = YMColor.accent
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var bump = false
+    @State private var sparkKey = 0
 
     var body: some View {
         Button {
             Haptics.light()
+            let becomesFav = !isFav
             isFav.toggle()
-            if !reduceMotion {
-                bump = true
-                withAnimation(YMMotion.snappy) { bump = false }
+            // Поп и искры — только при включении; при снятии — без эффектов.
+            if becomesFav && !reduceMotion {
+                withAnimation(.spring(response: 0.16, dampingFraction: 0.55)) { bump = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) { bump = false }
+                }
+                sparkKey += 1
             }
         } label: {
             Image(systemName: isFav ? "heart.fill" : "heart")
@@ -42,7 +48,17 @@ struct HeartButton: View {
                 .frame(width: size, height: size)
                 .background(Color.black.opacity(0.42), in: Circle())
                 .background(.ultraThinMaterial, in: Circle())
-                .scaleEffect(bump ? 1.25 : 1)
+                .scaleEffect(bump ? 1.35 : 1)
+                .overlay(
+                    Group {
+                        if sparkKey > 0 {
+                            YMBurst(config: .sparks(size: size, colors: [favColor, YMPalette.goldBright]))
+                                .id(sparkKey)
+                                .frame(width: size * 2.4, height: size * 2.4)
+                        }
+                    }
+                    .allowsHitTesting(false)
+                )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(isFav ? "Убрать из избранного" : "Добавить в избранное")

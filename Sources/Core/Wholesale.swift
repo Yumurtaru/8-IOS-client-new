@@ -128,12 +128,12 @@ enum Wholesale {
     /// Применимые ступени строки; пусто — опта нет (или корзину сохранила старая версия).
     static func steps(for line: CartLine) -> [Step] {
         guard let base = line.retailBase else { return [] }
-        return steps(line.priceTiers, retail: Money.parse(base))
+        return steps(line.priceTiers, retail: base)
     }
 
     /// Розничная цена единицы с добавками.
     static func retailUnit(_ line: CartLine) -> Decimal {
-        Money.parse(line.retailUnit ?? line.unitPrice)
+        line.retailUnit ?? line.unitPrice
     }
 
     /// Достигнутая ступень строки (по локальной формуле).
@@ -151,8 +151,7 @@ enum Wholesale {
     /// Цена единицы строки сейчас. Нет ступеней — как раньше (unitPrice).
     static func lineUnit(_ line: CartLine, in lines: [CartLine]) -> Decimal {
         let st = steps(for: line)
-        guard !st.isEmpty, let base = line.retailBase else { return Money.parse(line.unitPrice) }
-        let baseD = Money.parse(base)
+        guard !st.isEmpty, let baseD = line.retailBase else { return line.unitPrice }
         let rU = retailUnit(line)
         let addons = rU > baseD ? rU - baseD : 0
         return unit(retail: baseD, addons: addons, steps: st, qtyTotal: qtyTotal(lines, productId: line.productId))
