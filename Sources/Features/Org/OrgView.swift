@@ -959,6 +959,9 @@ struct DishRow: View {
                         if let w = product.wholesaleLabel {
                             Text(w).ymFont(11).foregroundStyle(YMColor.muted).lineLimit(1)
                         }
+                        if let l = LikesText.recommend(product.likesPercent) {
+                            Text(l).ymFont(11).foregroundStyle(YMColor.muted).lineLimit(1)
+                        }
                     }
                 }
                 Spacer(minLength: 8)

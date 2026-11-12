@@ -425,6 +425,9 @@ struct Product: Codable, Identifiable, Hashable {
     let shopName: String?
     /// O1: оптовые ступени (price_tiers). Нет поля (старый сервер) или мусор — nil = опта нет.
     @LossyList var priceTiers: [PriceTier]?
+    /// П-72 п.5: доля «понравилось» 0-100 (nil при < 5 оценок / старый сервер) и число оценок.
+    @LenientInt var likesPercent: Int?
+    @LenientInt var likesCount: Int?
 }
 struct ComboItem: Codable {
     let name: String?; @LenientInt var qty: Int?; @LenientDecimal var price: Decimal?; let photo: String?
@@ -448,6 +451,9 @@ struct ProductDetail: Codable, Identifiable {
     @LenientBool var outOfStock: Bool?
     /// O1: оптовые ступени (price_tiers). Нет поля или мусор — nil = опта нет.
     @LossyList var priceTiers: [PriceTier]?
+    /// П-72 п.5: «92 % рекомендуют» (nil - не показывать).
+    @LenientInt var likesPercent: Int?
+    @LenientInt var likesCount: Int?
 }
 struct ModifierGroup: Codable, Identifiable {
     let id: Int; let name: String?; let type: String?; @LenientBool var isRequired: Bool?
@@ -563,6 +569,11 @@ struct OrderItem: Codable, Identifiable {
     @LenientDouble var returnQty: Double?
     @LenientDouble var returnPendingQty: Double?
     @LenientDouble var returnableQty: Double?
+    /// К-56 К3: комментарий клиента к блюду (≤ 200). nil — старый сервер / не задан.
+    @LenientText var comment: String?
+    /// П-72 п.4: выбор клиента для позиции (similar | call | remove) и замена магазина.
+    @LenientText var substitution: String?
+    @LenientObject var substitute: OrderSubstitute?
 
     // Ключи камелкейсом: декодер работает с .convertFromSnakeCase, он уже
     // превратил product_id → productId. Явно переименовываем только id → lineId.
@@ -570,6 +581,7 @@ struct OrderItem: Codable, Identifiable {
         case lineId = "id"
         case productId, name, qty, qtyOrdered, price, unit
         case returnQty, returnPendingQty, returnableQty
+        case comment, substitution, substitute
     }
 
     var id: Int { lineId ?? ((productId ?? 0) &* 100000 &+ Int((qty ?? 0).rounded())) }
@@ -651,6 +663,11 @@ struct OrderDetail: Codable, Identifiable {
     /// А115 (П-60 №8): бронь жилья (orderStayInfo). null у обычного заказа и у
     /// старого сервера — тогда как раньше. Битое поле карточку не роняет.
     let stay: OrderStay?
+    /// П-72 п.4: замены товаров. Всё необязательное — старый сервер полей не шлёт.
+    @LenientText var substitutionDefault: String?
+    @LenientText var substitutionDeadlineAt: String?
+    @LenientInt var substitutionTimeoutMin: Int?
+    @LenientList var substitutions: [OrderSubstitute]?
 }
 /// `stay` карточки заказа: {date_from, date_to, nights, adults, children, unit,
 /// check_in_from, check_out_until, status}. status — статус самой брони:
@@ -1094,6 +1111,9 @@ struct WalletTopupCreated: Codable {
     @LenientInt var topupId: Int?
     @LenientDecimal var amount: Decimal?
     var confirmationUrl: String?
+    /// П-72: автоплатёж сохранённой картой - "confirmed" (+ balance) или "pending". Старый сервер - nil.
+    var status: String?
+    @LenientDecimal var balance: Decimal?
 }
 /// GET api/v1/wallet/topup/{id} — статус. Баланс поднимает только сервер и
 /// только после подтверждения платежа провайдером.
@@ -1108,6 +1128,10 @@ struct WalletTopupStatus: Codable {
 struct WalletTopupBody: Encodable {
     let amount: String           // деньги на провод — строкой "0.00", как везде
     let method: String?
+    // П-72 п.2 (необязательные: nil не уходит на сервер - старое поведение)
+    var saveCard: Bool? = nil
+    var paymentMethodId: Int? = nil
+    var returnUrl: String? = nil
 }
 
 // ---- Возвраты ----
@@ -1264,6 +1288,8 @@ struct CatalogItem: Codable, Hashable {
 struct RecommendationsResp: Codable {
     let orderedAgain: [OrderedAgainShop]?
     let popular: [CatalogItem]?
+    /// П-72 п.6: «Вы часто берёте» (формат как popular). Нет поля / мусор - nil.
+    @LossyList var oftenBought: [CatalogItem]?
 }
 /// Заведение из блока «Вы заказывали» (recommendations.ordered_again).
 /// rating приходит строкой "4.80" -> точный Decimal; всё опционально (старый сервер).
@@ -1304,6 +1330,12 @@ struct GiftCard: Codable { let code: String?; @LenientDecimal var balance: Decim
 struct Application: Codable, Identifiable { let id: Int; let status: String?; let title: String?; let shop: String?; let createdAt: String? }
 
 // ---- Отзыв (чтение) ----
+/// П-72 п.5: элемент `media` отзыва: kind "photo" | "video", url, poster (у видео, может быть null).
+struct ReviewMedia: Codable, Hashable {
+    let kind: String?
+    let url: String?
+    let poster: String?
+}
 struct Review: Codable, Identifiable {
     var id: String { serverId.map { "r\($0)" } ?? "\(author ?? "")-\(createdAt ?? "")" }
     /// П-21.4/П-23.4 (А58): id отзыва на сервере — для жалобы и дублей при догрузке.
@@ -1311,11 +1343,13 @@ struct Review: Codable, Identifiable {
     @LenientInt var serverId: Int?
     @LenientInt var ratingOverall: Int?; let text: String?; let author: String?; @LenientInt var isVerified: Int?; let createdAt: String?
     let photos: [String]?
+    /// П-72 п.5: медиа отзыва (фото и видео) рядом с photos. Нет поля - nil.
+    @LossyList var media: [ReviewMedia]?
     // Ответ продавца (Фаза 2.4, аддитивно): nil = ответа нет.
     let reply: String?; let replyAt: String?
     // Ключи в camelCase: декодер сам переводит snake_case; serverId ← "id".
     enum CodingKeys: String, CodingKey {
-        case serverId = "id", ratingOverall, text, author, isVerified, createdAt, photos, reply, replyAt
+        case serverId = "id", ratingOverall, text, author, isVerified, createdAt, photos, media, reply, replyAt
     }
 }
 

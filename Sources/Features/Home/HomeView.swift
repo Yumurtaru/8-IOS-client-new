@@ -11,6 +11,7 @@ final class HomeViewModel: ObservableObject {
     @Published var popular: [CatalogItem] = []      // «Популярное в городе»
     @Published var recommendations: [CatalogItem] = [] // «Рекомендуем вам» (персонально)
     @Published var orderedAgain: [OrderedAgainShop] = [] // «Вы заказывали» (ordered_again)
+    @Published var oftenBought: [CatalogItem] = []        // «Вы часто берёте» (often_bought, П-72 п.6)
     @Published var shops: [Shop] = []               // список организаций
     @Published var kind: OrgKind = .all
     @Published var loading = true
@@ -86,6 +87,7 @@ final class HomeViewModel: ObservableObject {
         guard session.token == t, session.cityId == c else { return }
         recommendations = resp?.popular ?? []
         orderedAgain = resp?.orderedAgain ?? []
+        oftenBought = resp?.oftenBought ?? []
     }
 
     /// Сменился аккаунт (вход/выход): личную подборку перечитываем, прежнюю
@@ -93,6 +95,7 @@ final class HomeViewModel: ObservableObject {
     func reloadRecommendations(session: Session) async {
         recommendations = []
         orderedAgain = []
+        oftenBought = []
         await loadRecommendations(session: session)
     }
 
@@ -436,6 +439,9 @@ struct HomeView: View {
                     .padding(.top, 4)
                 }
             }
+
+            // «Вы часто берёте» (П-72 п.6) - блок рисуется, только если сервер прислал товары.
+            OftenBoughtRow(items: Array(vm.oftenBought.prefix(10))) { go(.product($0)) }
 
             // «Популярное в городе» — горизонтальная карусель PopularCard.
             if !vm.popular.isEmpty {

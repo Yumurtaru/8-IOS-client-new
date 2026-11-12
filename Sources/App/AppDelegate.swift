@@ -81,6 +81,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         if (info["type"] as? String) == "pool_account" { NotificationCenter.default.post(name: .ymCourierPushed, object: nil) }
         // А102: ответ поддержки — открытые «Мои обращения» и переписка перечитаются сразу.
         if (info["type"] as? String) == "support" { NotificationCenter.default.post(name: .ymSupportPushed, object: Self.ticketId(info)) }
+        // П-72 п.3: открытый экран общего заказа перечитывается сразу.
+        Self.postGroupCart(info)
         completionHandler([.banner, .sound, .badge])
     }
 
@@ -142,7 +144,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let alertDict = alert as? [String: Any]
         let alertTitle = (alertDict?["title"] as? String) ?? ""
         let alertBody = (alertDict?["body"] as? String) ?? (alert as? String) ?? ""
-        let dedupKey = ["type", "order_id", "status", "product_id", "slug", "screen", "ad_id", "booking_id", "ticket_id", "title", "body", "call_id", "event"]
+        let dedupKey = ["type", "order_id", "status", "product_id", "slug", "screen", "ad_id", "booking_id", "ticket_id", "title", "body", "call_id", "event", "code", "item_id"]
             .map { k -> String in "\(k)=" + (userInfo[k].map { v in "\(v)" } ?? "") }.joined(separator: "&")
             + "&aps_title=" + alertTitle + "&aps_body=" + alertBody
         if let last = lastHandled, last.key == dedupKey, Date().timeIntervalSince(last.at) < 5 { return }
@@ -168,8 +170,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             if let id = Self.buyerOrderId(userInfo) { NotificationCenter.default.post(name: .ymOrderPushed, object: id) }
             if let id = Self.parcelId(userInfo) { NotificationCenter.default.post(name: .ymParcelPushed, object: id) }
             if (userInfo["type"] as? String) == "support" { NotificationCenter.default.post(name: .ymSupportPushed, object: Self.ticketId(userInfo)) }
+            Self.postGroupCart(userInfo)
             UIApplication.shared.applicationIconBadgeNumber = 0
         }
+    }
+
+    /// П-72 п.3: push type=group_cart (code, event) → экран общего заказа перечитается.
+    private static func postGroupCart(_ userInfo: [AnyHashable: Any]) {
+        guard (userInfo["type"] as? String) == "group_cart",
+              let raw = userInfo["code"] as? String, let code = GroupCartAPI.clean(raw) else { return }
+        NotificationCenter.default.post(name: .ymGroupCartPushed, object: [code, (userInfo["event"] as? String) ?? ""])
     }
 
     /// Волна 4313: id заказа покупателя из push (не продавца) — для .ymOrderPushed.
@@ -258,6 +268,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Push продавцу (владелец вошёл тем же аккаунтом) — заказ не его как
         // покупателя: просто открываем приложение.
         if isSellerSide(type, userInfo) { return nil }
+        // П-72 п.3: общий заказ (type=group_cart, code, event joined|locked|ordered|cancelled) —
+        // тап открывает экран группы; гостю экран сам предложит войти.
+        if type == "group_cart", let raw = userInfo["code"] as? String, let code = GroupCartAPI.clean(raw) {
+            return { nav.openGroup(code: code) }
+        }
         // А79: посылка (accepted, arrived, picked, delivered, failed, released,
         // expired, cancelled) — карточка посылки в профиле («Мои посылки»).
         // А101: event no_courier_yet («Курьера пока нет» за 30 мин до забора) и любой будущий

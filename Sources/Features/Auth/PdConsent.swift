@@ -4,8 +4,10 @@
 //
 //  152-ФЗ (ст. 9 в ред. 156-ФЗ, с 01.09.2025): согласие на обработку персональных данных — ОТДЕЛЬНЫЙ документ
 //  (https://yumurta.ru/consent), политика — https://yumurta.ru/privacy. Галочка на входе/регистрации по умолчанию
-//  не отмечена. Серверного поля pd_consent пока нет — на сервер ничего не шлём, факт и время хранятся на
-//  устройстве (UserDefaults, ключ pd_consent_at, ISO-8601). Те же тексты — Android PdConsent.kt и приложения курьера.
+//  не отмечена. П-74 п.4: при входе (пароль, ключ доступа) и регистрации (register/request и /confirm) уходят
+//  pd_consent = true (bool) и pd_consent_at — время отметки (ISO-8601 UTC); сервер пишет журнал согласий.
+//  На устройстве — время последнего согласия (UserDefaults, ключ pd_consent_at) после успешного входа.
+//  Те же тексты и поля — Android PdConsent.kt и приложения курьера.
 //
 
 import SwiftUI
@@ -28,11 +30,19 @@ enum PdConsent {
         text.replacingOccurrences(of: linkWord, with: "[\(linkWord)](\(consentURL))")
     }
 
-    /// Запомнить факт и время согласия на устройстве (на сервер не шлём).
-    static func remember() {
+    /// Время отметки согласия «сейчас» (ISO-8601 UTC, «2026-11-12T10:00:00Z») — для поля pd_consent_at.
+    static func now() -> String {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
-        UserDefaults.standard.set(f.string(from: Date()), forKey: keyAt)
+        return f.string(from: Date())
+    }
+
+    /// Поля согласия для тела запроса входа/регистрации (П-74 п.4).
+    static func fields(_ at: String) -> [String: Any] { ["pd_consent": true, "pd_consent_at": at] }
+
+    /// Запомнить факт и время согласия на устройстве (после успешного входа/регистрации).
+    static func remember() {
+        UserDefaults.standard.set(now(), forKey: keyAt)
     }
 }
 

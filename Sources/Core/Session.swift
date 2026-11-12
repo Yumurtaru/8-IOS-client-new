@@ -81,6 +81,7 @@ final class Session: ObservableObject {
         OfflineCache.shared.clearAll()   // списки и профиль прежнего аккаунта не должны пережить выход
         token = nil
         TokenStore.clear()
+        CardSecretStore.clear()   // К-57: секрет одноразового QR карты — из Keychain
         API.clearCookies()   // cookie прежних версий не должны пережить выход
         // Корзина, история поиска и «недавно смотрели» лежат на телефоне. Раньше
         // следующий вошедший видел всё это от прежнего владельца, а первая правка

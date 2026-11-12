@@ -30,6 +30,10 @@ struct CartView: View {
     /// там корзина показывает «Сервисный сбор» и «Итого» уже со сбором, а здесь
     /// итог был без него и на оформлении вдруг вырастал).
     @State private var feeShop: ShopDetail?
+    /// П-72 п.3: «Общий заказ» из корзины.
+    @State private var groupBusy = false
+    @State private var groupError: String?
+    @State private var groupChoice = false
 
     private var serviceFee: Decimal { Fees.service(subtotal: cart.total, shop: feeShop) }
     private var cartGrand: Decimal { cart.total + serviceFee }
@@ -59,6 +63,39 @@ struct CartView: View {
         .onAppear { cart.expireStalePending() }
     }
 
+    // MARK: - Общий заказ (П-72 п.3)
+
+    private func startGroup() {
+        groupError = nil
+        guard Session.shared.isLoggedIn else {
+            groupError = "Войдите в аккаунт (Профиль), чтобы создать общий заказ"
+            return
+        }
+        if GroupCartMemory.lastCode != nil { groupChoice = true } else { createGroup() }
+    }
+
+    /// Создаёт общий заказ в заведении корзины и переносит в него позиции корзины.
+    private func createGroup() {
+        guard let sid = cart.shopId, !groupBusy else { return }
+        let lines = GroupCartAPI.lines(fromCart: cart, shopId: sid)
+        if let e = GroupCartAPI.limitError(lines) { groupError = e; return }
+        groupBusy = true
+        Task {
+            do {
+                let created = try await GroupCartAPI.create(shopId: sid)
+                guard let code = created.code, !code.isEmpty else { throw APIError.decoding }
+                try await GroupCartAPI.putItems(code, lines: lines)
+                await MainActor.run {
+                    groupBusy = false
+                    GroupCartMemory.lastCode = code
+                    NavCoordinator.shared.openGroup(code: code)
+                }
+            } catch {
+                await MainActor.run { groupBusy = false; groupError = GroupCartText.message(error) }
+            }
+        }
+    }
+
     // MARK: - Header «‹ Корзина»
 
     private var header: some View {
@@ -77,6 +114,25 @@ struct CartView: View {
                 .ymFont(20, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             Spacer()
+            if !cart.isEmpty {
+                Button(action: { Haptics.light(); startGroup() }) {
+                    Text(groupBusy ? "…" : "Общий заказ")
+                        .ymFont(14, weight: .semibold)
+                        .foregroundStyle(YMColor.accent)
+                        .padding(.horizontal, 12).frame(height: 38)
+                        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .disabled(groupBusy)
+                .confirmationDialog("Общий заказ", isPresented: $groupChoice, titleVisibility: .visible) {
+                    if let last = GroupCartMemory.lastCode {
+                        Button("Открыть текущий общий заказ") { NavCoordinator.shared.openGroup(code: last) }
+                    }
+                    Button("Создать новый из корзины") { createGroup() }
+                    Button("Не сейчас", role: .cancel) {}
+                }
+            }
         }
         .padding(.horizontal, YMSpace.xl)
         .padding(.top, YMSpace.xs)
@@ -88,6 +144,11 @@ struct CartView: View {
     private var content: some View {
         VStack(spacing: 0) {
             header
+            if let e = groupError {
+                Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, YMSpace.xl).padding(.bottom, YMSpace.sm)
+            }
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     storeBanner

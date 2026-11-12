@@ -163,6 +163,9 @@ struct OrgReviewCard: View {
                 .padding(.top, 10)
             }
 
+            // П-72 п.5: видео отзыва (постер + ▶).
+            if let media = review.media, !media.isEmpty { ReviewMediaStrip(media: media) }
+
             // Автор + дата.
             HStack {
                 Text((review.author?.isEmpty == false ? review.author! : "Гость"))

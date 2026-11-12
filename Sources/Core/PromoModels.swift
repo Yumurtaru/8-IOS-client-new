@@ -46,9 +46,11 @@ struct AppliedPromo: Codable, Identifiable {
     @LenientDouble var points: Double?
     @LenientBool var freeDelivery: Bool?
     let gifts: [PromoGift]?
+    /// К-57: "loyalty" — скидка по программе (id 0, не акция продавца). У акций ключа нет -> nil.
+    let kind: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, name, description, discount, points, freeDelivery, gifts
+        case id, name, description, discount, points, freeDelivery, gifts, kind
     }
 
     init(from decoder: Decoder) throws {
@@ -60,7 +62,24 @@ struct AppliedPromo: Codable, Identifiable {
         _points = try c.decode(LenientDouble.self, forKey: .points)
         _freeDelivery = try c.decode(LenientBool.self, forKey: .freeDelivery)
         gifts = try? c.decodeIfPresent([PromoGift].self, forKey: .gifts)
+        kind = try? c.decodeIfPresent(String.self, forKey: .kind)
     }
+
+    /// Запись скидки по программе лояльности (К-57): id 0, kind "loyalty".
+    var isLoyalty: Bool { kind == "loyalty" }
+}
+
+/// К-57: разбивка по строкам (row — индекс строки запроса). Все поля необязательные.
+struct LoyaltyLine: Codable, Hashable {
+    @LenientInt var row: Int?
+    @LenientInt var productId: Int?
+    @LenientDecimal var percent: Decimal?
+    @LenientDecimal var discount: Decimal?
+    @LenientDecimal var pointsSpent: Decimal?
+    @LenientBool var earn: Bool?
+    @LenientBool var spend: Bool?
+    @LenientBool var discountable: Bool?
+    let reason: String?
 }
 
 struct PromoPreview: Codable {
@@ -81,6 +100,17 @@ struct PromoPreview: Codable {
     let deliveryFreeBy: String?
     /// O1: подсказки «до опта осталось немного» (показывать только near == true).
     @LossyList var wholesaleHints: [WholesaleHint]?
+    // К-57 (лояльность «кэшбэк или скидка»). Всё необязательное: старый сервер ключей не шлёт.
+    /// "cashback" | "discount" | nil (программа выключена).
+    let loyaltyMode: String?
+    /// Скидка по программе — УЖЕ входит в discount и total (вычитать повторно нельзя).
+    @LenientDecimal var loyaltyDiscount: Decimal?
+    /// Оценка кешбэка, который вернётся баллами после выполнения заказа.
+    @LenientDecimal var cashbackEstimate: Decimal?
+    /// nil — баланс скрыт.
+    @LenientDecimal var pointsBalance: Decimal?
+    @LenientBool var pointsEarnExcluded: Bool?
+    @LossyList var loyaltyLines: [LoyaltyLine]?
 }
 
 /* AT-2: POST /api/cart/validate (routes/cart.php → cartRecompute, конверт сайта
@@ -107,6 +137,8 @@ struct CartValidateLine: Decodable {
     @LenientBool var wholesale: Bool?
     @LenientDouble var tierMinQty: Double?
     @LenientDecimal var retailLinePrice: Decimal?
+    /// К-56: сколько порций осталось (nil — не ограничено / старый сервер).
+    @LenientInt var portionsLeft: Int?
 }
 struct CartValidateResult: Decodable {
     let items: [CartValidateLine]?

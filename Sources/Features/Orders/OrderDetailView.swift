@@ -50,6 +50,9 @@ private struct OrderReviewBody: Encodable {
     let ratingService: Int?
     let text: String?
     let photos: [String]?
+    // П-72 п.5 (необязательные): видео и «понравилось» по блюдам
+    var mediaIds: [Int]? = nil
+    var items: [ReviewLikeItem]? = nil
 }
 
 // MARK: - OrderDetailViewModel
@@ -146,7 +149,7 @@ final class OrderDetailViewModel: ObservableObject {
     }
 
     /// Отзыв: POST api/v1/reviews {order_id, rating, text}. Контракт 1:1 с Android createReview.
-    func sendReview(rating: Int, food: Int, delivery: Int, service: Int, text: String, photos: [ReviewPhoto]) async {
+    func sendReview(rating: Int, food: Int, delivery: Int, service: Int, text: String, photos: [ReviewPhoto], extras: ReviewExtras? = nil) async {
         guard !actionBusy else { return }
         // Сервер (А719) отклоняет отзыв без оценки или с оценкой < 1 (422 «Поставьте оценку от 1 до 5»):
         // 0 и «без оценки» в запрос не отправляем.
@@ -165,7 +168,9 @@ final class OrderDetailViewModel: ObservableObject {
             try await API.shared.postVoid("api/v1/reviews",
                 body: OrderReviewBody(orderId: id, rating: rating,
                                       ratingFood: part(food), ratingDelivery: part(delivery), ratingService: part(service),
-                                      text: t.isEmpty ? nil : t, photos: b64.isEmpty ? nil : b64),
+                                      text: t.isEmpty ? nil : t, photos: b64.isEmpty ? nil : b64,
+                                      mediaIds: (extras?.mediaIds).flatMap { $0.isEmpty ? nil : $0 },
+                                      items: (extras?.likeItems).flatMap { $0.isEmpty ? nil : $0 }),
                 retryKey: true)
             Haptics.success(); reviewSent = true; toast = "Спасибо за отзыв!"
         } catch let e as APIError where e.rejectStatus == 409 {
@@ -431,6 +436,8 @@ struct OrderDetailView: View {
                     // А63: комментарий клиента к записи на услугу.
                     if let note = clientNote(o) { clientNoteCard(note) }
                     if canPay(o) { payCard(o) }          // онлайн-оплата (неоплаченный online-заказ)
+                    // П-72 п.4: «Нет в наличии… Замена…» — принять / отказаться.
+                    OrderSubstitutionsSection(order: o, orderId: id, onChanged: { await vm.reload() })
                     if let ch = o.changes, !ch.isEmpty { changesCard(ch) }
                     itemsCard(o)
                     // П-23.1: форма отзыва — по can_review сервера; NPS — как раньше.
@@ -510,6 +517,7 @@ struct OrderDetailView: View {
     @State private var reviewDelivery = 0
     @State private var reviewService = 0
     @State private var reviewPhotos: [ReviewPhoto] = []
+    @StateObject private var reviewExtras = ReviewExtras()   // П-72 п.5: видео и «понравилось» по блюдам
     @State private var npsScore = -1
 
     /// Сервер прислал имя или телефон курьера (только пока заказ в пути).
@@ -867,6 +875,7 @@ struct OrderDetailView: View {
                         Text(Money.format(Money.parse(it.price)))
                             .font(YMFont.body).foregroundStyle(YMColor.muted)
                     }
+                    OrderItemExtras(item: it)
                     if it.quantityChanged {
                         Text("изменено: было \(numText(it.qtyOrdered))\((it.unit ?? "").isEmpty ? "" : " " + (it.unit ?? ""))")
                             .font(YMFont.caption).foregroundStyle(YMColor.accent)
@@ -1056,10 +1065,13 @@ struct OrderDetailView: View {
                 ReviewPhotosField(photos: $reviewPhotos, busy: vm.actionBusy) {
                     Haptics.warning(); vm.toast = "Одно фото не удалось прочитать"
                 }
+                ReviewExtrasField(extras: reviewExtras,
+                                  dishes: reviewDishes(o),
+                                  busy: vm.actionBusy || reviewExtras.uploading)
                 Button {
                     Task {
                         await vm.sendReview(rating: reviewRating, food: reviewFood, delivery: reviewDelivery,
-                                            service: reviewService, text: reviewText, photos: reviewPhotos)
+                                            service: reviewService, text: reviewText, photos: reviewPhotos, extras: reviewExtras)
                     }
                 } label: {
                     HStack(spacing: YMSpace.sm) {
@@ -1076,6 +1088,16 @@ struct OrderDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(YMSpace.lg)
         .ymCard(radius: YMRadius.card)
+    }
+
+    /// Блюда заказа для «понравилось» (без повторов по product_id).
+    private func reviewDishes(_ o: OrderDetail) -> [(id: Int, name: String)] {
+        var seen = Set<Int>()
+        return (o.items ?? []).compactMap { it in
+            guard let pid = it.productId, pid > 0, !seen.contains(pid) else { return nil }
+            seen.insert(pid)
+            return (id: pid, name: (it.name?.isEmpty == false ? it.name! : "Блюдо"))
+        }
     }
 
     private func reviewPartRow(_ label: String, _ value: Binding<Int>) -> some View {

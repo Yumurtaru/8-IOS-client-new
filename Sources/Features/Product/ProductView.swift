@@ -326,6 +326,11 @@ struct ProductView: View {
                 Spacer(minLength: 0)
             }
             .padding(.top, 22)
+            if vm.mode == .product, let l = LikesText.recommend(vm.detail?.likesPercent) {
+                Label(l, systemImage: "hand.thumbsup")
+                    .ymFont(13).foregroundStyle(YMColor.muted)
+                    .padding(.top, 4)
+            }
 
             // ★рейтинг · метаданные.
             HStack(spacing: 10) {

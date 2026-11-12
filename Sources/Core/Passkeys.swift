@@ -129,8 +129,9 @@ enum Passkeys {
 
     // MARK: Вход
 
+    /// `consentAt` — время отметки согласия на ПД (П-74 п.4), уходит в passkey/login/verify.
     @MainActor
-    static func signIn() async -> PasskeyOutcome<AuthTokens> {
+    static func signIn(consentAt: String? = nil) async -> PasskeyOutcome<AuthTokens> {
         var attempt = 0
         while true {
             attempt += 1
@@ -161,9 +162,11 @@ enum Passkeys {
                         "userHandle": a.userID.base64URL,
                     ] as [String: Any],
                 ]
+                var json: [String: Any] = ["challenge_id": o.challengeId, "credential": cred]
+                if let at = consentAt { json.merge(PdConsent.fields(at)) { _, new in new } }
                 let tokens: AuthTokens = try await API.shared.postJSON(
                     "api/v1/auth/passkey/login/verify",
-                    json: ["challenge_id": o.challengeId, "credential": cred])
+                    json: json)
                 return .ok(tokens)
             } catch {
                 if isExpired(error) && attempt < 2 { continue }

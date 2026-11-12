@@ -79,14 +79,56 @@ final class WalletViewModel: ObservableObject {
     /// Платёж создаётся — второе «Пополнить» в это время создавало второй платёж.
     @Published var creating = false
 
-    func topup(amount: Decimal, method: String) async {
+    // П-72 п.2: сохранённые способы оплаты (до 10).
+    @Published var methods: [SavedPayMethod] = []
+    @Published var methodsError: String?
+
+    func loadMethods() async {
+        do {
+            let r: ListPayload<SavedPayMethod> = try await API.shared.get("api/v1/payment-methods", fresh: true)
+            methods = r.items.filter { $0.methodId > 0 }
+            methodsError = nil
+        } catch is CancellationError {
+        } catch {
+            // Старый сервер без ручки - список просто пуст.
+            methodsError = nil
+        }
+    }
+    func deleteMethod(_ m: SavedPayMethod) async {
+        do {
+            try await API.shared.deleteVoid("api/v1/payment-methods/\(m.methodId)")
+            await loadMethods()
+        } catch {
+            methodsError = (error as? LocalizedError)?.errorDescription ?? "Не удалось удалить карту"
+        }
+    }
+    func makeDefault(_ m: SavedPayMethod) async {
+        do {
+            try await API.shared.postVoid("api/v1/payment-methods/\(m.methodId)/default")
+            await loadMethods()
+        } catch {
+            methodsError = (error as? LocalizedError)?.errorDescription ?? "Не удалось сделать основной"
+        }
+    }
+
+    func topup(_ choice: TopupChoice) async {
         guard !creating else { return }
         creating = true
         defer { creating = false }
         notice = nil
         do {
-            let body = WalletTopupBody(amount: Money.wire(amount), method: method)
+            let body = WalletTopupBody(amount: Money.wire(choice.amount), method: choice.savedId == nil ? choice.method.rawValue : nil,
+                                       saveCard: (choice.saveCard && choice.savedId == nil) ? true : nil,
+                                       paymentMethodId: choice.savedId,
+                                       returnUrl: PayReturn.url)
             let created: WalletTopupCreated = try await API.shared.post("api/v1/wallet/topup", body: body)
+            // Автоплатёж сохранённой картой уже прошёл - страницы оплаты нет.
+            if created.status == "confirmed", created.confirmationUrl == nil {
+                notice = "Кошелёк пополнен на \(Money.format(created.amount ?? choice.amount))"
+                await load()
+                await loadMethods()
+                return
+            }
             guard let link = created.confirmationUrl, let url = URL(string: link) else {
                 // Паритет с Android: прошлое пополнение на ту же сумму уже оплачено —
                 // сервер отвечает status = confirmed без ссылки (routes/wallet.php,
@@ -152,20 +194,25 @@ final class WalletViewModel: ObservableObject {
         if let st: WalletTopupStatus = try? await API.shared.get("api/v1/wallet/topup/\(id)") {
             if st.status == "confirmed" {
                 awaitingTopupId = nil
+                payLink = nil
                 notice = "Кошелёк пополнен на \(Money.format(st.amount ?? 0))"
             } else if st.status == "rejected" {
                 awaitingTopupId = nil
+                payLink = nil
                 notice = "Платёж не прошёл. Деньги не списаны, можно попробовать ещё раз."
             }
         }
         await load()
+        await loadMethods()   // карта появляется после вебхука ЮKassa
     }
 }
 
 struct WalletView: View {
     @StateObject private var vm = WalletViewModel()
     @State private var showTopup = false
-    @State private var pendingTopup: (amount: Decimal, method: String)?
+    @State private var pendingTopup: TopupChoice?
+    /// Возврат из банковского приложения / со страницы оплаты (yumurta://pay/return): перечитываем статус.
+    @Environment(\.scenePhase) private var scenePhase
     /// Паритет с Android: прошлое пополнение ещё ждёт ЮKassa — спрашиваем, прежде
     /// чем создать второй платёж (вернувшись со страницы оплаты, платили дважды).
     @State private var confirmNewTopup = false
@@ -183,7 +230,10 @@ struct WalletView: View {
         .background(YMColor.bg.ignoresSafeArea())
         .navigationTitle("Кошелёк")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await vm.load() }
+        .task { await vm.load(); await vm.loadMethods() }
+        .onChange(of: scenePhase) { phase in
+            if phase == .active, vm.awaitingTopupId != nil { Task { await vm.checkNow() } }
+        }
         .sheet(item: $vm.payLink, onDismiss: { Task { await vm.checkNow() } }) { link in
             SafariSheet(url: link.url)
         }
@@ -194,11 +244,11 @@ struct WalletView: View {
         .sheet(isPresented: $showTopup, onDismiss: {
             if let p = pendingTopup {
                 pendingTopup = nil
-                Task { await vm.topup(amount: p.amount, method: p.method) }
+                Task { await vm.topup(p) }
             }
         }) {
-            TopupSheet(min: vm.minTopup, max: vm.maxTopup) { amount, method in
-                pendingTopup = (amount, method)
+            TopupSheet(min: vm.minTopup, max: vm.maxTopup, vm: vm) { choice in
+                pendingTopup = choice
                 showTopup = false
             }
         }
@@ -412,11 +462,16 @@ private struct WalletTxRow: View {
 private struct TopupSheet: View {
     let min: Decimal
     let max: Decimal
-    let onSubmit: (Decimal, String) -> Void
+    @ObservedObject var vm: WalletViewModel
+    let onSubmit: (TopupChoice) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var amountText = "1000"
-    @State private var method = "card"
+    @State private var method: TopupMethod = .sbp
+    @State private var saveCard = false
+    /// nil - новый способ; иначе наш id сохранённой карты.
+    @State private var savedId: Int?
+    @State private var deleting: SavedPayMethod?
     @State private var localError: String?
 
     private let presets: [Decimal] = [500, 1000, 3000, 5000]
@@ -459,12 +514,61 @@ private struct TopupSheet: View {
                         .font(YMFont.caption)
                         .foregroundStyle(YMColor.muted)
                 }
-                Section("Способ") {
-                    Picker("Способ", selection: $method) {
-                        Text("Картой").tag("card")
-                        Text("СБП").tag("sbp")
+                if !vm.methods.isEmpty {
+                    Section("Сохранённые карты") {
+                        ForEach(vm.methods) { m in
+                            HStack {
+                                Button {
+                                    savedId = m.methodId
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: savedId == m.methodId ? "largecircle.fill.circle" : "circle")
+                                            .foregroundStyle(YMColor.accent)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(m.displayTitle + (m.isDefault == true ? " · основная" : ""))
+                                                .foregroundStyle(YMColor.text)
+                                            if let e = m.expiry, !e.isEmpty {
+                                                Text("до " + e).font(YMFont.caption).foregroundStyle(YMColor.muted)
+                                            }
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                Spacer(minLength: 4)
+                                Menu {
+                                    if m.isDefault != true {
+                                        Button("Сделать основной") { Task { await vm.makeDefault(m) } }
+                                    }
+                                    Button("Удалить", role: .destructive) { deleting = m }
+                                } label: {
+                                    Image(systemName: "ellipsis.circle").foregroundStyle(YMColor.muted)
+                                }
+                            }
+                        }
+                        Button {
+                            savedId = nil
+                        } label: {
+                            HStack(spacing: 8) {
+                                Image(systemName: savedId == nil ? "largecircle.fill.circle" : "circle")
+                                    .foregroundStyle(YMColor.accent)
+                                Text("Другой способ").foregroundStyle(YMColor.text)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        if let e = vm.methodsError {
+                            Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                        }
                     }
-                    .pickerStyle(.segmented)
+                }
+                if savedId == nil {
+                    Section("Способ") {
+                        Picker("Способ", selection: $method) {
+                            ForEach(TopupMethod.allCases) { m in Text(m.title).tag(m) }
+                        }
+                        if method == .card {
+                            Toggle("Запомнить карту", isOn: $saveCard).tint(YMColor.accent)
+                        }
+                    }
                 }
                 if let e = localError {
                     Section { Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel) }
@@ -475,7 +579,7 @@ private struct TopupSheet: View {
                             localError = "Сумма должна быть от \(Money.format(min)) до \(Money.format(max))"
                             return
                         }
-                        onSubmit(a, method)
+                        onSubmit(TopupChoice(amount: a, method: method, saveCard: saveCard && method == .card, savedId: savedId))
                     } label: {
                         HStack { Spacer(); Text("Пополнить").bold(); Spacer() }
                     }
@@ -489,6 +593,22 @@ private struct TopupSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) { Button("Отмена") { dismiss() } }
+            }
+            .onAppear {
+                // Основная карта выбрана заранее; «Другой способ» - одним нажатием.
+                if savedId == nil, let d = vm.methods.first(where: { $0.isDefault == true }) { savedId = d.methodId }
+            }
+            .alert("Удалить карту?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
+                Button("Отмена", role: .cancel) { deleting = nil }
+                Button("Удалить", role: .destructive) {
+                    if let m = deleting {
+                        if savedId == m.methodId { savedId = nil }
+                        Task { await vm.deleteMethod(m) }
+                    }
+                    deleting = nil
+                }
+            } message: {
+                Text(deleting?.displayTitle ?? "")
             }
         }
     }

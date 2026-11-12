@@ -30,7 +30,10 @@ import SwiftUI
 // исходе уходит повторно ровно тем же.
 private struct OrderItemBody: Codable {
     let productId: Int; let qty: Double; let modifiers: [Int]?
-    enum CodingKeys: String, CodingKey { case productId = "product_id", qty, modifiers }
+    /// К-56 К3: комментарий к блюду (≤ 200). nil — в JSON не попадает; у старых
+    /// сохранённых тел (PendingOrder) поля нет — читается как nil.
+    var comment: String? = nil
+    enum CodingKeys: String, CodingKey { case productId = "product_id", qty, modifiers, comment }
 }
 /// Адрес доставки — ОБЪЕКТОМ, 1:1 с AddressReq Android-клиента.
 ///
@@ -80,12 +83,15 @@ private struct OrderBody: Codable {
     /// В отпечаток повтора сервер её не включает: старое тело в PendingOrder
     /// без поля читается, повтор тем же ключом допустим.
     var expectedSubtotal: String? = nil
+    /// П-72 п.4: «Если товара нет» — "similar" | "call" | "remove". nil — не шлём.
+    var substitutionDefault: String? = nil
     enum CodingKeys: String, CodingKey {
         case shopId = "shop_id", items, deliveryType = "delivery_type", paymentType = "payment_type",
              address, comment, deliveryPrice = "delivery_price", lat, lng,
              spendPointsAll = "spend_points_all", idempotencyKey = "idempotency_key",
              tableNumber = "table_number", promoCode = "promo_code", preorderAt = "preorder_at",
-             changeFrom = "change_from", expectedSubtotal = "expected_subtotal"
+             changeFrom = "change_from", expectedSubtotal = "expected_subtotal",
+             substitutionDefault = "substitution_default"
     }
 }
 /// Ответ POST api/v1/promo/check.
@@ -183,6 +189,9 @@ struct CheckoutView: View {
     var onBack: () -> Void = {}
     /// AT-3: исход оформления неизвестен — «Проверить мои заказы».
     var onOpenOrders: () -> Void = {}
+    /// П-72 п.3: оформление общего заказа (владелец) — то же тело, но на
+    /// api/v1/group-carts/{code}/checkout. nil — обычный заказ.
+    var groupCode: String? = nil
 
     @ObservedObject private var cart = Cart.shared
     /// Сессия: истекла посреди оформления — раньше оставалась только надпись
@@ -238,7 +247,7 @@ struct CheckoutView: View {
     // применялась молча при создании заказа, и человек до последнего экрана
     // видел цену без скидки, а баллами заплатить было нельзя.
     @State private var promo: PromoPreview?
-    @State private var spendPoints = false
+    @State private var spendPoints = LoyaltyPrefs.spendDefault   // К-57: настройка «По умолчанию списывать баллы»
     @State private var promoTask: Task<Void, Never>?
     /// Пересчёт акций/баллов ещё идёт. Пока он не вернулся, итог на кнопке — от
     /// прежнего состояния: сняли «Оплатить баллами» — кнопка ещё показывала сумму
@@ -259,6 +268,8 @@ struct CheckoutView: View {
     @State private var checkingCode = false
     /// «Сдача с» (только для наличных) — уходит в заказ как change_from.
     @State private var changeFrom = ""
+    /// К-56 К3: комментарии к блюдам по ключу строки корзины.
+    @State private var dishComments: [String: String] = [:]
     /// Поле ввода в фокусе (клавиатура открыта): тогда нижняя панель сжимается
     /// до «Готово», чтобы не закрывать поле над клавиатурой.
     private enum Field: Hashable { case table, promo, comment, change }
@@ -744,11 +755,25 @@ struct CheckoutView: View {
 
                 SectionKicker("Ваш заказ").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.md)
                 VStack(spacing: YMSpace.md) {
-                    ForEach(cart.lines) { line in CheckoutRow(line: line, lines: cart.lines) }
+                    ForEach(cart.lines) { line in
+                        VStack(alignment: .leading, spacing: YMSpace.xs) {
+                            CheckoutRow(line: line, lines: cart.lines)
+                            DishCommentField(text: Binding(
+                                get: { dishComments[line.key] ?? "" },
+                                set: { dishComments[line.key] = $0 }
+                            ))
+                        }
+                    }
                     // O1: подсказки опта — только по свежему пересчёту ровно этого состава.
                     if !promoPending, promoFor == cartSig, let hs = promo?.wholesaleHints, !hs.isEmpty {
                         WholesaleHintsView(hints: hs)
                     }
+                }
+
+                // П-72 п.4: что делать, если товара не окажется (услуги — без замен).
+                if shop?.mode != "service" {
+                    SectionKicker("Если товара нет").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.sm)
+                    SubstitutionPickerBlock()
                 }
 
                 SectionKicker("Оплата").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.sm)
@@ -1118,9 +1143,10 @@ struct CheckoutView: View {
             if serviceFee > 0 {
                 totalRow("Сервисный сбор", Money.format(serviceFee))
             }
-            if promoDiscount > 0 {
-                totalRow("Скидка по акции", "−" + Money.format(promoDiscount), accent: true)
+            if promoDiscount - (promo?.loyaltyDiscountValue ?? 0) > 0 {
+                totalRow("Скидка по акции", "−" + Money.format(promoDiscount - (promo?.loyaltyDiscountValue ?? 0)), accent: true)
             }
+            LoyaltySummaryRows(promo: promo)   // К-57: скидка по программе (уже в итоге) и «Вернётся баллами ≈»
             if codeOff > 0 {
                 totalRow("Промокод", "−" + Money.format(codeOff), accent: true)
             }
@@ -1448,7 +1474,8 @@ struct CheckoutView: View {
 
         let items = cart.lines.map {
             OrderItemBody(productId: $0.productId, qty: $0.qty,
-                          modifiers: $0.modifierIds.isEmpty ? nil : $0.modifierIds)
+                          modifiers: $0.modifierIds.isEmpty ? nil : $0.modifierIds,
+                          comment: dishCommentWire($0.key))
         }
         let dp = fulfillment == .delivery ? NSDecimalNumber(decimal: deliveryCost).doubleValue : nil
         let trimmed = comment.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1472,8 +1499,11 @@ struct CheckoutView: View {
             preorderAt: needTime ? preorderAt : nil,
             // Только для наличных и только непустое — как сайт (change_from || null).
             changeFrom: payment == .cash && !changeDigits.isEmpty ? changeDigits : nil,
-            expectedSubtotal: expectedSubtotalWire
+            expectedSubtotal: expectedSubtotalWire,
+            substitutionDefault: shop?.mode != "service" ? SubstitutionPickerBlock.current : nil
         )
+        // П-72 п.3: повтор неотвеченного оформления общего заказа уйдёт на тот же адрес.
+        if let gc = groupCode { GroupCheckoutMemo.set(gc, for: body.idempotencyKey) }
 
         // AT-3: тело и ключ — в корзину (на диск) ДО запроса; что ушло — для
         // экрана «исход неизвестен».
@@ -1496,6 +1526,12 @@ struct CheckoutView: View {
         send(body, retry: false)
     }
 
+    /// Комментарий к блюду для тела заказа: обрезан до 200, пусто — nil.
+    private func dishCommentWire(_ lineKey: String) -> String? {
+        let t = (dishComments[lineKey] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : String(t.prefix(DishCommentField.maxLength))
+    }
+
     /// Повтор неотвеченного оформления: то же тело, тот же ключ.
     private func retryPending() {
         guard !placing, let po = cart.pendingOrder else { return }
@@ -1512,10 +1548,13 @@ struct CheckoutView: View {
     private func send(_ body: OrderBody, retry: Bool) {
         placing = true; errorText = nil
         let key = body.idempotencyKey
+        let gcode = groupCode ?? GroupCheckoutMemo.code(for: key)
+        let apiPath = gcode.map { "api/v1/group-carts/\($0)/checkout" } ?? "api/v1/orders"
         Task {
             do {
-                let r: OrderCreateResult = try await API.shared.post("api/v1/orders", body: body)
+                let r: OrderCreateResult = try await API.shared.post(apiPath, body: body)
                 await MainActor.run {
+                    GroupCheckoutMemo.clear(key)
                     Haptics.success()
                     Track.orderCreated(id: r.resolvedId ?? 0)
                     // Статус заказа на экране блокировки (Live Activity); без расширения — пустой ход.
@@ -1536,7 +1575,7 @@ struct CheckoutView: View {
                 await MainActor.run {
                     Haptics.error()
                     let keep = Self.outcomeUnknown(error) || (retry && Self.beforeDupCheck(error))
-                    if keep { cart.markOrderUnknown(key: key) } else { cart.dropPendingOrder(key: key) }
+                    if keep { cart.markOrderUnknown(key: key) } else { cart.dropPendingOrder(key: key); GroupCheckoutMemo.clear(key) }
                     errorText = error.localizedDescription
                     placing = false
                     let api = error as? APIError

@@ -237,13 +237,13 @@ final class API {
 
     /// Повтор только для идемпотентных запросов (GET): POST/PUT/DELETE не повторяем,
     /// чтобы не задвоить заказ или платёж.
-    private func send<T: Decodable>(_ req: URLRequest, as type: T.Type, upload: Bool = false) async throws -> T {
+    private func send<T: Decodable>(_ req: URLRequest, as type: T.Type, upload: Bool = false, fromFile: URL? = nil) async throws -> T {
         let idempotent = (req.httpMethod ?? "GET") == "GET"
         let attempts = idempotent ? maxRetries + 1 : 1
         var lastError: Error = APIError.network
         for attempt in 0..<attempts {
             do {
-                return try await perform(req, as: type, upload: upload)
+                return try await perform(req, as: type, upload: upload, fromFile: fromFile)
             } catch let e as APIError where e.isRetryable && attempt < attempts - 1 {
                 lastError = e
                 // Без сети повтор бесполезен: каждая попытка ждёт сеть до 40 с
@@ -257,7 +257,7 @@ final class API {
         throw lastError
     }
 
-    private func perform<T: Decodable>(_ req: URLRequest, as type: T.Type, isRetryAfterRefresh: Bool = false, upload: Bool = false) async throws -> T {
+    private func perform<T: Decodable>(_ req: URLRequest, as type: T.Type, isRetryAfterRefresh: Bool = false, upload: Bool = false, fromFile: URL? = nil) async throws -> T {
         var data = Data(); var resp: URLResponse?
         // Офлайн-кэш (только чтение витрины, см. OfflineCache): нет сети или связь
         // оборвалась — отдаём последний сохранённый ответ вместо ошибки.
@@ -272,7 +272,13 @@ final class API {
                 // Служебная пометка «без кэша» (X-YM-Fresh) на сервер не уходит.
                 var wire = req
                 wire.setValue(nil, forHTTPHeaderField: OfflineCache.freshHeader)
-                let got = try await (upload ? uploadSession : session).data(for: wire)
+                let got: (Data, URLResponse)
+                if let f = fromFile {
+                    // Тело из файла (видео): не держим его в памяти.
+                    got = try await uploadSession.upload(for: wire, fromFile: f)
+                } else {
+                    got = try await (upload ? uploadSession : session).data(for: wire)
+                }
                 data = got.0; resp = got.1
             } catch let urlError as URLError {
                 if urlError.code == .cancelled { throw CancellationError() }   // отмена (дебаунс) — не повторяем
@@ -314,13 +320,13 @@ final class API {
                     retry.setValue("Bearer \(current)", forHTTPHeaderField: "Authorization")
                     // false: если и свежий токен отвергнут, этот повтор сам пойдёт в продление
                     // (заголовок теперь совпадает с текущим — второй раз сюда не попадём).
-                    return try await perform(retry, as: type, isRetryAfterRefresh: false, upload: upload)
+                    return try await perform(retry, as: type, isRetryAfterRefresh: false, upload: upload, fromFile: fromFile)
                 }
                 switch await refreshAccessToken() {
                 case .token(let newToken):
                     var retry = req
                     retry.setValue("Bearer \(newToken)", forHTTPHeaderField: "Authorization")
-                    return try await perform(retry, as: type, isRetryAfterRefresh: true, upload: upload)
+                    return try await perform(retry, as: type, isRetryAfterRefresh: true, upload: upload, fromFile: fromFile)
                 case .unavailable:
                     // Продлить не удалось из-за СЕТИ (таймаут, нет связи, 5xx).
                     // Раньше это считалось отказом, и человека разлогинивало со
@@ -659,6 +665,43 @@ final class API {
         req.httpBody = body
         let r: AdPhotoUploadedResponse = try await send(req, as: AdPhotoUploadedResponse.self, upload: true)
         return r.photo
+    }
+
+    /// П-72 п.5: видео к отзыву. POST api/v1/reviews/media (multipart, поле "file").
+    /// Тело собирается во временный файл кусками по 1 МБ и уходит upload(fromFile:) -
+    /// видео до 50 МБ не лежит в памяти. Общий лимит запроса - 120 с (uploadSession).
+    func uploadReviewMedia(fileURL: URL) async throws -> ReviewMediaUploaded {
+        let ext = fileURL.pathExtension.lowercased()
+        let mime = ext == "mp4" ? "video/mp4" : "video/quicktime"
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("upload-\(UUID().uuidString).body")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        guard FileManager.default.createFile(atPath: tmp.path, contents: nil),
+              let out = try? FileHandle(forWritingTo: tmp),
+              let src = try? FileHandle(forReadingFrom: fileURL) else { throw APIError.decoding }
+        do {
+            defer { try? out.close(); try? src.close() }
+            var head = "--\(boundary)\r\n"
+            head += "Content-Disposition: form-data; name=\"file\"; filename=\"review.\(ext.isEmpty ? "mov" : ext)\"\r\n"
+            head += "Content-Type: \(mime)\r\n\r\n"
+            try out.write(contentsOf: Data(head.utf8))
+            while true {
+                try Task.checkCancellation()
+                guard let chunk = try src.read(upToCount: 1_048_576), !chunk.isEmpty else { break }
+                try out.write(contentsOf: chunk)
+            }
+            try out.write(contentsOf: Data("\r\n--\(boundary)--\r\n".utf8))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw APIError.server("Не удалось подготовить видео")
+        }
+        var req = URLRequest(url: URL(string: API.base + "/api/v1/reviews/media")!)
+        req.httpMethod = "POST"
+        req.timeoutInterval = 120
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        if let token = TokenStore.access { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        return try await send(req, as: ReviewMediaUploaded.self, upload: true, fromFile: tmp)
     }
 
     func deleteVoid(_ path: String) async throws { _ = try await send(try makeRequest("DELETE", path), as: EmptyResp.self) }

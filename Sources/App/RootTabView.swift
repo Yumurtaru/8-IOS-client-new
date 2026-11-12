@@ -113,6 +113,8 @@ struct RootTabView: View {
             }
         }
         .tint(YMColor.accent)
+        // Общий заказ (ссылка /g/{code}, push group_cart): отдельным фоном — см. GroupCartPresenter.
+        .background(GroupCartPresenter(coord: coord))
         // Полёт золотого шарика к вкладке «Корзина» (Effects.swift): не на самой корзине/оформлении.
         .ymCartFlight(count: cart.count, suppressed: tab == 2 || coord.showCart)
         .animation(.easeInOut, value: net.online)
@@ -192,6 +194,7 @@ struct RootTabView: View {
             onboarded && tab == 0 && !orgShown && referralPrompt == nil
                 && !coord.showCart && !coord.cartConflict && !coord.showLodging
                 && !coord.profileOpen && coord.chatOrderId == nil && coord.pendingOrgSlug == nil
+                && coord.pendingGroupCode == nil
         }, presentationKey: updatePresentationKey))
     }
 }
@@ -201,7 +204,7 @@ extension RootTabView {
     /// экране окно «Вышла новая версия», — окно убирается (без «Позже»), чтобы не мешать.
     fileprivate var updatePresentationKey: String {
         "\(coord.showCart)|\(coord.cartConflict)|\(coord.showLodging)|\(coord.profileOpen)|"
-            + "\(coord.chatOrderId ?? 0)|\(coord.pendingOrgSlug ?? "")|\(coord.pendingOrderDetail ?? 0)|\(coord.pendingProductId ?? 0)|"
+            + "\(coord.chatOrderId ?? 0)|\(coord.pendingOrgSlug ?? "")|\(coord.pendingGroupCode ?? "")|\(coord.pendingOrderDetail ?? 0)|\(coord.pendingProductId ?? 0)|"
             + "\(router.requestedTab ?? -1)|\(router.referralCode ?? "")|\(referralPrompt?.code ?? "")"
     }
 }

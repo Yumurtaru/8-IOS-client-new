@@ -121,6 +121,8 @@ struct AuthView: View {
     @State private var error: String?
     /// 152-ФЗ: отдельная галочка согласия на обработку ПДн — при каждом показе экрана не отмечена.
     @State private var pdChecked = false
+    /// Время отметки согласия при регистрации: в register/request и тем же — в register/confirm.
+    @State private var regConsentAt: String?
     @State private var pdError = false
     /// А114: 422 email_invalid на «Получить код» — текст у поля почты и
     /// исправленный адрес для кнопки «Исправить на …» (nil — подсказки нет).
@@ -470,10 +472,10 @@ struct AuthView: View {
         busy = true; error = nil
         Task {
             do {
-                let t: AuthTokens = try await API.shared.post(
-                    "api/v1/auth/login",
-                    body: ["login": loginField.trimmingCharacters(in: .whitespaces), "password": password]
-                )
+                // postJSON: pd_consent — bool, как на Android (П-74 п.4).
+                var json: [String: Any] = ["login": loginField.trimmingCharacters(in: .whitespaces), "password": password]
+                json.merge(PdConsent.fields(PdConsent.now())) { _, new in new }
+                let t: AuthTokens = try await API.shared.postJSON("api/v1/auth/login", json: json)
                 finish(t)
             } catch {
                 fail(error, fallback: "Неверный логин или пароль")
@@ -487,7 +489,7 @@ struct AuthView: View {
         guard PdConsent.allowed(pdChecked) else { pdError = true; Haptics.error(); return }
         busy = true; error = nil
         Task { @MainActor in
-            switch await Passkeys.signIn() {
+            switch await Passkeys.signIn(consentAt: PdConsent.now()) {
             case .ok(let t): finish(t)
             case .cancelled: busy = false
             case .fail(let m): busy = false; error = m; Haptics.error()
@@ -500,15 +502,18 @@ struct AuthView: View {
         guard registerValid, !busy else { return }
         guard PdConsent.allowed(pdChecked) else { pdError = true; Haptics.error(); return }
         busy = true; error = nil
-        let body: [String: String] = [
+        let consentAt = PdConsent.now()
+        regConsentAt = consentAt
+        var body: [String: Any] = [
             "name": name.trimmingCharacters(in: .whitespaces),
             "phone": normalizedPhone(),
             "email": regEmail.trimmingCharacters(in: .whitespaces),
             "password": password,
         ]
+        body.merge(PdConsent.fields(consentAt)) { _, new in new }
         Task {
             do {
-                let r: RegRequestResult = try await API.shared.post("api/v1/auth/register/request", body: body)
+                let r: RegRequestResult = try await API.shared.postJSON("api/v1/auth/register/request", json: body)
                 await MainActor.run {
                     let resent = step == .registerCode
                     busy = false
@@ -547,14 +552,14 @@ struct AuthView: View {
         guard codeValid, !busy else { return }
         busy = true; error = nil
         let email = regEmail.trimmingCharacters(in: .whitespaces).lowercased()
+        let consentAt = regConsentAt ?? PdConsent.now()
         Task {
             do {
-                let t: AuthTokens = try await API.shared.post(
-                    "api/v1/auth/register/confirm",
-                    // Только цифры: codeValid считает цифры, и вставленный «123 456»
-                    // или «123-456» проходил проверку, а сервер отвечал «Неверный код».
-                    body: ["email": email, "code": code.filter { $0.isASCII && $0.isNumber }]
-                )
+                // Только цифры: codeValid считает цифры, и вставленный «123 456»
+                // или «123-456» проходил проверку, а сервер отвечал «Неверный код».
+                var json: [String: Any] = ["email": email, "code": code.filter { $0.isASCII && $0.isNumber }]
+                json.merge(PdConsent.fields(consentAt)) { _, new in new }
+                let t: AuthTokens = try await API.shared.postJSON("api/v1/auth/register/confirm", json: json)
                 finish(t)
             } catch {
                 fail(error, fallback: "Неверный код")

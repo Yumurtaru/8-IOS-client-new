@@ -50,6 +50,10 @@ final class NavCoordinator: ObservableObject {
     /// открывает карточку и сбрасывает значение.
     @Published var pendingProductId: Int?
 
+    /// Общий заказ (П-72 п.3): код из ссылки /g/{code}, yumurta://g/{code}, push
+    /// group_cart или кнопки в корзине. GroupCartPresenter показывает экран поверх вкладок.
+    @Published var pendingGroupCode: String?
+
     // ── Диалог конфликта корзины (single-store) ──
     /// Показать ли диалог конфликта.
     @Published var cartConflict = false
@@ -79,7 +83,8 @@ final class NavCoordinator: ObservableObject {
         // не покажет вторую шторку, и организация из пуша не открылась бы.
         // То же с «Жильём» и профилем: ссылка или пуш при них не открывали
         // заведение, а обложка всплывала позже сама, когда человек их закрывал.
-        if showCart || chatOrderId != nil || showLodging || profileOpen {
+        if showCart || chatOrderId != nil || showLodging || profileOpen || pendingGroupCode != nil {
+            pendingGroupCode = nil
             showCart = false
             chatOrderId = nil
             showLodging = false
@@ -99,13 +104,19 @@ final class NavCoordinator: ObservableObject {
     /// обложки свой показ чата.
     func revealForPush(closeAll: Bool, then action: @escaping () -> Void) {
         let covered = showCart || showLodging || profileOpen
-            || (closeAll && (pendingOrgSlug != nil || chatOrderId != nil))
+            || (closeAll && (pendingOrgSlug != nil || chatOrderId != nil || pendingGroupCode != nil))
         guard covered else { action(); return }
+        if closeAll { pendingGroupCode = nil }
         showCart = false
         showLodging = false
         profileOpen = false
         if closeAll { pendingOrgSlug = nil; chatOrderId = nil }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { action() }
+    }
+    /// Открыть экран общего заказа: окна поверх вкладок сначала закрываем.
+    func openGroup(code: String) {
+        guard let c = GroupCartAPI.clean(code) else { return }
+        revealForPush(closeAll: true) { [weak self] in self?.pendingGroupCode = c }
     }
     func openChat(orderId: Int) { chatOrderId = orderId }
     func openChatList() { chatOrderId = -1 }

@@ -21,6 +21,18 @@ final class DeepLinkRouter: ObservableObject {
         if url.scheme == "yumurta", let host = url.host, ["order", "orders", "bonuses"].contains(host) {
             return handleOrderWidgetLink(host: host, parts: parts, url: url)
         }
+        // Общий заказ (П-72 п.3): https://yumurta.ru/g/КОД и yumurta://g/КОД.
+        var groupRaw: String?
+        if url.scheme == "yumurta" {
+            if url.host == "g" { groupRaw = parts.first }
+        } else if parts.count >= 2, parts[0] == "g" {
+            groupRaw = parts[1]
+        }
+        if let raw = groupRaw {
+            guard let code = GroupCartAPI.clean(raw) else { return false }
+            DispatchQueue.main.async { NavCoordinator.shared.openGroup(code: code) }
+            return true
+        }
         // Организация: тот же экран, что открывается по тапу на уведомление
         // «новое заведение в городе».
         var shopSlug: String?

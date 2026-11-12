@@ -128,6 +128,7 @@ struct ProfileView: View {
                         // ничего не рисует, если код не пришёл или невалиден.
                         if let code = profile?.clientCode {
                             ClientCardBlock(code: code)
+                            LoyaltySpendDefaultToggle()
                         }
                         stats
                         themeSwitcher
