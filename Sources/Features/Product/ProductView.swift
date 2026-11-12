@@ -1055,7 +1055,11 @@ struct ProductView: View {
         } else if isStopped {
             Text("Нет в наличии")
         } else if added {
-            Text("Добавлено ✓")
+            // Окно закроется через 0,7 с: до закрытия на кнопке крутилка (добавление уже выполнено).
+            HStack(spacing: 8) {
+                ProgressView().tint(YMUi.disabledText)
+                Text("Добавлено ✓")
+            }
         } else {
             HStack(spacing: 6) {
                 Text(Money.format(lineTotal) + " +").ymNumeric(lineTotal)
@@ -1404,7 +1408,7 @@ struct ProductView: View {
             qty: effectiveQty
         ) else {
             // Говорим здесь же, тостом (общих алертов на корне нет).
-            Haptics.warning()
+            Haptics.error()
             favError = "Прошлое оформление не завершилось — заказ мог создаться. Откройте корзину → «Оформить» и узнайте исход, потом добавляйте товары."
             return
         }

@@ -236,7 +236,7 @@ struct ProfileView: View {
                     }
                 }
             } else {
-                profile = nil
+                profile = nil; BonusCardCache.code = nil; BonusCardCache.balance = nil
                 // Счётчики прежнего аккаунта не должны показываться следующему,
                 // пока у него грузится профиль.
                 ordersCount = 0; favCount = 0; bookingsCount = 0; unreadNotifs = 0; recentOrders = []
@@ -261,7 +261,7 @@ struct ProfileView: View {
             if n == 0, session.isLoggedIn {
                 Task {
                     await loadUnread()
-                    if let p: Profile = try? await API.shared.get("api/v1/profile"), session.isLoggedIn { profile = p }
+                    if let p: Profile = try? await API.shared.get("api/v1/profile"), session.isLoggedIn { profile = p; BonusCardCache.code = p.clientCode; BonusCardCache.balance = p.bonusBalance }
                     await loadParcelGate()
                     // А97: заявку курьера могли только что отправить (кэш — без лишнего запроса).
                     let courier = await CourierGate.check()
@@ -421,33 +421,6 @@ struct ProfileView: View {
             .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
         }
         .buttonStyle(.plain)
-    }
-
-    // ── Быстрые статы (до редизайна; не используются — удалить на этапе 14) ──
-    private var stats: some View {
-        HStack(spacing: 10) {
-            statCard(value: ordersCount, label: pluralOrders(ordersCount))
-            statCard(value: favCount, label: "в избранном")
-            statCard(value: bookingsCount, label: pluralBookings(bookingsCount))
-        }
-        .padding(.horizontal, YMSpace.xl)
-        .padding(.top, YMSpace.lg)
-    }
-
-    private func statCard(value: Int, label: String) -> some View {
-        VStack(spacing: 2) {
-            Text("\(value)")
-                .ymFont(22, weight: .heavy)
-                .foregroundStyle(YMColor.accent)
-            Text(label)
-                .ymFont(11.5)
-                .foregroundStyle(YMColor.muted)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 14).padding(.horizontal, 10)
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
     }
 
     // ── Переключатель темы (пишет в реальный @AppStorage-ключ root) ──
@@ -721,7 +694,7 @@ struct ProfileView: View {
             // Явный выход уже очистил корзину: что гость наберёт дальше, при
             // следующем входе (любым аккаунтом) не стираем (см. AuthLastUser).
             AuthLastUser.forget()
-            profile = nil
+            profile = nil; BonusCardCache.code = nil; BonusCardCache.balance = nil
         }
     }
 
@@ -812,6 +785,8 @@ struct ProfileView: View {
         let loaded = await profileReq
         if let p = loaded, session.isLoggedIn {
             profile = p
+            BonusCardCache.code = p.clientCode
+            BonusCardCache.balance = p.bonusBalance
             AuthLastUser.confirm(p.id)
         }
         profileFailed = loaded == nil
@@ -909,19 +884,6 @@ struct ProfileView: View {
                 path.append(ProfileRoute.supportTicket(id))
             }
         }
-    }
-
-    private func pluralOrders(_ n: Int) -> String {
-        let m10 = n % 10, m100 = n % 100
-        if m10 == 1 && m100 != 11 { return "заказ" }
-        if (2...4).contains(m10) && !(12...14).contains(m100) { return "заказа" }
-        return "заказов"
-    }
-    private func pluralBookings(_ n: Int) -> String {
-        let m10 = n % 10, m100 = n % 100
-        if m10 == 1 && m100 != 11 { return "запись" }
-        if (2...4).contains(m10) && !(12...14).contains(m100) { return "записи" }
-        return "записей"
     }
 }
 

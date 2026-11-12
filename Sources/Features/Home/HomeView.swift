@@ -419,7 +419,18 @@ struct HomeView: View {
                 .buttonStyle(.plain)
             }
             Spacer()
-            avatar
+            HStack(spacing: 10) {
+                // Код для бонусов в одно нажатие (гость - сначала вход).
+                BonusCodeButton {
+                    Image(systemName: "qrcode")
+                        .ymIcon(17, weight: .semibold)
+                        .foregroundStyle(YMColor.accent)
+                        .frame(width: 42, height: 42)
+                        .background(YMColor.surface2, in: Circle())
+                        .overlay(Circle().strokeBorder(YMColor.accent, lineWidth: 1.5))
+                }
+                avatar
+            }
         }
         .padding(.horizontal, YMSpace.xl)
         .padding(.top, 6)

@@ -82,6 +82,7 @@ final class Session: ObservableObject {
         token = nil
         TokenStore.clear()
         CardSecretStore.clear()   // К-57: секрет одноразового QR карты — из Keychain
+        BonusCardCache.code = nil; BonusCardCache.balance = nil
         API.clearCookies()   // cookie прежних версий не должны пережить выход
         // Корзина, история поиска и «недавно смотрели» лежат на телефоне. Раньше
         // следующий вошедший видел всё это от прежнего владельца, а первая правка

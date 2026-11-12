@@ -866,6 +866,14 @@ struct OrgView: View {
             circleControl("chevron.left") { Haptics.light(); dismiss() }
             Spacer()
             HStack(spacing: 10) {
+                BonusCodeButton {
+                    Image(systemName: "qrcode")
+                        .ymIcon(16, weight: .semibold)
+                        .foregroundStyle(.white)
+                        .frame(width: 38, height: 38)
+                        .background(Color.black.opacity(0.4), in: Circle())
+                        .background(.ultraThinMaterial, in: Circle())
+                }
                 circleControl("square.and.arrow.up") { share() }
                 // Избранное организации — красное сердечко (heart.fill, YMColor.statusCancel).
                 // Гостю — сначала вход: раньше сердечко загоралось, запрос получал
@@ -1111,104 +1119,6 @@ struct OrgView: View {
             .rootViewController
         while let p = top?.presentedViewController { top = p }
         top?.present(av, animated: true)
-    }
-}
-
-// MARK: - DishRow (строка блюда)
-
-/// Не используется с этапа 4 (меню — плитки ProductTile), удалить на этапе 14.
-/// Строка блюда: фото 88×88, название + ХАЛЯЛЬ, описание, цена, круглая золотая «+».
-struct DishRow: View {
-    let product: Product
-    var onTap: () -> Void = {}
-    var onAdd: () -> Void = {}
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(product.name ?? "—")
-                            .ymFont(15.5, weight: .bold)
-                            .foregroundStyle(YMColor.text)
-                            .lineLimit(1)
-                        if product.isHalal == true {
-                            HalalBadge()
-                        }
-                    }
-                    if let d = product.description, !d.isEmpty {
-                        Text(d)
-                            .ymFont(12.5)
-                            .foregroundStyle(YMColor.muted)
-                            .lineLimit(2)
-                    }
-                    if product.stopped == true {
-                        Text("Нет в наличии")
-                            .ymFont(13, weight: .semibold)
-                            .foregroundStyle(YMColor.muted)
-                            .padding(.top, 2)
-                    } else {
-                        Text(Money.format(Money.dec(product.price)))
-                            .ymFont(15, weight: .heavy)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-                            .foregroundStyle(YMColor.text)
-                            .padding(.top, 2)
-                        if let w = product.wholesaleLabel {
-                            Text(w).ymFont(11).foregroundStyle(YMColor.muted).lineLimit(1)
-                        }
-                        if let l = LikesText.recommend(product.likesPercent) {
-                            Text(l).ymFont(11).foregroundStyle(YMColor.muted).lineLimit(1)
-                        }
-                    }
-                }
-                Spacer(minLength: 8)
-                ZStack(alignment: .bottomTrailing) {
-                    PhotoPlaceholder(url: API.imageURL(product.photo),
-                                     label: "ФОТО", radius: YMRadius.control, tone: product.id, fit: true)
-                        .frame(width: 88, height: 88)
-                    // Круглая золотая «+» со свечением. У закончившейся позиции её нет.
-                    if product.stopped != true {
-                    Button {
-                        Haptics.light()
-                        onAdd()
-                    } label: {
-                        Image(systemName: "plus")
-                            .accessibilityLabel("Добавить в корзину")
-                            .ymIcon(16, weight: .heavy)
-                            .foregroundStyle(YMColor.onAccent)
-                            .frame(width: 30, height: 30)
-                            .background(YMColor.accent, in: Circle())
-                            .shadow(color: YMPalette.gold.opacity(0.5), radius: 10, y: 3)
-                    }
-                    .buttonStyle(.plain)
-                    .offset(x: 8, y: 8)
-                    }
-                }
-                .opacity(product.stopped == true ? 0.5 : 1)
-            }
-            .padding(12)
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: YMRadius.card, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: YMRadius.card, style: .continuous)
-                .strokeBorder(YMColor.hairline, lineWidth: 1))
-        }
-        .buttonStyle(CardPressStyle())
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(a11yLabel)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction(named: "Добавить в корзину") { if product.stopped != true { onAdd() } }
-    }
-
-    /// Название, цена и оптовая цена одной фразой для VoiceOver.
-    private var a11yLabel: String {
-        var parts: [String] = [product.name ?? "Товар"]
-        if product.stopped == true {
-            parts.append("нет в наличии")
-        } else {
-            parts.append(Money.format(Money.dec(product.price)))
-            if let w = product.wholesaleLabel, !w.isEmpty { parts.append("оптовая цена " + w) }
-        }
-        return parts.joined(separator: ", ")
     }
 }
 

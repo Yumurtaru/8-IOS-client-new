@@ -54,7 +54,12 @@ enum QuickPick: String, CaseIterable, Identifiable {
 
     /// Только подборки, в которых есть хотя бы одна позиция.
     static func present(in products: [Product]) -> [QuickPick] {
-        allCases.filter { pick in products.contains { pick.matches($0) } }
+        // «Можно заказать» — только когда часть меню недоступна (иначе дублирует всё меню).
+        let someStopped = products.contains { $0.stopped == true }
+        return allCases.filter { pick in
+            if pick == .available && !someStopped { return false }
+            return products.contains { pick.matches($0) }
+        }
     }
 }
 

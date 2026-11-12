@@ -258,3 +258,84 @@ struct BonusCodeSheet: View {
         }
     }
 }
+
+// MARK: - Быстрый вход в «Код для бонусов» (этап 13, ТЗ 5.12)
+
+/// Последние известные данные карты: профиль кладёт их сюда при загрузке,
+/// остальные экраны читают без новых запросов.
+enum BonusCardCache {
+    static var code: String?
+    static var balance: Decimal?
+}
+
+/// Кнопка-значок «Код для бонусов» для шапок главной и заведения.
+/// Гость — сначала вход (тот же AuthView), после входа открывается лист.
+/// Один `.sheet(item:)` на кнопке: вход и лист не конфликтуют.
+struct BonusCodeButton<Label: View>: View {
+    @EnvironmentObject private var session: Session
+    @ViewBuilder let label: () -> Label
+
+    private enum Sheet: Identifiable {
+        case auth, code
+        var id: Int { self == .auth ? 0 : 1 }
+    }
+    @State private var sheet: Sheet?
+    @State private var loading = false
+    @State private var failed = false
+
+    private var knownCode: String? {
+        BonusCardCache.code ?? CardSecretStore.load()?.clientCode
+    }
+
+    /// Код уже известен - открываем лист; иначе один запрос профиля (как в ProfileView).
+    private func openCode() {
+        if let c = knownCode, !c.isEmpty { sheet = .code; return }
+        guard !loading else { return }
+        loading = true
+        Task {
+            let p: Profile? = try? await API.shared.get("api/v1/profile")
+            loading = false
+            if let p, let c = p.clientCode, !c.isEmpty {
+                BonusCardCache.code = c
+                BonusCardCache.balance = p.bonusBalance
+                sheet = .code
+            } else {
+                Haptics.error()
+                failed = true
+            }
+        }
+    }
+
+    var body: some View {
+        Button {
+            Haptics.light()
+            if session.isLoggedIn { openCode() } else { sheet = .auth }
+        } label: {
+            label()
+                .opacity(loading ? 0.35 : 1)
+                .overlay { if loading { ProgressView() } }
+        }
+        .buttonStyle(.plain)
+        .disabled(loading)
+        .alert("Не удалось получить код", isPresented: $failed) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Проверьте соединение и попробуйте ещё раз.")
+        }
+        .accessibilityLabel("Код для бонусов")
+        .sheet(item: $sheet) { s in
+            switch s {
+            case .auth:
+                NavigationStack {
+                    AuthView(onAuthed: { sheet = nil; openCode() })
+                }
+                .environmentObject(session)
+            case .code:
+                BonusCodeSheet(
+                    code: BonusCardCache.code ?? CardSecretStore.load()?.clientCode ?? "",
+                    balance: BonusCardCache.balance
+                )
+            }
+        }
+    }
+}
