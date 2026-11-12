@@ -41,7 +41,7 @@ targets:
         #   90186 «ветка 1.1 закрыта для новых сборок».
         # Поднимать нужно ИМЕННО этот ключ (и MARKETING_VERSION ниже, чтобы
         # локальная сборка в Xcode не расходилась).
-        CFBundleShortVersionString: "1.4"
+        CFBundleShortVersionString: "1.5"
         NSLocationWhenInUseUsageDescription: "Нужно, чтобы определить ваш город и показать курьера на карте во время доставки"
         # А97 «Стать курьером»: фото лица и водительских прав для заявки курьера (камера
         # открывается только по кнопке «Сфотографировать»; галерея — системный выбор без разрешения).
@@ -107,7 +107,7 @@ targets:
         # Держим в том же значении, что CFBundleShortVersionString выше —
         # для локальной сборки в Xcode. На публикацию влияет именно ключ
         # в info.properties, а не эта настройка.
-        MARKETING_VERSION: "1.4"
+        MARKETING_VERSION: "1.5"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: 1
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
