@@ -39,7 +39,7 @@ struct BarcodeScannerScreen: View {
                     .padding(.vertical, 8)
                     .background(Color.black.opacity(0.6), in: Capsule())
                 Button("Закрыть") { dismiss() }
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.custom(YMFont.golosName(.bold), fixedSize: 16))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 28)
                     .padding(.vertical, 12)

@@ -399,11 +399,11 @@ struct AssistantView: View {
                 Text(item.text).font(YMFont.callout).foregroundStyle(YMColor.text).multilineTextAlignment(.center)
                 if let tid = item.ticketId {
                     NavigationLink { SupportTicketView(id: tid) } label: {
-                        Text("Открыть обращение №\(tid)").font(YMFont.callout.weight(.bold)).foregroundStyle(YMColor.accent)
+                        Text("Открыть обращение №\(tid)").font(YMFont.styled(.callout, .bold)).foregroundStyle(YMColor.accent)
                     }
                 } else {
                     NavigationLink { NotificationsView() } label: {
-                        Text("Открыть уведомления").font(YMFont.callout.weight(.bold)).foregroundStyle(YMColor.accent)
+                        Text("Открыть уведомления").font(YMFont.styled(.callout, .bold)).foregroundStyle(YMColor.accent)
                     }
                 }
             }
@@ -469,7 +469,7 @@ struct AssistantView: View {
                     ForEach(Array(item.blocks.enumerated()), id: \.offset) { _, b in
                         if let marker = b.marker {
                             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                Text(marker).font(YMFont.body.weight(.semibold)).foregroundStyle(YMColor.accent)
+                                Text(marker).font(YMFont.styled(.body, .semibold)).foregroundStyle(YMColor.accent)
                                     .frame(minWidth: marker == "•" ? 10 : 20, alignment: .leading)
                                 attributed(b.spans).font(YMFont.body).foregroundStyle(YMColor.text)
                                     .fixedSize(horizontal: false, vertical: true)
@@ -520,7 +520,7 @@ struct AssistantView: View {
         let on = item.rating == (up ? 1 : -1)
         return Button { vm.rate(item.id, up ? 1 : -1) } label: {
             Image(systemName: up ? (on ? "hand.thumbsup.fill" : "hand.thumbsup") : (on ? "hand.thumbsdown.fill" : "hand.thumbsdown"))
-                .ymFont(14, weight: .semibold)
+                .ymIcon(14, weight: .semibold)
                 .foregroundStyle(on ? YMColor.accent : YMColor.muted)
                 .frame(width: 36, height: 36)
                 .background(on ? YMColor.accent.opacity(0.16) : YMColor.surface2, in: Circle())
@@ -571,7 +571,7 @@ struct AssistantView: View {
                     if vm.ask(draft) { draft = "" }
                 } label: {
                     Image(systemName: "paperplane.fill")
-                        .ymFont(17, weight: .semibold).foregroundStyle(YMColor.onAccent)
+                        .ymIcon(17, weight: .semibold).foregroundStyle(YMColor.onAccent)
                         .frame(width: 40, height: 40)
                         .background(YMColor.accent, in: Circle())
                 }

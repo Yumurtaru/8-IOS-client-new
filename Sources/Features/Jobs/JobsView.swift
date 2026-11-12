@@ -420,7 +420,7 @@ private struct ApplyFormView: View {
                     Button(action: submit) {
                         HStack {
                             Spacer()
-                            if sending { ProgressView() } else { Text("Откликнуться").fontWeight(.bold) }
+                            if sending { ProgressView() } else { Text("Откликнуться").font(YMFont.golos(17, .bold, relativeTo: .body)) }
                             Spacer()
                         }
                     }

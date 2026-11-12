@@ -203,7 +203,7 @@ private struct AddressCard: View {
                 Button(role: .destructive) { onDelete() } label: { Label("Удалить", systemImage: "trash") }
             } label: {
                 Image(systemName: "ellipsis")
-                    .ymFont(16, weight: .semibold)
+                    .ymIcon(16, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
                     .frame(width: 30, height: 30)
             }
@@ -292,7 +292,7 @@ private struct AddAddressView: View {
                 Section {
                     Button(action: save) {
                         HStack { Spacer()
-                            if saving { ProgressView() } else { Text("Сохранить").fontWeight(.bold) }
+                            if saving { ProgressView() } else { Text("Сохранить").font(YMFont.golos(17, .bold, relativeTo: .body)) }
                             Spacer() }
                     }
                     .disabled(saving)
@@ -674,7 +674,7 @@ private struct BookingCard: View {
                     Text(booking.org).ymFont(12.5).foregroundStyle(YMColor.muted).lineLimit(1)
                     HStack(spacing: 8) {
                         Label(booking.time, systemImage: "clock")
-                            .ymFont(12, weight: .bold)
+                            .ymIcon(12, weight: .bold)
                             .foregroundStyle(YMColor.text)
                             .labelStyle(.titleAndIcon)
                         Text(booking.status.title)
@@ -687,7 +687,7 @@ private struct BookingCard: View {
 
                     if let visit = booking.visitAddress {
                         Label("Мастер приедет: \(visit)", systemImage: "location.fill")
-                            .ymFont(11.5, weight: .semibold)
+                            .ymIcon(11.5, weight: .semibold)
                             .foregroundStyle(YMColor.muted)
                             .labelStyle(.titleAndIcon)
                             .lineLimit(2)
@@ -696,7 +696,7 @@ private struct BookingCard: View {
                     // А63: комментарий мастеру, оставленный при записи.
                     if let note = booking.clientComment {
                         Label(note, systemImage: "text.bubble")
-                            .ymFont(11.5)
+                            .ymIcon(11.5)
                             .foregroundStyle(YMColor.muted)
                             .labelStyle(.titleAndIcon)
                             .lineLimit(3)

@@ -869,7 +869,7 @@ struct OrderDetailView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: YMSpace.sm) {
                         Text(qtyLabel(it))
-                            .font(.system(size: 14, weight: .heavy)).foregroundStyle(YMColor.accent)
+                            .font(.custom(YMFont.golosName(.heavy), fixedSize: 14)).foregroundStyle(YMColor.accent)
                         Text(it.name ?? "—").font(YMFont.body).foregroundStyle(YMColor.text)
                         Spacer(minLength: 8)
                         Text(Money.format(Money.parse(it.price)))
@@ -895,7 +895,7 @@ struct OrderDetailView: View {
                 Text("Итого").font(YMFont.headline).foregroundStyle(YMColor.text)
                 Spacer()
                 Text(Money.format(Money.parse(o.total)))
-                    .font(.system(size: 17, weight: .heavy)).foregroundStyle(YMColor.text)
+                    .font(.custom(YMFont.golosName(.heavy), fixedSize: 17)).foregroundStyle(YMColor.text)
             }
             .padding(.top, YMSpace.xs)
             // «Сдача с …», указанная при оплате наличными (payment_note): раньше
@@ -951,7 +951,7 @@ struct OrderDetailView: View {
                         Text("Сумма заказа").font(YMFont.callout).foregroundStyle(YMColor.muted)
                         Spacer()
                         Text(Money.format(Money.parse(ch.totalBefore)) + " → " + Money.format(Money.parse(ch.totalAfter)))
-                            .font(YMFont.callout.weight(.semibold)).foregroundStyle(YMColor.text)
+                            .font(YMFont.styled(.callout, .semibold)).foregroundStyle(YMColor.text)
                     }
                 }
             }
@@ -1123,7 +1123,7 @@ struct OrderDetailView: View {
                     ForEach(0...10, id: \.self) { i in
                         let on = npsScore == i
                         Text("\(i)")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(.custom(YMFont.golosName(.bold), fixedSize: 13))
                             .foregroundStyle(on ? YMColor.onAccent : YMColor.text)
                             .frame(maxWidth: .infinity, minHeight: 34)
                             .background(on ? YMColor.accent : YMColor.surface2,
@@ -1276,7 +1276,7 @@ private struct TimelineRow: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 15, weight: state == .todo ? .regular : .semibold))
+                    .font(.custom(YMFont.golosName(state == .todo ? .regular : .semibold), fixedSize: 15))
                     .foregroundStyle(state == .todo ? YMColor.muted : YMColor.text)
                 if !time.isEmpty {
                     Text(time).font(YMFont.caption).foregroundStyle(YMColor.muted)

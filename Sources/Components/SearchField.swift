@@ -11,7 +11,7 @@ struct SearchField: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
-                .ymFont(16, weight: .semibold)
+                .ymIcon(16, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             if let text {
                 TextField(placeholder, text: text)

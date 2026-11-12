@@ -345,7 +345,7 @@ struct MyAdsView: View {
                                 // рубрике заранее не продлевает (Ads.php:386, price > 0).
                                 if MyAdsViewModel.hasPayButton(ad) {
                                     Button { Task { await vm.renew(ad) } } label: {
-                                        Text("Продлить").font(YMFont.callout).fontWeight(.semibold)
+                                        Text("Продлить").font(YMFont.styled(.callout, .semibold))
                                             .foregroundStyle(YMColor.accent)
                                     }
                                     .disabled(vm.paying)
@@ -363,7 +363,7 @@ struct MyAdsView: View {
                                     Text((ad.renewPrice ?? 0) > 0
                                          ? "Оплатить \(Money.format(ad.renewPrice ?? 0))"
                                          : "Опубликовать")
-                                        .font(YMFont.callout).fontWeight(.semibold)
+                                        .font(YMFont.styled(.callout, .semibold))
                                         .foregroundStyle(YMColor.accent)
                                 }
                                 .disabled(vm.paying)

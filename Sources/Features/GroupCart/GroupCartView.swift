@@ -301,7 +301,7 @@ struct GroupCartView: View {
             ForEach(m.itemList) { it in
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: YMSpace.sm) {
-                        Text("× " + qtyText(it.qty)).font(.system(size: 14, weight: .heavy)).foregroundStyle(YMColor.accent)
+                        Text("× " + qtyText(it.qty)).font(.custom(YMFont.golosName(.heavy), fixedSize: 14)).foregroundStyle(YMColor.accent)
                         Text(it.name ?? "—").font(YMFont.body).foregroundStyle(YMColor.text)
                         Spacer(minLength: 8)
                         Text(Money.format(it.sum)).font(YMFont.body).foregroundStyle(YMColor.muted)
@@ -324,7 +324,7 @@ struct GroupCartView: View {
             Text("Итого").font(YMFont.headline).foregroundStyle(YMColor.text)
             Spacer()
             Text(Money.format(g.total ?? g.memberList.reduce(Decimal(0)) { $0 + ($1.subtotal ?? 0) }))
-                .font(.system(size: 17, weight: .heavy)).foregroundStyle(YMColor.text)
+                .font(.custom(YMFont.golosName(.heavy), fixedSize: 17)).foregroundStyle(YMColor.text)
         }
         .padding(YMSpace.lg)
         .ymCard(radius: YMRadius.card)

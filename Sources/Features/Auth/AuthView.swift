@@ -281,7 +281,7 @@ struct AuthView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .accessibilityLabel("Назад")
-                    .ymFont(17, weight: .bold)
+                    .ymIcon(17, weight: .bold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
                     .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

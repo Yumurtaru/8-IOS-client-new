@@ -331,7 +331,7 @@ struct WalletView: View {
                                 if vm.loadingMore { ProgressView() }
                                 else {
                                     Text(vm.moreFailed ? "Не удалось загрузить — повторить" : "Показать ещё")
-                                        .font(YMFont.callout).fontWeight(.semibold)
+                                        .font(YMFont.styled(.callout, .semibold))
                                         .foregroundStyle(YMColor.accent)
                                 }
                             }
@@ -581,7 +581,7 @@ private struct TopupSheet: View {
                         }
                         onSubmit(TopupChoice(amount: a, method: method, saveCard: saveCard && method == .card, savedId: savedId))
                     } label: {
-                        HStack { Spacer(); Text("Пополнить").bold(); Spacer() }
+                        HStack { Spacer(); Text("Пополнить").font(YMFont.golos(17, .bold, relativeTo: .body)); Spacer() }
                     }
                 }
             }

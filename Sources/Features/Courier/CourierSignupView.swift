@@ -416,13 +416,13 @@ private struct CourierApplyForm: View {
                 Button(CourierSignupText.consentLink) {
                     if let u = URL(string: CourierSignupText.consentURL) { CourierLive.leftForLink = true; UIApplication.shared.open(u) }
                 }
-                .font(YMFont.callout.weight(.semibold))
+                .font(YMFont.styled(.callout, .semibold))
                 .foregroundStyle(YMColor.accent)
                 .frame(minHeight: 44, alignment: .leading)
                 Button("Политика конфиденциальности") {
                     if let u = URL(string: CourierSignupText.privacyURL) { CourierLive.leftForLink = true; UIApplication.shared.open(u) }
                 }
-                .font(YMFont.callout.weight(.semibold))
+                .font(YMFont.styled(.callout, .semibold))
                 .foregroundStyle(YMColor.accent)
                 .frame(minHeight: 44, alignment: .leading)
                 if let v = me.consentVersion {
@@ -572,7 +572,7 @@ private struct CourierApplyForm: View {
                     .disabled(processing == kind)
                     PhotosPicker(selection: item, matching: .images) {
                         Text("Выбрать из галереи")
-                            .font(YMFont.callout.weight(.semibold))
+                            .font(YMFont.styled(.callout, .semibold))
                             .foregroundStyle(YMColor.accent)
                             .frame(maxWidth: .infinity, minHeight: 44)
                             .contentShape(Rectangle())
@@ -594,7 +594,7 @@ private struct CourierApplyForm: View {
         Button(action: toggle) {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: checked ? "checkmark.square.fill" : "square")
-                    .ymFont(20)
+                    .ymIcon(20)
                     .foregroundStyle(checked ? YMColor.accent : YMColor.muted)
                 Text(text).font(YMFont.callout).foregroundStyle(YMColor.text).multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -764,7 +764,7 @@ private struct CourierCityPicker: View {
                     VStack(spacing: YMSpace.sm) {
                         Text(e).font(YMFont.callout).foregroundStyle(YMColor.muted).multilineTextAlignment(.center)
                         Button("Повторить") { Task { await load() } }
-                            .font(YMFont.callout.weight(.bold)).foregroundStyle(YMColor.accent)
+                            .font(YMFont.styled(.callout, .bold)).foregroundStyle(YMColor.accent)
                     }
                     .frame(maxWidth: .infinity).padding(.top, 40)
                 } else if filtered.isEmpty {

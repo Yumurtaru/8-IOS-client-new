@@ -86,14 +86,14 @@ struct AdCategoryFieldRow: View {
         Button(action: action) {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: root.map { adCategorySymbol($0.icon, $0.name ?? "") } ?? "square.grid.2x2")
-                    .ymFont(18, weight: .semibold)
+                    .ymIcon(18, weight: .semibold)
                     .foregroundStyle(tint)
                     .frame(width: 40, height: 40)
                     .background(tint.opacity(0.14), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Категория").font(YMFont.caption).foregroundStyle(YMColor.muted)
                     Text(path ?? "Выберите категорию")
-                        .font(path != nil ? YMFont.body.weight(.semibold) : YMFont.body)
+                        .font(path != nil ? YMFont.styled(.body, .semibold) : YMFont.body)
                         .foregroundStyle(path != nil ? YMColor.text : YMColor.muted)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -105,7 +105,7 @@ struct AdCategoryFieldRow: View {
                 Spacer(minLength: 0)
                 if enabled {
                     Image(systemName: "chevron.right")
-                        .ymFont(13, weight: .semibold)
+                        .ymIcon(13, weight: .semibold)
                         .foregroundStyle(YMColor.muted)
                 }
             }
@@ -192,7 +192,7 @@ struct AdCategoryPicker: View {
         } label: {
             VStack(alignment: .leading, spacing: YMSpace.sm) {
                 Image(systemName: adCategorySymbol(root.icon, root.name ?? ""))
-                    .ymFont(22, weight: .semibold)
+                    .ymIcon(22, weight: .semibold)
                     .foregroundStyle(tint)
                     .frame(width: 48, height: 48)
                     .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -280,7 +280,7 @@ struct AdCategoryPicker: View {
         if list.isEmpty {
             VStack(spacing: YMSpace.sm) {
                 Image(systemName: "magnifyingglass")
-                    .ymFont(36, weight: .regular)
+                    .ymIcon(36, weight: .regular)
                     .foregroundStyle(YMColor.muted)
                 Text("Ничего не нашлось").font(YMFont.headline).foregroundStyle(YMColor.text)
                 Text("Попробуйте другое слово или выберите раздел из списка.")
@@ -321,7 +321,7 @@ struct AdCategoryPicker: View {
         let s = a.index(a.startIndex, offsetByCharacters: start)
         let e = a.index(s, offsetByCharacters: len)
         a[s..<e].foregroundColor = YMColor.accent
-        a[s..<e].font = YMFont.body.weight(.bold)
+        a[s..<e].font = YMFont.styled(.body, .bold)
         return a
     }
 
@@ -330,13 +330,13 @@ struct AdCategoryPicker: View {
         Button(action: action) {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: symbol)
-                    .ymFont(16, weight: .semibold)
+                    .ymIcon(16, weight: .semibold)
                     .foregroundStyle(tint)
                     .frame(width: 36, height: 36)
                     .background(tint.opacity(0.14), in: Circle())
                 VStack(alignment: .leading, spacing: 2) {
                     title
-                        .font(YMFont.body.weight(.semibold))
+                        .font(YMFont.styled(.body, .semibold))
                         .foregroundStyle(YMColor.text)
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
@@ -347,7 +347,7 @@ struct AdCategoryPicker: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: selected ? "checkmark" : "chevron.right")
-                    .ymFont(13, weight: .semibold)
+                    .ymIcon(13, weight: .semibold)
                     .foregroundStyle(selected ? YMColor.accent : YMColor.muted)
             }
             .padding(.horizontal, YMSpace.md)

@@ -103,7 +103,7 @@ struct CartView: View {
             Button(action: { Haptics.light(); onClose() }) {
                 Image(systemName: "chevron.left")
                     .accessibilityLabel("Назад")
-                    .ymFont(18, weight: .semibold)
+                    .ymIcon(18, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
                     .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -273,7 +273,7 @@ struct CartView: View {
     private var commentField: some View {
         HStack(spacing: YMSpace.sm) {
             Image(systemName: "square.and.pencil")
-                .ymFont(15)
+                .ymIcon(15)
                 .foregroundStyle(YMColor.muted)
             TextField("Комментарий к заказу…", text: $comment, axis: .vertical)
                 .focused($commentFocused)
@@ -323,7 +323,7 @@ struct CartView: View {
             Text(label).ymFont(13.5).foregroundStyle(YMColor.muted)
             Spacer()
             Text(value)
-                .font(.system(size: 13.5, weight: bold ? .heavy : .semibold))
+                .font(.custom(YMFont.golosName(bold ? .heavy : .semibold), fixedSize: 13.5))
                 .foregroundStyle(bold ? YMColor.text : YMColor.muted)
                 .ymNumeric(value)
         }
@@ -390,7 +390,7 @@ struct CartView: View {
                         .fill(YMColor.accent.opacity(0.12))
                         .frame(width: 120, height: 120)
                     Image(systemName: "bag")
-                        .ymFont(48, weight: .light)
+                        .ymIcon(48, weight: .light)
                         .foregroundStyle(YMColor.accent)
                 }
                 VStack(spacing: YMSpace.sm) {
@@ -472,7 +472,7 @@ private struct CartRow: View {
             Button(action: { Haptics.light(); cart.dec(line.key) }) {
                 Image(systemName: "minus")
                     .accessibilityLabel("Уменьшить количество, \(line.name)")
-                    .ymFont(14, weight: .semibold)
+                    .ymIcon(14, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 26, height: 26)
                     .contentShape(Rectangle())
@@ -489,7 +489,7 @@ private struct CartRow: View {
             Button(action: { Haptics.light(); cart.inc(line.key) }) {
                 Image(systemName: "plus")
                     .accessibilityLabel("Увеличить количество, \(line.name)")
-                    .ymFont(14, weight: .semibold)
+                    .ymIcon(14, weight: .semibold)
                     .foregroundStyle(YMColor.onAccent)
                     .frame(width: 26, height: 26)
                     .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

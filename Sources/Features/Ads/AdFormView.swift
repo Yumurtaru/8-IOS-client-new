@@ -620,7 +620,7 @@ struct AdFormView: View {
                                     } label: {
                                         Image(systemName: "xmark.circle.fill")
                                             .accessibilityLabel("Удалить фото")
-                                            .ymFont(20)
+                                            .ymIcon(20)
                                             .foregroundStyle(.white, YMColor.statusCancel)
                                     }
                                     // В строке Form кнопки со стилем по умолчанию
@@ -730,7 +730,7 @@ struct AdFormView: View {
                         Spacer()
                         if vm.busy { ProgressView() }
                         else {
-                            Text(vm.payButtonTitle).bold()
+                            Text(vm.payButtonTitle).font(YMFont.golos(17, .bold, relativeTo: .body))
                         }
                         Spacer()
                     }

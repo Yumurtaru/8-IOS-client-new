@@ -22,7 +22,7 @@ struct ParcelVehicleDrawing: View {
             let soft = YMColor.accent.opacity(0.16)
             let stroke = StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round)
             func label(_ s: String, _ x: CGFloat, _ y: CGFloat, _ anchor: UnitPoint = .center) {
-                ctx.draw(Text(s).font(.system(size: 12 * k, weight: .semibold)).foregroundColor(line), at: p(x, y), anchor: anchor)
+                ctx.draw(Text(s).font(.custom(YMFont.golosName(.semibold), fixedSize: 12 * k)).foregroundColor(line), at: p(x, y), anchor: anchor)
             }
             func wheel(_ x: CGFloat, _ y: CGFloat, _ r: CGFloat) {
                 let c = Path(ellipseIn: CGRect(origin: p(x - r, y - r), size: CGSize(width: 2 * r * k, height: 2 * r * k)))

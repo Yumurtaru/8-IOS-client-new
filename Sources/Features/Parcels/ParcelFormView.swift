@@ -482,7 +482,7 @@ struct ParcelFormView: View {
                 Button { Haptics.selection(); m.confirm.toggle() } label: {
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: m.confirm ? "checkmark.square.fill" : "square")
-                            .ymFont(20).foregroundStyle(m.confirm ? YMColor.accent : YMColor.muted)
+                            .ymIcon(20).foregroundStyle(m.confirm ? YMColor.accent : YMColor.muted)
                         Text("Во вложении нет запрещённого, это вещь — не пассажир и не животное")
                             .font(YMFont.callout).foregroundStyle(YMColor.text)
                             .multilineTextAlignment(.leading)
@@ -529,7 +529,7 @@ struct ParcelFormView: View {
 
     private func ruleBanner(_ rule: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(rule + ".").font(YMFont.callout.weight(.bold)).foregroundStyle(YMColor.text)
+            Text(rule + ".").font(YMFont.styled(.callout, .bold)).foregroundStyle(YMColor.text)
             Text("Людей и животных курьеры не возят — для поездок есть такси.")
                 .font(YMFont.callout).foregroundStyle(YMColor.text)
         }
@@ -588,7 +588,7 @@ struct ParcelFormView: View {
         Button { Haptics.selection(); action() } label: {
             HStack(spacing: 10) {
                 Image(systemName: on ? "largecircle.fill.circle" : "circle")
-                    .ymFont(18).foregroundStyle(on ? YMColor.accent : YMColor.muted)
+                    .ymIcon(18).foregroundStyle(on ? YMColor.accent : YMColor.muted)
                 Text(title).font(YMFont.callout).foregroundStyle(YMColor.text).multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }

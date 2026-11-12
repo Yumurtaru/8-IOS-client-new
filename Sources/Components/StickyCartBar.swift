@@ -33,7 +33,7 @@ struct StickyCartBar: View {
         } label: {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: "bag.fill")
-                    .ymFont(16, weight: .semibold)
+                    .ymIcon(16, weight: .semibold)
                     .accessibilityHidden(true)
                 Text("Корзина · \(count) \(itemsWord)")
                     .ymFont(16, weight: .heavy)

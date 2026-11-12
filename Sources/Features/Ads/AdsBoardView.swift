@@ -656,14 +656,13 @@ struct AdCatChip: View {
                     ZStack {
                         Circle().fill(selected ? Color.white.opacity(0.22) : YMColor.accent.opacity(0.12))
                         Image(systemName: symbol)
-                            .ymFont(13, weight: .semibold)
+                            .ymIcon(13, weight: .semibold)
                             .foregroundStyle(selected ? Color.white : YMColor.accent)
                     }
                     .frame(width: 28, height: 28)
                 }
                 Text(title)
-                    .font(YMFont.callout)
-                    .fontWeight(selected ? .semibold : .regular)
+                    .font(YMFont.styled(.callout, selected ? .semibold : .regular))
                     .lineLimit(1)
             }
             .padding(.leading, symbol == nil ? YMSpace.md : 6)

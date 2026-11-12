@@ -30,7 +30,7 @@ struct BecomeSellerPromoCard: View {
         } label: {
             VStack(alignment: .leading, spacing: YMSpace.sm) {
                 Text("YUMURTA ДЛЯ БИЗНЕСА")
-                    .font(YMFont.caption2).fontWeight(.semibold)
+                    .font(YMFont.styled(.caption2, .semibold))
                     .foregroundStyle(YMColor.accent)
                 Text("Добавьте свою организацию")
                     .font(YMFont.title3).foregroundStyle(YMColor.text)
@@ -112,7 +112,7 @@ struct BecomeSellerView: View {
                 ForEach(benefits, id: \.0) { title, sub in
                     HStack(alignment: .top, spacing: YMSpace.md) {
                         Image(systemName: "checkmark.circle.fill")
-                            .ymFont(20).foregroundStyle(YMColor.accent)
+                            .ymIcon(20).foregroundStyle(YMColor.accent)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(title).font(YMFont.headline).foregroundStyle(YMColor.text)
                             Text(sub).font(YMFont.callout).foregroundStyle(YMColor.muted)
@@ -139,7 +139,7 @@ struct BecomeSellerView: View {
     private var doneContent: some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "checkmark.circle.fill")
-                .ymFont(64).foregroundStyle(YMColor.accent)
+                .ymIcon(64).foregroundStyle(YMColor.accent)
                 .padding(.top, YMSpace.xxxl)
             if approved {
                 // Волна А75: организация активирована сразу — «на рассмотрении»
@@ -293,7 +293,7 @@ private struct ApplyOrgFormView: View {
                     Button(action: { submit() }) {
                         HStack {
                             Spacer()
-                            if sending { ProgressView() } else { Text("Отправить заявку").fontWeight(.bold) }
+                            if sending { ProgressView() } else { Text("Отправить заявку").font(YMFont.golos(17, .bold, relativeTo: .body)) }
                             Spacer()
                         }
                     }

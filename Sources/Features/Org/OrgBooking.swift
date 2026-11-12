@@ -1140,7 +1140,7 @@ private struct CountStepper: View {
             action()
         } label: {
             Image(systemName: icon)
-                .ymFont(14, weight: .heavy)
+                .ymIcon(14, weight: .heavy)
                 .foregroundStyle(enabled ? YMColor.text : YMColor.muted)
                 .frame(width: 36, height: 36)
                 .background(enabled ? YMColor.surface2 : YMColor.surface, in: Circle())
@@ -1500,7 +1500,7 @@ private struct ConfirmBookingSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Image(systemName: "location.fill")
-                    .ymFont(12, weight: .bold)
+                    .ymIcon(12, weight: .bold)
                     .foregroundStyle(YMColor.accent)
                 Text("Куда приехать")
                     .ymFont(13, weight: .heavy)
@@ -1589,11 +1589,11 @@ private struct ConfirmBookingSheet: View {
     private func priceRow(_ label: String, _ value: Decimal, bold: Bool) -> some View {
         HStack {
             Text(label)
-                .font(.system(size: bold ? 17 : 13, weight: bold ? .heavy : .semibold))
+                .font(.custom(YMFont.golosName(bold ? .heavy : .semibold), fixedSize: bold ? 17 : 13))
                 .foregroundStyle(bold ? YMColor.text : YMColor.muted)
             Spacer()
             Text(Money.format(value))
-                .font(.system(size: bold ? 17 : 13, weight: bold ? .heavy : .bold))
+                .font(.custom(YMFont.golosName(bold ? .heavy : .bold), fixedSize: bold ? 17 : 13))
                 .foregroundStyle(YMColor.text)
         }
         .padding(.vertical, 3)
@@ -1645,7 +1645,7 @@ private struct SuccessBookingSheet: View {
     var body: some View {
         VStack(spacing: 0) {
             Image(systemName: "checkmark.circle.fill")
-                .ymFont(56)
+                .ymIcon(56)
                 .foregroundStyle(YMColor.statusDone)
                 .padding(.bottom, 6)
             Text("Вы записаны!")

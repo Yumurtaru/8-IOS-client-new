@@ -175,7 +175,7 @@ struct SettingsView: View {
             rowDivider
             HStack {
                 Image(systemName: "info.circle")
-                    .ymFont(15).foregroundStyle(YMColor.muted).frame(width: 26)
+                    .ymIcon(15).foregroundStyle(YMColor.muted).frame(width: 26)
                 Text("Версия").ymFont(14.5, weight: .semibold).foregroundStyle(YMColor.text)
                 Spacer()
                 Text(appVersion).ymFont(13.5).foregroundStyle(YMColor.muted)
@@ -189,11 +189,11 @@ struct SettingsView: View {
         Link(destination: URL(string: url)!) {
             HStack {
                 Image(systemName: icon)
-                    .ymFont(15).foregroundStyle(YMColor.accent).frame(width: 26)
+                    .ymIcon(15).foregroundStyle(YMColor.accent).frame(width: 26)
                 Text(label).ymFont(14.5, weight: .semibold).foregroundStyle(YMColor.text)
                 Spacer()
                 Image(systemName: "arrow.up.right")
-                    .ymFont(12, weight: .semibold).foregroundStyle(YMColor.muted)
+                    .ymIcon(12, weight: .semibold).foregroundStyle(YMColor.muted)
             }
             .padding(.horizontal, 16).padding(.vertical, 13)
             .contentShape(Rectangle())

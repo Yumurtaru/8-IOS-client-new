@@ -376,7 +376,7 @@ struct ProfileView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .ymFont(12, weight: .semibold)
+                    .ymIcon(12, weight: .semibold)
                     .foregroundStyle(YMColor.muted)
             }
             .padding(.horizontal, YMSpace.lg).padding(.vertical, YMSpace.md)
@@ -540,7 +540,7 @@ struct ProfileView: View {
                 }
                 if chevron {
                     Image(systemName: "chevron.right")
-                        .ymFont(13, weight: .semibold)
+                        .ymIcon(13, weight: .semibold)
                         .foregroundStyle(YMColor.muted)
                 }
             }

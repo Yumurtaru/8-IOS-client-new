@@ -133,7 +133,7 @@ struct ReviewsScreen: View {
             if cnt > 0 || avg > 0 {
                 HStack(spacing: 10) {
                     Image(systemName: "star.fill")
-                        .ymFont(22)
+                        .ymIcon(22)
                         .foregroundStyle(YMColor.accent)
                     Text(fmtRatingHeader(avg))
                         .ymFont(30, weight: .heavy)
@@ -168,7 +168,7 @@ struct ReviewsScreen: View {
     private func errorBox(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .ymFont(30, weight: .semibold)
+                .ymIcon(30, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message.isEmpty ? "Не удалось загрузить отзывы" : message)
                 .font(YMFont.callout)

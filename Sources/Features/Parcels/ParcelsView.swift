@@ -371,7 +371,7 @@ struct ParcelDetailView: View {
                         let until = p.target == nil ? ParcelFmt.searchUntil(p.expiresAt, now: tl.date) : nil
                         VStack(alignment: .leading, spacing: YMSpace.sm) {
                             if let until {
-                                Text(until).font(YMFont.callout.weight(.semibold)).foregroundStyle(YMColor.text)
+                                Text(until).font(YMFont.styled(.callout, .semibold)).foregroundStyle(YMColor.text)
                             }
                             Text(searchLine(p, until: until != nil)).font(YMFont.caption).foregroundStyle(YMColor.muted)
                         }
@@ -463,7 +463,7 @@ struct ParcelDetailView: View {
                         if let u = URL(string: "tel://" + c.phone.filter { $0.isNumber || $0 == "+" }) { openURL(u) }
                     } label: {
                         Image(systemName: "phone.fill")
-                            .ymFont(17, weight: .semibold)
+                            .ymIcon(17, weight: .semibold)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 44, height: 44)
                             .background(YMColor.accent, in: Circle())
@@ -604,7 +604,7 @@ private struct ParcelRateSheet: View {
                     ForEach(1...5, id: \.self) { n in
                         Button { Haptics.selection(); rating = n } label: {
                             Image(systemName: n <= rating ? "star.fill" : "star")
-                                .ymFont(32).foregroundStyle(YMColor.accent)
+                                .ymIcon(32).foregroundStyle(YMColor.accent)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(n) из 5")

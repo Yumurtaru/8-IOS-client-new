@@ -328,7 +328,7 @@ struct ProductView: View {
             .padding(.top, 22)
             if vm.mode == .product, let l = LikesText.recommend(vm.detail?.likesPercent) {
                 Label(l, systemImage: "hand.thumbsup")
-                    .ymFont(13).foregroundStyle(YMColor.muted)
+                    .ymIcon(13).foregroundStyle(YMColor.muted)
                     .padding(.top, 4)
             }
 
@@ -649,7 +649,7 @@ struct ProductView: View {
                             .fill(YMColor.accent)
                             .frame(width: 22, height: 22)
                         Image(systemName: "checkmark")
-                            .ymFont(12, weight: .heavy)
+                            .ymIcon(12, weight: .heavy)
                             .foregroundStyle(YMColor.onAccent)
                     }
                 }
@@ -778,7 +778,7 @@ struct ProductView: View {
             Button { Haptics.light(); dismiss() } label: {
                 Image(systemName: "chevron.left")
                     .accessibilityLabel("Назад")
-                    .ymFont(16, weight: .semibold)
+                    .ymIcon(16, weight: .semibold)
                     .foregroundStyle(.white)
                     .frame(width: 38, height: 38)
                     .background(Color.black.opacity(0.4), in: Circle())
@@ -847,7 +847,7 @@ struct ProductView: View {
                     Button { decQty() } label: {
                         Image(systemName: "minus")
                             .accessibilityLabel("Уменьшить количество")
-                            .ymFont(18, weight: .bold)
+                            .ymIcon(18, weight: .bold)
                             .foregroundStyle(YMColor.text)
                             .frame(width: 38, height: 38)
                     }
@@ -859,7 +859,7 @@ struct ProductView: View {
                     Button { incQty() } label: {
                         Image(systemName: "plus")
                             .accessibilityLabel("Увеличить количество")
-                            .ymFont(18, weight: .bold)
+                            .ymIcon(18, weight: .bold)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 38, height: 38)
                             .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -944,7 +944,7 @@ struct ProductView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .ymFont(34, weight: .semibold)
+                .ymIcon(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)

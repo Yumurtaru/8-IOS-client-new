@@ -56,6 +56,12 @@ enum YMPalette {
     static let white       = Color(hex: "#FFFFFF")   // light surface
     static let cream100    = Color(hex: "#F1EDE4")   // light surface-2
 
+    // Редизайн, этап 2 (ТЗ 12.11.2026, раздел 3): нейтральный светлый вместо тёплого крема.
+    static let screenGray  = Color(hex: "#F2F2F4")   // фон экрана
+    static let segmentGray = Color(hex: "#E9E9EE")   // вторичная поверхность: подложки, поля, чипы
+    static let ink111      = Color(hex: "#111111")   // основной текст
+    static let gray8E      = Color(hex: "#8E8E93")   // вторичный текст (обе темы)
+
     // Нейтральные тексты
     static let inkDark     = Color(hex: "#1A1710")
     static let inkLight    = Color(hex: "#F6F5F1")
@@ -76,11 +82,11 @@ enum YMPalette {
 
 /// Использование: `YMColor.bg`, `YMColor.accent` и т.д. — сами подстраиваются под light/dark.
 enum YMColor {
-    static var bg: Color        { .init(light: YMPalette.cream50,  dark: YMPalette.graphite900) }
-    static var surface: Color   { .init(light: YMPalette.white,    dark: YMPalette.graphite800) }
-    static var surface2: Color  { .init(light: YMPalette.cream100, dark: YMPalette.graphite700) }
-    static var text: Color      { .init(light: YMPalette.inkDark,  dark: YMPalette.inkLight) }
-    static var muted: Color     { .init(light: YMPalette.mutedLight, dark: YMPalette.mutedDark) }
+    static var bg: Color        { .init(light: YMPalette.screenGray,  dark: YMPalette.graphite900) }
+    static var surface: Color   { .init(light: YMPalette.white,       dark: YMPalette.graphite800) }
+    static var surface2: Color  { .init(light: YMPalette.segmentGray, dark: YMPalette.graphite700) }
+    static var text: Color      { .init(light: YMPalette.ink111,      dark: YMPalette.inkLight) }
+    static var muted: Color     { YMPalette.gray8E }
     static var accent: Color    { .init(light: YMPalette.goldOnLight, dark: YMPalette.gold) }
     static var onAccent: Color  { YMPalette.goldInk }
     static var hairline: Color  { .init(light: Color.black.opacity(0.07), dark: Color.white.opacity(0.08)) }
@@ -106,20 +112,68 @@ extension Color {
 // MARK: - Typography (SF Pro + Dynamic Type)
 
 enum YMFont {
-    /// SF Pro Display для крупных заголовков, SF Pro Text для тела — системные шрифты iOS.
-    // Стили привязаны к системным текстовым стилям: размер на обычных настройках
-    // тот же (34/28/22/20/17/15/13/12/11), но шрифт растёт с «Размером текста» в
-    // настройках iPhone. Раньше стояли Font.system(size:) — они НЕ масштабируются.
-    static let largeTitle = Font.system(.largeTitle, design: .default).weight(.heavy)    // экраны-заголовки
-    static let title      = Font.system(.title,      design: .default).weight(.bold)
-    static let title2     = Font.system(.title2,     design: .default).weight(.bold)     // секции
-    static let title3     = Font.system(.title3,     design: .default).weight(.bold)
-    static let headline   = Font.system(.headline,   design: .default).weight(.semibold) // карточки
-    static let body       = Font.system(.subheadline, design: .default)                  // 15
-    static let callout    = Font.system(.subheadline, design: .default)                  // было 14
-    static let subhead    = Font.system(.footnote,   design: .default).weight(.semibold) // 13
-    static let caption    = Font.system(.caption,    design: .default)                   // 12
-    static let caption2   = Font.system(.caption2,   design: .default).weight(.semibold) // kicker/бейджи
+    // Редизайн, этап 2 (ТЗ 12.11.2026): Golos Text — основной, Unbounded — акцентный (только largeTitle:
+    // заголовки экранов и крупные суммы; на title Unbounded слишком широк — придёт с размерами ТЗ на этапах 5–6). Размеры прежние (34/28/22/20/17/15/13/12/11), рост с
+    // «Размером текста» iPhone — как раньше (relativeTo:).
+    // Начертание задаётся ЯВНО по имени: модификаторы .weight()/.fontWeight()/.bold() со вшитыми
+    // статичными шрифтами срабатывают ненадёжно. Нужен другой вес — `YMFont.styled(.body, .semibold)`.
+    static let largeTitle = display(34, .heavy,  relativeTo: .largeTitle)   // экраны-заголовки
+    static let title      = golos(28, .bold,     relativeTo: .title)
+    static let title2     = golos(22, .bold,     relativeTo: .title2)       // секции
+    static let title3     = golos(20, .bold,     relativeTo: .title3)
+    static let headline   = golos(17, .semibold, relativeTo: .headline)     // карточки
+    static let body       = golos(15, .regular,  relativeTo: .subheadline)  // 15
+    static let callout    = golos(15, .regular,  relativeTo: .subheadline)  // было 14
+    static let subhead    = golos(13, .semibold, relativeTo: .footnote)     // 13
+    static let caption    = golos(12, .regular,  relativeTo: .caption)      // 12
+    static let caption2   = golos(11, .semibold, relativeTo: .caption2)     // kicker/бейджи
+
+    /// Стиль из шкалы для `styled(_:_:)`.
+    enum Role { case largeTitle, title, title2, title3, headline, body, callout, subhead, caption, caption2 }
+
+    /// Тот же стиль другим весом — вместо `YMFont.body.weight(.semibold)`: `YMFont.styled(.body, .semibold)`.
+    static func styled(_ role: Role, _ w: Font.Weight) -> Font {
+        switch role {
+        case .largeTitle: return display(34, w, relativeTo: .largeTitle)
+        case .title:      return golos(28, w, relativeTo: .title)
+        case .title2:     return golos(22, w, relativeTo: .title2)
+        case .title3:     return golos(20, w, relativeTo: .title3)
+        case .headline:   return golos(17, w, relativeTo: .headline)
+        case .body:       return golos(15, w, relativeTo: .subheadline)
+        case .callout:    return golos(15, w, relativeTo: .subheadline)
+        case .subhead:    return golos(13, w, relativeTo: .footnote)
+        case .caption:    return golos(12, w, relativeTo: .caption)
+        case .caption2:   return golos(11, w, relativeTo: .caption2)
+        }
+    }
+
+    /// PostScript-имя начертания Golos Text для веса (есть 400/500/600/700; тоньше — 400, жирнее — 700).
+    static func golosName(_ w: Font.Weight) -> String {
+        switch w {
+        case .medium: return "GolosText-Medium"
+        case .semibold: return "GolosText-SemiBold"
+        case .bold, .heavy, .black: return "GolosText-Bold"
+        default: return "GolosText-Regular"
+        }
+    }
+
+    /// PostScript-имя начертания Unbounded для веса (есть 600 и 700).
+    static func displayName(_ w: Font.Weight) -> String {
+        switch w {
+        case .bold, .heavy, .black: return "Unbounded-Bold"
+        default: return "Unbounded-SemiBold"
+        }
+    }
+
+    /// Основной шрифт заданного размера и веса, растёт с Dynamic Type относительно `relativeTo`.
+    static func golos(_ size: CGFloat, _ w: Font.Weight = .regular, relativeTo style: Font.TextStyle = .body) -> Font {
+        .custom(golosName(w), size: size, relativeTo: style)
+    }
+
+    /// Акцентный шрифт (крупные заголовки экранов, суммы).
+    static func display(_ size: CGFloat, _ w: Font.Weight = .bold, relativeTo style: Font.TextStyle = .title) -> Font {
+        .custom(displayName(w), size: size, relativeTo: style)
+    }
 
     /// Для произвольного размера есть `.ymFont(size, weight:, design:)` — тоже масштабируется.
 }
@@ -127,6 +181,22 @@ enum YMFont {
 /// Шрифт заданного размера, который растёт вместе с Dynamic Type, но не больше
 /// чем в 1,35 раза: фиксированные плашки, бейджи и кнопки не ломаются, а крупный
 /// текст при этом читаем. Для цен и кнопок дополнительно ставят lineLimit/minimumScaleFactor.
+struct YMScaledSymbolFont: ViewModifier {
+    @ScaledMetric private var scaled: CGFloat
+    private let base: CGFloat
+    private let weight: Font.Weight
+
+    init(size: CGFloat, weight: Font.Weight) {
+        _scaled = ScaledMetric(wrappedValue: size, relativeTo: .body)
+        base = size
+        self.weight = weight
+    }
+
+    func body(content: Content) -> some View {
+        content.font(.system(size: min(scaled, base * 1.35), weight: weight, design: .default))
+    }
+}
+
 struct YMScaledFont: ViewModifier {
     @ScaledMetric private var scaled: CGFloat
     private let base: CGFloat
@@ -141,7 +211,14 @@ struct YMScaledFont: ViewModifier {
     }
 
     func body(content: Content) -> some View {
-        content.font(.system(size: min(scaled, base * 1.35), weight: weight, design: design))
+        let size = min(scaled, base * 1.35)
+        // Редизайн, этап 2: обычный дизайн — Golos Text нужным начертанием; .rounded/.monospaced/.serif
+        // оставлены системными (осознанные исключения: коды, цифры таймеров и т. п.).
+        if design == .default {
+            content.font(.custom(YMFont.golosName(weight), fixedSize: size))
+        } else {
+            content.font(.system(size: size, weight: weight, design: design))
+        }
     }
 }
 
@@ -177,6 +254,11 @@ extension View {
 
     func ymFont(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> some View {
         modifier(YMScaledFont(size: size, weight: weight, design: design))
+    }
+
+    /// Для SF Symbols: масштабирование как у `ymFont`, но шрифт системный (значки не переводим на Golos).
+    func ymIcon(_ size: CGFloat, weight: Font.Weight = .regular) -> some View {
+        modifier(YMScaledSymbolFont(size: size, weight: weight))
     }
 }
 

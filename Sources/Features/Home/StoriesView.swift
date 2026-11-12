@@ -167,7 +167,7 @@ private struct StoriesPlayer: View {
                         img.resizable().scaledToFit()
                     case .failure:
                         Image(systemName: "photo")
-                            .ymFont(40).foregroundStyle(.white.opacity(0.35))
+                            .ymIcon(40).foregroundStyle(.white.opacity(0.35))
                     default:
                         ProgressView().tint(.white)
                     }
@@ -205,7 +205,7 @@ private struct StoriesPlayer: View {
                     Button { close() } label: {
                         Image(systemName: "xmark")
                             .accessibilityLabel("Закрыть")
-                            .ymFont(15, weight: .bold).foregroundStyle(.white)
+                            .ymIcon(15, weight: .bold).foregroundStyle(.white)
                             .frame(width: 34, height: 34)
                             .background(Color.black.opacity(0.4), in: Circle())
                     }

@@ -42,7 +42,7 @@ struct AboutView: View {
                     ForEach(features) { f in
                         HStack(alignment: .top, spacing: YMSpace.md) {
                             Image(systemName: f.icon)
-                                .ymFont(18, weight: .semibold)
+                                .ymIcon(18, weight: .semibold)
                                 .foregroundStyle(YMColor.accent)
                                 .frame(width: 40, height: 40)
                                 .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))

@@ -38,7 +38,7 @@ struct RootTabView: View {
         VStack(spacing: 0) {
             if !net.online {
                 Text("Нет подключения к интернету")
-                    .font(YMFont.caption).fontWeight(.semibold)
+                    .font(YMFont.styled(.caption, .semibold))
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)

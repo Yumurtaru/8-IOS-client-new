@@ -14,8 +14,7 @@ struct StaleDataBanner: View {
                     .lineLimit(2)
                     .minimumScaleFactor(0.85)
             }
-            .font(YMFont.caption)
-            .fontWeight(.semibold)
+            .font(YMFont.styled(.caption, .semibold))
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 6)

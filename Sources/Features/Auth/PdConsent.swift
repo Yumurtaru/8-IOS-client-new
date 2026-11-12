@@ -60,7 +60,7 @@ struct PdConsentRow: View {
                     checked.toggle()
                 } label: {
                     Image(systemName: checked ? "checkmark.square.fill" : "square")
-                        .ymFont(22)
+                        .ymIcon(22)
                         .foregroundStyle(checked ? YMColor.accent : (showError ? YMColor.statusCancel : YMColor.muted))
                         .frame(width: 44, height: 44)
                         .contentShape(Rectangle())
@@ -88,7 +88,7 @@ struct PdConsentRow: View {
             if let u = URL(string: PdConsent.privacyURL) {
                 Link(destination: u) {
                     Text(PdConsent.privacyTitle)
-                        .font(YMFont.subhead.weight(.semibold))
+                        .font(YMFont.styled(.subhead, .semibold))
                         .foregroundStyle(YMColor.accent)
                         .frame(minHeight: 44, alignment: .leading)
                 }

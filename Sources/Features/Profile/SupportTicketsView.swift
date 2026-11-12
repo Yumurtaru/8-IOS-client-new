@@ -528,7 +528,7 @@ struct SupportTicketView: View {
                         if vm.sending { ProgressView().tint(YMColor.onAccent) }
                         else {
                             Image(systemName: "paperplane.fill")
-                                .ymFont(17, weight: .semibold).foregroundStyle(YMColor.onAccent)
+                                .ymIcon(17, weight: .semibold).foregroundStyle(YMColor.onAccent)
                         }
                     }
                     .frame(width: 40, height: 40)
@@ -541,7 +541,7 @@ struct SupportTicketView: View {
             }
             if let counter { Text(counter).font(YMFont.caption).foregroundStyle(YMColor.muted) }
             if let e = vm.sendError {
-                Text(e).font(YMFont.callout.weight(.semibold)).foregroundStyle(YMColor.statusCancel)
+                Text(e).font(YMFont.styled(.callout, .semibold)).foregroundStyle(YMColor.statusCancel)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }

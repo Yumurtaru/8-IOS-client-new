@@ -82,9 +82,9 @@ struct ParcelComplaintSheet: View {
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: reason == item.code ? "largecircle.fill.circle" : "circle")
-                            .ymFont(20).foregroundStyle(reason == item.code ? YMColor.accent : YMColor.muted)
+                            .ymIcon(20).foregroundStyle(reason == item.code ? YMColor.accent : YMColor.muted)
                         Text(item.label)
-                            .font(item.code == "passenger" ? YMFont.callout.weight(.semibold) : YMFont.callout)
+                            .font(item.code == "passenger" ? YMFont.styled(.callout, .semibold) : YMFont.callout)
                             .foregroundStyle(YMColor.text).multilineTextAlignment(.leading)
                         Spacer(minLength: 0)
                     }

@@ -36,6 +36,9 @@ struct PromoBanner: View {
                     .ymFont(22, weight: .heavy)
                     .foregroundStyle(Color(hex: "#F5EEDE"))
                     .lineLimit(2)
+                    // Баннер фиксированной высоты: если две строки не вмещают текст (шрифт шире,
+                    // крупный текст в настройках) — кегль чуть уменьшается, а не обрезается.
+                    .minimumScaleFactor(0.75)
                     .frame(maxWidth: 210, alignment: .leading)
                 Button(action: { Haptics.light(); action() }) {
                     Text(cta)

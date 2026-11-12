@@ -379,7 +379,7 @@ struct ListingView: View {
             Button { Haptics.light(); dismiss() } label: {
                 Image(systemName: "chevron.left")
                     .accessibilityLabel("Назад")
-                    .ymFont(17, weight: .semibold)
+                    .ymIcon(17, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
             }
@@ -450,7 +450,7 @@ struct ListingView: View {
                 Button { Haptics.selection(); showSort = true } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "arrow.up.arrow.down")
-                            .ymFont(12, weight: .bold)
+                            .ymIcon(12, weight: .bold)
                         Text(vm.sort.rawValue)
                             .ymFont(13, weight: .bold)
                     }
@@ -538,7 +538,7 @@ struct ListingView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .ymFont(34, weight: .semibold)
+                .ymIcon(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)
@@ -716,7 +716,7 @@ struct ProductGridCard: View {
                     } label: {
                         Image(systemName: "plus")
                             .accessibilityLabel("Добавить в корзину")
-                            .ymFont(15, weight: .heavy)
+                            .ymIcon(15, weight: .heavy)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 30, height: 30)
                             .background(YMColor.accent, in: Circle())
@@ -785,16 +785,16 @@ struct SortSheet: View {
                     } label: {
                         HStack(spacing: 12) {
                             Image(systemName: opt.icon)
-                                .ymFont(15)
+                                .ymIcon(15)
                                 .foregroundStyle(draft == opt ? YMColor.accent : YMColor.muted)
                                 .frame(width: 24)
                             Text(opt.rawValue)
-                                .font(.system(size: 15, weight: draft == opt ? .heavy : .semibold))
+                                .font(.custom(YMFont.golosName(draft == opt ? .heavy : .semibold), fixedSize: 15))
                                 .foregroundStyle(YMColor.text)
                             Spacer()
                             if draft == opt {
                                 Image(systemName: "checkmark")
-                                    .ymFont(15, weight: .heavy)
+                                    .ymIcon(15, weight: .heavy)
                                     .foregroundStyle(YMColor.accent)
                             }
                         }

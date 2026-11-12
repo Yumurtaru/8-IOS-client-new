@@ -172,7 +172,7 @@ struct PlusView: View {
             ForEach(Array(benefits.enumerated()), id: \.offset) { _, b in
                 HStack(spacing: YMSpace.sm) {
                     Image(systemName: "checkmark")
-                        .ymFont(12, weight: .bold)
+                        .ymIcon(12, weight: .bold)
                         .foregroundStyle(YMColor.accent)
                         .frame(width: 22, height: 22)
                         .background(YMColor.accent.opacity(0.16), in: Circle())

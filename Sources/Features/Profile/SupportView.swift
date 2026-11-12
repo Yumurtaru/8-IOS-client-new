@@ -123,7 +123,7 @@ struct SupportView: View {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: "sparkles")
                     .accessibilityHidden(true)
-                    .ymFont(18).foregroundStyle(YMColor.accent)
+                    .ymIcon(18).foregroundStyle(YMColor.accent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
@@ -134,7 +134,7 @@ struct SupportView: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .ymFont(13, weight: .semibold).foregroundStyle(YMColor.muted)
+                    .ymIcon(13, weight: .semibold).foregroundStyle(YMColor.muted)
             }
             .padding(YMSpace.md)
             .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -150,7 +150,7 @@ struct SupportView: View {
             HStack(spacing: YMSpace.md) {
                 Image(systemName: "bubble.left.and.bubble.right.fill")
                     .accessibilityHidden(true)
-                    .ymFont(17).foregroundStyle(YMColor.accent)
+                    .ymIcon(17).foregroundStyle(YMColor.accent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
                     .accessibilityHidden(true)
@@ -162,7 +162,7 @@ struct SupportView: View {
                 }
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
-                    .ymFont(13, weight: .semibold).foregroundStyle(YMColor.muted)
+                    .ymIcon(13, weight: .semibold).foregroundStyle(YMColor.muted)
                     .accessibilityHidden(true)
             }
             .padding(YMSpace.md)
@@ -201,7 +201,7 @@ struct SupportView: View {
         Button(action: { Haptics.light(); action() }) {
             VStack(alignment: .leading, spacing: YMSpace.sm) {
                 Image(systemName: icon)
-                    .ymFont(18).foregroundStyle(YMColor.accent)
+                    .ymIcon(18).foregroundStyle(YMColor.accent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
                 Text(title).ymFont(15, weight: .heavy).foregroundStyle(YMColor.text)
@@ -276,7 +276,7 @@ struct SupportView: View {
                         Text(reason.label).ymFont(15).foregroundStyle(YMColor.text)
                         Spacer()
                         Image(systemName: "chevron.up.chevron.down")
-                            .ymFont(12, weight: .semibold).foregroundStyle(YMColor.muted)
+                            .ymIcon(12, weight: .semibold).foregroundStyle(YMColor.muted)
                     }
                     .padding(.horizontal, 14).padding(.vertical, 14)
                     .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
@@ -380,7 +380,7 @@ private struct SupportFaqRow: View {
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 8)
                     Image(systemName: "chevron.down")
-                        .ymFont(13, weight: .semibold)
+                        .ymIcon(13, weight: .semibold)
                         .foregroundStyle(expanded ? YMColor.accent : YMColor.muted)
                         .rotationEffect(.degrees(expanded ? 180 : 0))
                 }

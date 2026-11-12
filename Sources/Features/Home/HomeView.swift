@@ -411,7 +411,7 @@ struct HomeView: View {
         } label: {
             Image(systemName: "person.fill")
                 .accessibilityLabel("Профиль")
-                .ymFont(17, weight: .semibold)
+                .ymIcon(17, weight: .semibold)
                 .foregroundStyle(YMColor.accent)
                 .frame(width: 42, height: 42)
                 .background(YMColor.surface2, in: Circle())
@@ -634,7 +634,7 @@ struct HomeView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .ymFont(34, weight: .semibold)
+                .ymIcon(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)
@@ -757,7 +757,7 @@ struct ParcelPromoCard: View {
         } label: {
             VStack(alignment: .leading, spacing: YMSpace.sm) {
                 Text("КУРЬЕР YUMURTA")
-                    .font(YMFont.caption2).fontWeight(.semibold)
+                    .font(YMFont.styled(.caption2, .semibold))
                     .foregroundStyle(YMColor.accent)
                 Text("Отправить посылку")
                     .font(YMFont.title3).foregroundStyle(YMColor.text)
@@ -841,7 +841,7 @@ private struct CityPickerSheet: View {
                             .foregroundStyle(YMColor.muted)
                             .multilineTextAlignment(.center)
                         Button("Повторить") { Task { await loadCities() } }
-                            .font(YMFont.callout.weight(.bold))
+                            .font(YMFont.styled(.callout, .bold))
                             .foregroundStyle(YMColor.accent)
                     }
                     .frame(maxWidth: .infinity)
@@ -891,12 +891,12 @@ private struct CityPickerSheet: View {
         } label: {
             HStack {
                 Text(name)
-                    .font(.system(size: 16, weight: selected ? .bold : .medium))
+                    .font(.custom(YMFont.golosName(selected ? .bold : .medium), fixedSize: 16))
                     .foregroundStyle(selected ? YMColor.accent : YMColor.text)
                 Spacer()
                 if selected {
                     Image(systemName: "checkmark")
-                        .ymFont(14, weight: .bold)
+                        .ymIcon(14, weight: .bold)
                         .foregroundStyle(YMColor.accent)
                 }
             }

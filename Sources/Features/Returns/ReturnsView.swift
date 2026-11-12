@@ -207,7 +207,7 @@ struct ReturnsView: View {
                 RoundedRectangle(cornerRadius: YMRadius.card, style: .continuous)
                     .fill(YMColor.surface2).frame(width: 96, height: 96)
                 Image(systemName: icon)
-                    .ymFont(38, weight: .semibold)
+                    .ymIcon(38, weight: .semibold)
                     .foregroundStyle(YMColor.accent)
             }
             Text(title).font(YMFont.title3).foregroundStyle(YMColor.text)
@@ -275,7 +275,7 @@ private struct ReturnCard: View {
             }
             if open { detailBlock }
             Text(open ? "Скрыть состав" : "Что возвращаете")
-                .font(YMFont.caption.weight(.semibold)).foregroundStyle(YMColor.accent)
+                .font(YMFont.styled(.caption, .semibold)).foregroundStyle(YMColor.accent)
         }
         .padding(YMSpace.lg)
         .ymCard(radius: YMRadius.card)
@@ -478,7 +478,7 @@ struct ReturnCreateView: View {
                             Text("Не удалось загрузить заказы: \(e)")
                                 .font(YMFont.callout).foregroundStyle(YMColor.statusCancel)
                             Button("Повторить") { Task { await loadOrders() } }
-                                .font(YMFont.callout.weight(.semibold)).foregroundStyle(YMColor.accent)
+                                .font(YMFont.styled(.callout, .semibold)).foregroundStyle(YMColor.accent)
                         }
                     } else if eligibleOrders.isEmpty {
                         Text("Нет выполненных заказов, доступных для возврата.")
@@ -526,7 +526,7 @@ struct ReturnCreateView: View {
                                 .font(YMFont.callout).foregroundStyle(YMColor.statusCancel)
                                 .fixedSize(horizontal: false, vertical: true)
                             Button("Повторить") { if let id = selectedOrderId { Task { await loadLines(id) } } }
-                                .font(YMFont.callout.weight(.semibold)).foregroundStyle(YMColor.accent)
+                                .font(YMFont.styled(.callout, .semibold)).foregroundStyle(YMColor.accent)
                                 .disabled(locked)
                         }
                     }
@@ -623,7 +623,7 @@ struct ReturnCreateView: View {
             ZStack {
                 Circle().fill(YMColor.statusDone.opacity(0.16)).frame(width: 96, height: 96)
                 Image(systemName: "checkmark")
-                    .ymFont(40, weight: .heavy).foregroundStyle(YMColor.statusDone)
+                    .ymIcon(40, weight: .heavy).foregroundStyle(YMColor.statusDone)
             }
             Text("Заявка отправлена").font(YMFont.title3).foregroundStyle(YMColor.text)
             Text("Продавец рассмотрит возврат. Статус появится в списке возвратов.")
@@ -839,7 +839,7 @@ private struct ReturnQtyRow: View {
     @ViewBuilder private func stepper(canMinus: Bool, canPlus: Bool) -> some View {
         Button { Haptics.light(); onQty(snap(max(0, qty - step))) } label: {
             Image(systemName: "minus")
-                .ymFont(14, weight: .bold)
+                .ymIcon(14, weight: .bold)
                 .foregroundStyle(canMinus ? YMColor.accent : YMColor.muted)
                 .frame(width: 32, height: 32)
         }
@@ -847,11 +847,11 @@ private struct ReturnQtyRow: View {
         .disabled(!canMinus)
         .accessibilityLabel("Вернуть меньше")
         Text(fmtQty(qty, unitLabel))
-            .font(YMFont.callout.weight(.semibold)).foregroundStyle(YMColor.text)
+            .font(YMFont.styled(.callout, .semibold)).foregroundStyle(YMColor.text)
             .frame(minWidth: 52)
         Button { Haptics.light(); onQty(snap(min(maxQty, qty + step))) } label: {
             Image(systemName: "plus")
-                .ymFont(14, weight: .bold)
+                .ymIcon(14, weight: .bold)
                 .foregroundStyle(canPlus ? YMColor.accent : YMColor.muted)
                 .frame(width: 32, height: 32)
         }

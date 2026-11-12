@@ -299,7 +299,7 @@ private struct CityStep: View {
             HStack(spacing: YMSpace.md) {
                 Text("🏙️").ymFont(18)
                 Text(name)
-                    .font(.system(size: 15.5, weight: selected ? .heavy : .semibold))
+                    .font(.custom(YMFont.golosName(selected ? .heavy : .semibold), fixedSize: 15.5))
                     .foregroundStyle(YMColor.text)
                 Spacer()
                 if selected {

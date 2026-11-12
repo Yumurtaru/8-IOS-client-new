@@ -75,9 +75,9 @@ struct CartConflictDialog: View {
 
             // «товары», а не «блюда»: диалог общий для кафе, магазинов и аптек.
             (Text("В корзине уже есть товары из ")
-                + Text(currentName).foregroundColor(YMColor.text).bold()
+                + Text(currentName).font(YMFont.golos(14, .bold, relativeTo: .body)).foregroundColor(YMColor.text)
                 + Text(". Заказ можно оформить только из одного заведения. Очистить корзину и добавить товар из ")
-                + Text(newName).foregroundColor(YMColor.text).bold()
+                + Text(newName).font(YMFont.golos(14, .bold, relativeTo: .body)).foregroundColor(YMColor.text)
                 + Text("?"))
                 .ymFont(14)
                 .foregroundStyle(YMColor.muted)

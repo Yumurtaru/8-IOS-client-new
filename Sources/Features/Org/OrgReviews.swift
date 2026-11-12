@@ -41,7 +41,7 @@ struct OrgReviewsSection: View {
                     if cnt > 0 || (avgRating ?? 0) > 0 {
                         HStack(spacing: 6) {
                             Image(systemName: "star.fill")
-                                .ymFont(14)
+                                .ymIcon(14)
                                 .foregroundStyle(YMColor.accent)
                             Text(fmtRating1(avgRating))
                                 .ymFont(16, weight: .heavy)
@@ -54,7 +54,7 @@ struct OrgReviewsSection: View {
                         }
                     }
                     Image(systemName: "chevron.right")
-                        .ymFont(13, weight: .bold)
+                        .ymIcon(13, weight: .bold)
                         .foregroundStyle(YMColor.muted)
                 }
                 .contentShape(Rectangle())

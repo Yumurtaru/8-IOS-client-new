@@ -36,6 +36,9 @@ struct YumurtaApp: App {
                 .environmentObject(router)
                 .environmentObject(coord)
                 .tint(YMColor.accent)
+                // Редизайн, этап 2: текст без явного шрифта — Golos Text того же размера,
+                // что системный по умолчанию (17, растёт с «Размером текста»).
+                .font(YMFont.golos(17, .regular, relativeTo: .body))
                 .preferredColorScheme(colorScheme)
                 .fullScreenCover(isPresented: Binding(
                     // Онбординг ждёт, пока доиграет анимация запуска: модальный

@@ -538,7 +538,7 @@ struct OrgView: View {
                         .font(YMFont.title3).foregroundStyle(YMColor.text)
                 }
                 Text("№ \(number)" + (licDate(lic.issuedAt).map { " от \($0)" } ?? ""))
-                    .font(YMFont.body.weight(.semibold)).foregroundStyle(YMColor.text)
+                    .font(YMFont.styled(.body, .semibold)).foregroundStyle(YMColor.text)
                 if let by = lic.issuedBy, !by.isEmpty {
                     Text("Выдана: \(by)").font(YMFont.callout).foregroundStyle(YMColor.muted)
                 }
@@ -586,7 +586,7 @@ struct OrgView: View {
             }
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "mappin.and.ellipse")
-                    .ymFont(18, weight: .semibold)
+                    .ymIcon(18, weight: .semibold)
                     .foregroundStyle(YMColor.accent)
                 VStack(alignment: .leading, spacing: 3) {
                     // Пустой адрес из карточки («») давал пустую строку рядом с пином.
@@ -685,7 +685,7 @@ struct OrgView: View {
         } label: {
             VStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 14.5, weight: active ? .heavy : .semibold))
+                    .font(.custom(YMFont.golosName(active ? .heavy : .semibold), fixedSize: 14.5))
                     .foregroundStyle(active ? YMColor.text : YMColor.muted)
                 Rectangle()
                     .fill(active ? YMColor.accent : .clear)
@@ -723,7 +723,7 @@ struct OrgView: View {
     private func circleControl(_ system: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system)
-                .ymFont(16, weight: .semibold)
+                .ymIcon(16, weight: .semibold)
                 .foregroundStyle(.white)
                 .frame(width: 38, height: 38)
                 .background(Color.black.opacity(0.4), in: Circle())
@@ -815,7 +815,7 @@ struct OrgView: View {
     private func errorState(_ message: String) -> some View {
         VStack(spacing: YMSpace.md) {
             Image(systemName: "wifi.exclamationmark")
-                .ymFont(34, weight: .semibold)
+                .ymIcon(34, weight: .semibold)
                 .foregroundStyle(YMColor.muted)
             Text(message)
                 .font(YMFont.callout)
@@ -977,7 +977,7 @@ struct DishRow: View {
                     } label: {
                         Image(systemName: "plus")
                             .accessibilityLabel("Добавить в корзину")
-                            .ymFont(16, weight: .heavy)
+                            .ymIcon(16, weight: .heavy)
                             .foregroundStyle(YMColor.onAccent)
                             .frame(width: 30, height: 30)
                             .background(YMColor.accent, in: Circle())
@@ -1046,7 +1046,7 @@ struct OrgMiniMap: View {
             annotationItems: [Pin(coord: coord)]) { pin in
             MapAnnotation(coordinate: pin.coord) {
                 Image(systemName: "mappin.circle.fill")
-                    .ymFont(30)
+                    .ymIcon(30)
                     .foregroundStyle(YMColor.accent)
                     .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
             }

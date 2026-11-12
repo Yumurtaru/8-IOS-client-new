@@ -342,7 +342,7 @@ private struct SearchSection: View {
                 Button("Отмена") {
                     q = ""; clearResults(); focused = false
                 }
-                .font(.system(size: 15, weight: .bold))
+                .font(.custom(YMFont.golosName(.bold), fixedSize: 15))
                 .foregroundStyle(YMColor.accent)
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
@@ -374,7 +374,7 @@ private struct SearchSection: View {
                             .font(.system(size: 14))
                             .foregroundStyle(YMColor.muted)
                         highlighted(s)
-                            .font(.system(size: 14.5))
+                            .font(.custom(YMFont.golosName(.regular), fixedSize: 14.5))
                             .foregroundStyle(YMColor.text)
                         Spacer(minLength: 0)
                         Image(systemName: "arrow.up.left")
@@ -415,7 +415,7 @@ private struct SearchSection: View {
                     sectionKicker("Недавние запросы")
                     Spacer()
                     Button("Очистить") { SearchHistoryStore.clear(); history = [] }
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.custom(YMFont.golosName(.semibold), fixedSize: 12))
                         .foregroundStyle(YMColor.accent)
                         .padding(.trailing, YMSpace.xl)
                 }
@@ -433,7 +433,7 @@ private struct SearchSection: View {
                             Text(r.name).font(YMFont.body).foregroundStyle(YMColor.text).lineLimit(1)
                             Spacer(minLength: 8)
                             Text(Money.format(Money.parse(r.price)))
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.custom(YMFont.golosName(.semibold), fixedSize: 13))
                                 .foregroundStyle(YMColor.muted)
                         }
                         .padding(.horizontal, YMSpace.xl)
@@ -481,7 +481,7 @@ private struct SearchSection: View {
                     .overlay(alignment: .bottomLeading) {
                         if (p.isPromoted ?? 0) == 1 {
                             Text("Реклама")
-                                .font(.system(size: 10, weight: .bold))
+                                .font(.custom(YMFont.golosName(.bold), fixedSize: 10))
                                 .foregroundStyle(.white)
                                 .padding(.horizontal, 6).padding(.vertical, 3)
                                 .background(Color.black.opacity(0.55), in: Capsule())
@@ -489,19 +489,19 @@ private struct SearchSection: View {
                         }
                     }
                 Text(p.name ?? "—")
-                    .font(.system(size: 13.5, weight: .bold))
+                    .font(.custom(YMFont.golosName(.bold), fixedSize: 13.5))
                     .foregroundStyle(YMColor.text).lineLimit(1)
                 // П-22.3: из какого заведения товар (поле необязательное).
                 if let sn = p.shopName?.trimmingCharacters(in: .whitespaces), !sn.isEmpty {
                     Text(sn)
-                        .font(.system(size: 11.5))
+                        .font(.custom(YMFont.golosName(.regular), fixedSize: 11.5))
                         .foregroundStyle(YMColor.muted).lineLimit(1)
                 }
                 Text(Money.format(Money.parse(p.price)))
-                    .font(.system(size: 12))
+                    .font(.custom(YMFont.golosName(.regular), fixedSize: 12))
                     .foregroundStyle(YMColor.muted)
                 if let w = p.wholesaleLabel {
-                    Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
+                    Text(w).font(.custom(YMFont.golosName(.regular), fixedSize: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
                 }
             }
             .frame(width: 150, alignment: .leading)
@@ -515,9 +515,9 @@ private struct SearchSection: View {
                 PhotoPlaceholder(url: API.imageURL(s.logo ?? s.cover), label: "ЛОГО", radius: 12, tone: tone)
                     .frame(width: 44, height: 44)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(s.name ?? "—").font(.system(size: 14, weight: .bold)).foregroundStyle(YMColor.text).lineLimit(1)
+                    Text(s.name ?? "—").font(.custom(YMFont.golosName(.bold), fixedSize: 14)).foregroundStyle(YMColor.text).lineLimit(1)
                     if let cat = s.category, !cat.isEmpty {
-                        Text(cat).font(.system(size: 12)).foregroundStyle(YMColor.muted).lineLimit(1)
+                        Text(cat).font(.custom(YMFont.golosName(.regular), fixedSize: 12)).foregroundStyle(YMColor.muted).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 8)
@@ -553,7 +553,7 @@ private struct SearchSection: View {
                     .font(YMFont.title3).foregroundStyle(YMColor.text)
                     .multilineTextAlignment(.center)
                 Button("Искать во всех категориях") { selectCategory(nil) }
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.custom(YMFont.golosName(.bold), fixedSize: 15))
                     .foregroundStyle(YMColor.accent)
                     .padding(.top, YMSpace.xs)
             } else {
@@ -587,7 +587,7 @@ private struct SearchSection: View {
     private func facetChip(_ title: String, selected: Bool, a11y: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                .font(.custom(YMFont.golosName(.semibold), fixedSize: 13)).lineLimit(1)
                 .foregroundStyle(selected ? YMColor.onAccent : YMColor.text)
                 .padding(.horizontal, 13).padding(.vertical, 8)
                 .background(selected ? YMColor.accent : YMColor.surface,
@@ -624,7 +624,7 @@ private struct SearchSection: View {
     // ── helpers ──
     private func sectionKicker(_ t: String) -> some View {
         Text(t.uppercased())
-            .font(.system(size: 12, weight: .heavy)).tracking(0.6)
+            .font(.custom(YMFont.golosName(.heavy), fixedSize: 12)).tracking(0.6)
             .foregroundStyle(YMColor.muted)
             .padding(.horizontal, YMSpace.xl)
             .padding(.top, YMSpace.md).padding(.bottom, YMSpace.sm)
@@ -640,7 +640,7 @@ private struct SearchSection: View {
         let pre = String(s[s.startIndex..<r.lowerBound])
         let mid = String(s[r])
         let post = String(s[r.upperBound..<s.endIndex])
-        return Text(pre) + Text(mid).fontWeight(.heavy) + Text(post)
+        return Text(pre) + Text(mid).font(.custom(YMFont.golosName(.bold), fixedSize: 14.5)) + Text(post)
     }
 
     private func favProduct(_ id: Int) -> Binding<Bool> {
@@ -748,7 +748,7 @@ private struct FlowChips: View {
                     Button { onTap(term) } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "clock.arrow.circlepath").font(.system(size: 11))
-                            Text(term).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                            Text(term).font(.custom(YMFont.golosName(.semibold), fixedSize: 13)).lineLimit(1)
                         }
                         .foregroundStyle(YMColor.text)
                         .padding(.horizontal, 13).padding(.vertical, 8)
@@ -796,7 +796,7 @@ private struct CategoriesSection: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Категории")
-                        .font(.system(size: 28, weight: .heavy)).tracking(-0.6)
+                        .font(.custom(YMFont.golosName(.heavy), fixedSize: 28)).tracking(-0.6)
                         .foregroundStyle(YMColor.text)
                         .padding(.horizontal, YMSpace.xl)
                         .padding(.top, YMSpace.sm).padding(.bottom, YMSpace.md)
@@ -915,10 +915,10 @@ private struct CategoryTile: View {
                 Spacer(minLength: 6)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(category.name ?? "—")
-                        .font(.system(size: 15, weight: .heavy))
+                        .font(.custom(YMFont.golosName(.heavy), fixedSize: 15))
                         .foregroundStyle(YMColor.text).lineLimit(1)
                     if let c = countLine {
-                        Text(c).font(.system(size: 11.5)).foregroundStyle(YMColor.muted).lineLimit(1)
+                        Text(c).font(.custom(YMFont.golosName(.regular), fixedSize: 11.5)).foregroundStyle(YMColor.muted).lineLimit(1)
                     }
                 }
             }
@@ -1019,7 +1019,7 @@ private struct FavoritesSection: View {
                         Text(e).font(YMFont.callout).foregroundStyle(YMColor.muted)
                             .multilineTextAlignment(.center)
                         Button("Повторить") { reloadKey += 1 }
-                            .font(YMFont.callout.weight(.bold))
+                            .font(YMFont.styled(.callout, .bold))
                             .foregroundStyle(YMColor.accent)
                     }
                     .frame(maxWidth: .infinity)
@@ -1221,7 +1221,7 @@ private struct FavOrgCard: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(shop.name ?? "—")
-                            .font(.system(size: 16, weight: .heavy))
+                            .font(.custom(YMFont.golosName(.heavy), fixedSize: 16))
                             .foregroundStyle(YMColor.text).lineLimit(1)
                         Spacer(minLength: 8)
                         if let r = shop.rating, r > 0 {
@@ -1236,18 +1236,18 @@ private struct FavOrgCard: View {
                     // строка была пустой. Берём адрес и avg_cook_time «25–35 мин».
                     HStack(spacing: 6) {
                         if let cat = favSubtitle {
-                            Text(cat).font(.system(size: 13)).foregroundStyle(YMColor.muted).lineLimit(1)
+                            Text(cat).font(.custom(YMFont.golosName(.regular), fixedSize: 13)).foregroundStyle(YMColor.muted).lineLimit(1)
                         }
                         if let t = favTime {
                             Circle().fill(YMColor.muted).frame(width: 3, height: 3)
-                            Text(t).font(.system(size: 13)).foregroundStyle(YMColor.muted)
+                            Text(t).font(.custom(YMFont.golosName(.regular), fixedSize: 13)).foregroundStyle(YMColor.muted)
                         }
                     }
                     if isPaused {
                         Text(ShopPause.title(statusText: nil, until: shop.pauseUntil, untilTs: shop.pauseUntilTs))
-                            .font(.system(size: 12.5)).foregroundStyle(YMColor.statusCancel).lineLimit(2)
+                            .font(.custom(YMFont.golosName(.regular), fixedSize: 12.5)).foregroundStyle(YMColor.statusCancel).lineLimit(2)
                         if let r = ShopPause.reason(shop.pauseReason) {
-                            Text(r).font(.system(size: 12.5)).foregroundStyle(YMColor.muted).lineLimit(2)
+                            Text(r).font(.custom(YMFont.golosName(.regular), fixedSize: 12.5)).foregroundStyle(YMColor.muted).lineLimit(2)
                         }
                     }
                 }
@@ -1283,27 +1283,27 @@ private struct FavProductCard: View {
                     .frame(height: 120).frame(maxWidth: .infinity).clipped()
                 VStack(alignment: .leading, spacing: 4) {
                     Text(product.name ?? "—")
-                        .font(.system(size: 16, weight: .heavy))
+                        .font(.custom(YMFont.golosName(.heavy), fixedSize: 16))
                         .foregroundStyle(YMColor.text).lineLimit(1)
                     // П-22.3: заведение товара (поле необязательное).
                     if let sn = product.shopName?.trimmingCharacters(in: .whitespaces), !sn.isEmpty {
                         Text(sn)
-                            .font(.system(size: 12.5))
+                            .font(.custom(YMFont.golosName(.regular), fixedSize: 12.5))
                             .foregroundStyle(YMColor.muted).lineLimit(1)
                     }
                     HStack(spacing: 8) {
                         Text(Money.format(Money.parse(product.price)))
-                            .font(.system(size: 14, weight: .heavy))
+                            .font(.custom(YMFont.golosName(.heavy), fixedSize: 14))
                             .foregroundStyle(YMColor.accent)
                         if let old = product.oldPriceAny, old > (product.price ?? 0) {
                             Text(Money.format(Money.parse(old)))
-                                .font(.system(size: 12))
+                                .font(.custom(YMFont.golosName(.regular), fixedSize: 12))
                                 .strikethrough()
                                 .foregroundStyle(YMColor.muted)
                         }
                     }
                     if let w = product.wholesaleLabel {
-                        Text(w).font(.system(size: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
+                        Text(w).font(.custom(YMFont.golosName(.regular), fixedSize: 11)).foregroundStyle(YMColor.muted).lineLimit(1)
                     }
                 }
                 .padding(.horizontal, 15).padding(.top, 12).padding(.bottom, 14)

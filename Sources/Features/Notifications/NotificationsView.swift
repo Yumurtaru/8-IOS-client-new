@@ -314,7 +314,7 @@ private struct NotifRow: View {
         HStack(alignment: .top, spacing: 12) {
             if giveaway {
                 Image(systemName: "gift.fill")
-                    .ymFont(17, weight: .semibold)
+                    .ymIcon(17, weight: .semibold)
                     .foregroundStyle(YMColor.onAccent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))

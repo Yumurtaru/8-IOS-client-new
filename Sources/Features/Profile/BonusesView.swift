@@ -232,7 +232,7 @@ private struct ShopBalanceRow: View {
     var body: some View {
         HStack(spacing: YMSpace.md) {
             Image(systemName: "star.fill")
-                .ymFont(18)
+                .ymIcon(18)
                 .foregroundStyle(YMColor.accent)
                 .frame(width: 44, height: 44)
                 .background(YMColor.accent.opacity(0.16),

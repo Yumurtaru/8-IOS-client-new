@@ -650,7 +650,7 @@ struct CheckoutView: View {
             Button(action: { Haptics.light(); onBack() }) {
                 Image(systemName: "chevron.left")
                     .accessibilityLabel("Назад")
-                    .ymFont(18, weight: .semibold)
+                    .ymIcon(18, weight: .semibold)
                     .foregroundStyle(YMColor.text)
                     .frame(width: 38, height: 38)
                     .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -1925,7 +1925,7 @@ private struct AddAddressSheet: View {
                 Section {
                     Button(action: save) {
                         HStack { Spacer()
-                            if saving { ProgressView() } else { Text("Сохранить").fontWeight(.bold) }
+                            if saving { ProgressView() } else { Text("Сохранить").font(YMFont.golos(17, .bold, relativeTo: .body)) }
                             Spacer() }
                     }
                     .disabled(saving)
@@ -2268,7 +2268,7 @@ private struct PreorderChip: View {
             action()
         } label: {
             Text(title)
-                .font(.system(size: 13.5, weight: selected ? .semibold : .regular))
+                .font(.custom(YMFont.golosName(selected ? .semibold : .regular), fixedSize: 13.5))
                 .foregroundStyle(selected ? YMColor.onAccent : YMColor.text)
                 .padding(.horizontal, 12).padding(.vertical, 8)
                 .background(selected ? YMColor.accent : YMColor.surface2,

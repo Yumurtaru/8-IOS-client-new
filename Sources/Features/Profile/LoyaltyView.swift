@@ -182,8 +182,7 @@ private struct LevelRow: View {
                             in: RoundedRectangle(cornerRadius: YMRadius.chip, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(name)
-                    .font(YMFont.headline)
-                    .fontWeight(isCurrent ? .bold : .semibold)
+                    .font(YMFont.styled(.headline, isCurrent ? .bold : .semibold))
                     .foregroundStyle(YMColor.text)
                 // «от 1 заказов», «от 21 заказов», «от 0 заказов» — склоняем
                 // (после «от» — родительный падеж: 1 заказа, 5 заказов).

@@ -56,7 +56,7 @@ struct GiftCardView: View {
     private var heroCard: some View {
         VStack(alignment: .leading, spacing: YMSpace.sm) {
             Image(systemName: "giftcard.fill")
-                .ymFont(32, weight: .semibold)
+                .ymIcon(32, weight: .semibold)
                 .foregroundStyle(YMColor.onAccent)
             Text("Подарочная карта")
                 .font(YMFont.title3).foregroundStyle(YMColor.onAccent)

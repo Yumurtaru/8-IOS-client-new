@@ -490,7 +490,7 @@ struct OrdersView: View {
                 .font(YMFont.callout).foregroundStyle(YMColor.muted)
                 .multilineTextAlignment(.center)
             Button { Task { await vm.load() } } label: {
-                Text("Повторить").font(.system(size: 14.5, weight: .heavy)).foregroundStyle(YMColor.accent)
+                Text("Повторить").font(.custom(YMFont.golosName(.heavy), fixedSize: 14.5)).foregroundStyle(YMColor.accent)
                     .padding(.horizontal, YMSpace.xxl).padding(.vertical, 12)
                     .background(YMColor.accent.opacity(0.14), in: Capsule())
             }
@@ -599,7 +599,7 @@ private struct OrderCard: View {
                             .font(YMFont.caption).foregroundStyle(YMColor.muted)
                     }
                     Spacer(minLength: 8)
-                    Text(money).font(.system(size: 16, weight: .heavy)).foregroundStyle(YMColor.text)
+                    Text(money).font(.custom(YMFont.golosName(.heavy), fixedSize: 16)).foregroundStyle(YMColor.text)
                 }
 
                 // ── Строка статуса: точка (пульс у «В пути») + текст + ETA ──
@@ -617,7 +617,7 @@ private struct OrderCard: View {
                 // ETA у такого заказа нет. Отменённому строка не нужна.
                 if let pre = preorderText {
                     Label("Ко времени: \(pre)", systemImage: "clock.fill")
-                        .font(YMFont.subhead.weight(.semibold))
+                        .font(YMFont.styled(.subhead, .semibold))
                         .foregroundStyle(YMColor.accent)
                         .labelStyle(.titleAndIcon)
                         .lineLimit(1)
@@ -651,7 +651,7 @@ struct LogoBadge: View {
                 .fill(LinearGradient(colors: [YMPalette.goldBright, YMPalette.goldDeep],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
             Text(letter)
-                .font(.system(size: size * 0.42, weight: .heavy))
+                .font(.custom(YMFont.golosName(.heavy), fixedSize: size * 0.42))
                 .foregroundStyle(YMPalette.goldInk)
             if let url {
                 CachedAsyncImage(url: url) { phase in

@@ -232,7 +232,7 @@ private struct ChatListRow: View {
                 }
                 HStack(spacing: YMSpace.sm) {
                     Text(preview)
-                        .font(.system(size: 13, weight: unread > 0 ? .semibold : .regular))
+                        .font(.custom(YMFont.golosName(unread > 0 ? .semibold : .regular), fixedSize: 13))
                         .foregroundStyle(unread > 0 ? YMColor.text : YMColor.muted)
                         .lineLimit(1)
                     Spacer(minLength: 6)
@@ -546,7 +546,7 @@ private struct ChatThreadScreen: View {
         HStack(spacing: YMSpace.sm) {
             PhotosPicker(selection: $photoItems, maxSelectionCount: 1, matching: .images) {
                 Image(systemName: "plus")
-                    .ymFont(18, weight: .semibold).foregroundStyle(YMColor.muted)
+                    .ymIcon(18, weight: .semibold).foregroundStyle(YMColor.muted)
                     .frame(width: 40, height: 40)
                     .background(YMColor.surface2, in: Circle())
             }
@@ -570,7 +570,7 @@ private struct ChatThreadScreen: View {
                 Task { if !(await vm.send(text)) { draft = draft.isEmpty ? text : text + "\n" + draft } }
             } label: {
                 Image(systemName: "arrow.up")
-                    .ymFont(18, weight: .heavy).foregroundStyle(YMColor.onAccent)
+                    .ymIcon(18, weight: .heavy).foregroundStyle(YMColor.onAccent)
                     .frame(width: 40, height: 40)
                     .background(YMColor.accent, in: Circle())
                     .shadow(color: YMPalette.gold.opacity(0.5), radius: 12, y: 4)
@@ -755,7 +755,7 @@ private struct ChatBubble: View {
                 HStack(spacing: 4) {
                     if mine, message.localState == "failed" {
                         Image(systemName: "exclamationmark.circle.fill")
-                            .ymFont(10).foregroundStyle(YMColor.statusCancel)
+                            .ymIcon(10).foregroundStyle(YMColor.statusCancel)
                     }
                     Text(DateFmt.time(message.createdAt))
                         .ymFont(10.5).foregroundStyle(YMColor.muted)
