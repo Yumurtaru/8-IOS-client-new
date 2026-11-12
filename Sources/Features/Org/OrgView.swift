@@ -676,12 +676,21 @@ struct OrgView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Липкая навигация по разделам меню — золотое подчёркивание активного.
             if !categories.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 18) {
-                        catTab("Популярное", 0)
-                        ForEach(categories) { c in catTab(c.name ?? "—", c.id) }
+                // Лента-капсула (редизайн): серая рамка, активная вкладка — белая капсула.
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 4) {
+                            catTab("Популярное", 0)
+                            ForEach(categories) { c in catTab(c.name ?? "—", c.id) }
+                        }
+                        .padding(4)
                     }
-                    .padding(.bottom, 4)
+                    .background(YMUi.segmentBg, in: Capsule())
+                    .onChange(of: activeCat) { id in
+                        withAnimation(YMMotion.adaptive(.easeInOut(duration: YMDur.tabSwitch), reduceMotion: reduceMotion)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
                 }
             }
 
@@ -750,23 +759,29 @@ struct OrgView: View {
 
     // MARK: Category tab (золотое подчёркивание)
 
+    @Namespace private var catNS
+
     private func catTab(_ title: String, _ id: Int) -> some View {
         let active = activeCat == id
         return Button {
             Haptics.selection()
-            withAnimation(YMMotion.adaptive(YMMotion.snappy, reduceMotion: reduceMotion)) { activeCat = id }
+            withAnimation(YMMotion.adaptive(.easeInOut(duration: YMDur.tabSwitch), reduceMotion: reduceMotion)) { activeCat = id }
         } label: {
-            VStack(spacing: 6) {
-                Text(title)
-                    .font(.custom(YMFont.golosName(active ? .heavy : .semibold), fixedSize: 14.5))
-                    .foregroundStyle(active ? YMColor.text : YMColor.muted)
-                Rectangle()
-                    .fill(active ? YMColor.accent : .clear)
-                    .frame(height: 2.5)
-                    .clipShape(Capsule())
-            }
+            Text(title)
+                .font(.custom(YMFont.golosName(active ? .heavy : .semibold), fixedSize: 14.5))
+                .foregroundStyle(active ? YMUi.text : YMUi.textSecondary)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background {
+                    if active {
+                        Capsule().fill(YMUi.segmentSelected)
+                            .shadow(color: .black.opacity(0.10), radius: 3, y: 1)
+                            .matchedGeometryEffect(id: "catTabBg", in: catNS)
+                    }
+                }
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .id(id)
     }
 
     // MARK: Top controls (‹ ↗ ♡)

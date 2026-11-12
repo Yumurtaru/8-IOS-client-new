@@ -348,7 +348,7 @@ struct ListingView: View {
             SortSheet(selection: $vm.sort, options: vm.sortOptions)
                 // А56: пунктов стало 5 — шторка выше, чтобы «Применить» не уезжала.
                 .presentationDetents([.height(420)])
-                .presentationDragIndicator(.visible)
+                .ymSheetChrome(onClose: { showSort = false })
         }
         .sheet(isPresented: $showBecomeSeller) {
             NavigationStack { BecomeSellerView() }

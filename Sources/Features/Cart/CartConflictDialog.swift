@@ -46,10 +46,14 @@ struct CartConflictDialog: View {
                 .opacity(appeared ? 1 : 0)
                 .onTapGesture { dismiss(confirm: false) }
 
-            card
-                .scaleEffect(appeared ? 1 : (reduceMotion ? 1 : 0.9))
-                .opacity(appeared ? 1 : 0)
-                .padding(.horizontal, 24)
+            // Редизайн: белая карточка снизу, отступ 12 от краёв, скругление 38.
+            VStack {
+                Spacer()
+                card
+                    .offset(y: appeared || reduceMotion ? 0 : 40)
+                    .opacity(appeared ? 1 : 0)
+                    .padding(12)
+            }
         }
         .onAppear {
             if reduceMotion { appeared = true }
@@ -59,6 +63,18 @@ struct CartConflictDialog: View {
 
     private var card: some View {
         VStack(spacing: 0) {
+            HStack {
+                Spacer()
+                Button(action: { Haptics.light(); dismiss(confirm: false) }) {
+                    Image(systemName: "xmark")
+                        .ymIcon(14, weight: .bold)
+                        .foregroundStyle(YMUi.text)
+                        .frame(width: YMForm.closeButton, height: YMForm.closeButton)
+                        .background(YMUi.screenBg, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Закрыть")
+            }
             // Иконка 🛒 на мягкой золотой подложке.
             ZStack {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -85,23 +101,23 @@ struct CartConflictDialog: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, YMSpace.sm)
 
-            VStack(spacing: YMSpace.md) {
-                Button(action: { Haptics.warning(); dismiss(confirm: true) }) {
-                    Text("Очистить и начать новую")
-                }
-                .buttonStyle(YMPrimaryButtonStyle())
-
+            HStack(spacing: YMSpace.md) {
                 Button(action: { Haptics.light(); dismiss(confirm: false) }) {
-                    Text("Оставить текущую")
+                    Text("Оставить текущую").lineLimit(2).minimumScaleFactor(0.8)
                 }
                 .buttonStyle(YMSecondaryButtonStyle())
+
+                Button(action: { Haptics.warning(); dismiss(confirm: true) }) {
+                    Text("Очистить и начать новую").lineLimit(2).minimumScaleFactor(0.8)
+                }
+                .buttonStyle(YMPrimaryButtonStyle())
             }
             .padding(.top, YMSpace.xl)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 26)
-        .padding(.bottom, 22)
-        .background(YMColor.bg, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .padding(.horizontal, 20)
+        .padding(.top, 14)
+        .padding(.bottom, 20)
+        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.sheetRadius, style: .continuous))
         .shadow(color: .black.opacity(0.5), radius: 40, y: 20)
     }
 
@@ -125,9 +141,12 @@ private struct CartConflictModifier: ViewModifier {
     var currentShop: String?
     var newShop: String?
     var onConfirm: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        content.overlay {
+        content
+            .ymSheetBehind(isPresented, reduceMotion: reduceMotion)
+            .overlay {
             if isPresented {
                 CartConflictDialog(
                     currentShop: currentShop,

@@ -349,6 +349,7 @@ struct HomeView: View {
             // Профиль модально (вкладки профиля больше нет — доступ из шапки).
             .sheet(isPresented: $coord.profileOpen) {
                 ProfileView()
+                    .ymSheetChrome()
                     .environmentObject(session)
                     .environmentObject(Cart.shared)
                     .environmentObject(DeepLinkRouter.shared)
