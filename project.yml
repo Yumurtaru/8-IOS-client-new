@@ -80,6 +80,15 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: ru.marketplace.client.premium
             CFBundleURLSchemes: [yumurta]
+        # Редизайн (ТЗ 12.11.2026): вшитые шрифты, лежат в Sources/DesignSystem/Fonts (ресурсы
+        # попадают в корень бандла). Лицензия SIL OFL 1.1 — рядом, OFL-*.txt.
+        UIAppFonts:
+          - GolosText-Regular.ttf
+          - GolosText-Medium.ttf
+          - GolosText-SemiBold.ttf
+          - GolosText-Bold.ttf
+          - Unbounded-SemiBold.ttf
+          - Unbounded-Bold.ttf
     entitlements:
       path: Generated/YumurtaPremium.entitlements
       properties:
