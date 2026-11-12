@@ -255,6 +255,48 @@ struct OrgView: View {
     @State private var pushedProduct: Int?
     @State private var pushedService: ServiceItem?
     @State private var showAuth = false
+    /// Этап 4: «+» в плитке — товар, по которому идёт проверка/добавление (индикатор в кнопке).
+    @State private var quickBusy: Int?
+    @State private var localConflict = false
+    @State private var quickPending: ProductDetail?
+    @State private var quickTask: Task<Void, Never>?
+
+    /// «+» в плитке: товар без обязательного выбора — сразу в корзину, с выбором — карточка.
+    /// Закрыто/пауза/корзина заперта неотвеченным заказом/идёт другой запрос — карточка, как раньше.
+    private func onTilePlus(_ p: Product) {
+        if quickBusy != nil { return }
+        guard vm.detail != nil, isOpen, !isPaused, !Cart.shared.checkLocked() else { openProduct(p.id); return }
+        quickBusy = p.id
+        quickTask = Task { @MainActor in
+            let needs = await QuickAdd.needsCard(p)
+            if Task.isCancelled { quickBusy = nil; return }
+            if needs == false, let d = await QuickAdd.detail(p.id) {
+                if Task.isCancelled { quickBusy = nil; return }
+                addQuick(d)
+            } else { openProduct(p.id) }
+            quickBusy = nil
+        }
+    }
+
+    /// Тот же путь, что у кнопки «В корзину» на экране товара (ProductView.addToCart/commitAdd):
+    /// инвариант «одна корзина = один магазин» с общим диалогом конфликта.
+    private func addQuick(_ d: ProductDetail) {
+        let newShopId = d.shopId ?? 0
+        if let cur = cart.shopId, cur != newShopId, !cart.isEmpty {
+            if nested { quickPending = d; localConflict = true; return }
+            coord.requestCartConflict(currentShop: cart.shopName, newShop: d.shopName,
+                                      onConfirm: { commitQuick(d) })
+            return
+        }
+        commitQuick(d)
+    }
+
+    private func commitQuick(_ d: ProductDetail) {
+        let ok = Cart.shared.add(product: d, modifierIds: [], options: [],
+                                 shopId: d.shopId ?? 0, shopName: d.shopName,
+                                 qty: 1)
+        if ok { Haptics.success() } else { Haptics.warning(); openProduct(d.id) }
+    }
 
     /// Открыть товар как go() на Главной: если экран товара сняли, не вызвав
     /// сеттер (тап по вкладке, программный возврат), pushedProduct «висел», и
@@ -295,6 +337,13 @@ struct OrgView: View {
         .navigationBarHidden(true)
         // Причина отказа ♥ — над липкой корзиной.
         .errorToast($vm.favError, bottom: 96)
+        .cartConflictDialog(
+            isPresented: $localConflict,
+            currentShop: cart.shopName,
+            newShop: quickPending?.shopName,
+            onConfirm: { if let d = quickPending { commitQuick(d) } }
+        )
+        .onDisappear { quickTask?.cancel(); quickTask = nil; quickBusy = nil }
         .task { if vm.detail == nil { await vm.load() } }
         // Внутренние переходы флоу (организация → товар / услуга).
         // ОДИН navigationDestination на экран. Раньше их было два подряд —
@@ -637,14 +686,38 @@ struct OrgView: View {
             }
 
             let shown = shownProducts
-            LazyVStack(spacing: 12) {
-                ForEach(shown) { p in
-                    DishRow(product: p) {
-                        Haptics.light()
-                        openProduct(p.id)
-                    } onAdd: {
-                        openProduct(p.id)   // «+» ведёт на карточку (модификаторы/степпер там)
+            LazyVStack(spacing: YMForm.cardGap) {
+                if !shown.isEmpty {
+                    // Заголовок раздела — по центру (ТЗ 5.3).
+                    Text(activeCat == 0 ? "Популярное" : (categories.first { $0.id == activeCat }?.name ?? "Меню"))
+                        .ymText(YMText.sectionTitle)
+                        .foregroundStyle(YMUi.text)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 20).padding(.bottom, 10 - YMForm.cardGap)
+                }
+                // Сетка в два столбца (ТЗ 5.4): строки по 2 внутри той же ленивой колонки.
+                // Раздел по-прежнему выбирается через activeCat -> shownProducts: якорей нет, id не меняются.
+                ForEach(menuRows(shown)) { row in
+                    HStack(alignment: .top, spacing: YMForm.cardGap) {
+                        ForEach(row.items) { p in
+                            ProductTile(
+                                product: p,
+                                line: simpleLine(p.id),
+                                busy: quickBusy == p.id,
+                                reduceMotion: reduceMotion,
+                                onOpen: { Haptics.light(); openProduct(p.id) },
+                                onPlus: { Haptics.light(); onTilePlus(p) },
+                                onMinus: { if let l = simpleLine(p.id) { cart.dec(l.key) } },
+                                onInc: { if let l = simpleLine(p.id) { cart.inc(l.key) } }
+                            )
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        if row.items.count == 1 { Color.clear.frame(maxWidth: .infinity) }
                     }
+                    .fixedSize(horizontal: false, vertical: true)
+                    // Поля экрана 16 (лист заведения даёт 20).
+                    .padding(.horizontal, YMForm.screenPadding - YMSpace.xl)
                 }
                 if shown.isEmpty, vm.products.isEmpty, let pe = vm.productsError {
                     // Меню не загрузилось — это не «пусто»: даём повторить.
@@ -873,6 +946,18 @@ struct OrgView: View {
         return vm.productCategories.filter { used.contains($0.id) }
     }
 
+    private struct MenuRow: Identifiable { let id: Int; let items: [Product] }
+    private func menuRows(_ list: [Product]) -> [MenuRow] {
+        stride(from: 0, to: list.count, by: 2).map { i in
+            let items = Array(list[i..<min(i + 2, list.count)])
+            return MenuRow(id: items[0].id, items: items)
+        }
+    }
+    /// Простая строка корзины: тот же товар без добавок.
+    private func simpleLine(_ productId: Int) -> CartLine? {
+        cart.lines.first { $0.productId == productId && $0.modifierIds.isEmpty }
+    }
+
     private var shownProducts: [Product] {
         activeCat == 0 ? vm.products : vm.products.filter { $0.categoryId == activeCat }
     }
@@ -919,6 +1004,7 @@ struct OrgView: View {
 
 // MARK: - DishRow (строка блюда)
 
+/// Не используется с этапа 4 (меню — плитки ProductTile), удалить на этапе 14.
 /// Строка блюда: фото 88×88, название + ХАЛЯЛЬ, описание, цена, круглая золотая «+».
 struct DishRow: View {
     let product: Product
@@ -1011,6 +1097,151 @@ struct DishRow: View {
             if let w = product.wholesaleLabel, !w.isEmpty { parts.append("оптовая цена " + w) }
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+// MARK: - ProductTile (плитка товара, редизайн этап 4, ТЗ 5.4)
+
+/// Белая карточка r20: квадратное фото на светло-серой плитке (вписано), метки в левом нижнем углу,
+/// название в 2 строки, цена слева и круглая «+» справа; у товара в корзине «+» превращается в «− N +».
+struct ProductTile: View {
+    @Environment(\.colorScheme) private var tileScheme
+    let product: Product
+    var line: CartLine? = nil
+    var busy: Bool = false
+    var reduceMotion: Bool = false
+    var onOpen: () -> Void = {}
+    var onPlus: () -> Void = {}
+    var onMinus: () -> Void = {}
+    var onInc: () -> Void = {}
+
+    private var unavailable: Bool { product.stopped == true }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: onOpen) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Color.clear
+                        .aspectRatio(1, contentMode: .fit)
+                        .background(YMUi.photoBg)
+                        .overlay {
+                            PhotoPlaceholder(url: API.imageURL(product.photo), label: "ФОТО",
+                                             radius: 0, tone: product.id, fit: true)
+                                .padding(8)
+                                // Белый фон фото продавцов сливается с серой плиткой (умножение): единый
+                                // вид витрины без «рамок». В тёмной теме не применяем — затемнило бы товар.
+                                .blendMode(tileScheme == .dark ? .normal : .multiply)
+                        }
+                        .overlay(alignment: .bottomLeading) {
+                            let st = Self.stickers(product)
+                            if !st.isEmpty { StickerStack(items: st).padding(6) }
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    Text(product.name ?? "—")
+                        .ymText(YMText.cardTitle)
+                        .foregroundStyle(YMUi.text)
+                        .lineLimit(2)
+                        .truncationMode(.tail)
+                        .multilineTextAlignment(.leading)
+                        .padding(.horizontal, 4).padding(.top, 8)
+                    if !unavailable {
+                        if let l = LikesText.recommend(product.likesPercent) {
+                            Text(l).ymText(YMText.caption).foregroundStyle(YMUi.textSecondary)
+                                .lineLimit(1).padding(.horizontal, 4)
+                        }
+                        if let w = product.wholesaleLabel, !w.isEmpty {
+                            Text(w).ymText(YMText.caption).foregroundStyle(YMUi.textSecondary)
+                                .lineLimit(1).padding(.horizontal, 4)
+                        }
+                    }
+                    Spacer(minLength: 6)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(a11yLabel)
+            .accessibilityAddTraits(.isButton)
+
+            HStack(spacing: 6) {
+                if unavailable {
+                    Text("Нет в наличии")
+                        .ymText(YMText.caption)
+                        .foregroundStyle(YMColor.statusCancel)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                } else {
+                    Text(Money.format(Money.dec(product.price)))
+                        .ymText(YMText.cardPrice)
+                        .foregroundStyle(YMUi.text)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Spacer(minLength: 4)
+                    ZStack {
+                        if let l = line {
+                            QtyStepper(qtyText: fmtQty(l.qty, l.isFractional ? l.unit : nil),
+                                       onMinus: onMinus, onPlus: onInc)
+                                .transition(.opacity)
+                        } else {
+                            Button(action: onPlus) {
+                                ZStack {
+                                    if busy {
+                                        ProgressView().controlSize(.small).tint(YMUi.text)
+                                    } else {
+                                        Image(systemName: "plus")
+                                            .ymIcon(15, weight: .semibold)
+                                            .foregroundStyle(YMUi.text)
+                                    }
+                                }
+                                .frame(width: 34, height: 34)
+                                .background(YMUi.stepperBg, in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(busy)
+                            .accessibilityLabel("Добавить в корзину")
+                            .transition(.opacity)
+                        }
+                    }
+                    .animation(reduceMotion ? nil : .easeOut(duration: YMDur.plusToStepper), value: line != nil)
+                }
+            }
+            .padding(.horizontal, 4)
+            .frame(minHeight: 34)
+        }
+        .padding(8)
+        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+        .opacity(unavailable ? 0.55 : 1)
+    }
+
+    private var a11yLabel: String {
+        var parts: [String] = [product.name ?? "Товар"]
+        if unavailable { parts.append("нет в наличии") }
+        else { parts.append(Money.format(Money.dec(product.price))) }
+        return parts.joined(separator: ", ")
+    }
+
+    /// Метки: теги продавца («хит» — красная, «новинка» — зелёная, остальное — свойство) + «Халяль».
+    /// Цветные первыми; StickerStack показывает не больше трёх.
+    static func stickers(_ p: Product) -> [(String, StickerKind)] {
+        var out: [(String, StickerKind)] = []
+        for t in p.tags ?? [] {
+            let s = t.trimmingCharacters(in: .whitespacesAndNewlines)
+            if s.isEmpty { continue }
+            let low = s.lowercased()
+            let kind: StickerKind
+            if low == "хит" || low == "hit" || low.hasPrefix("хит ") { kind = .hit }
+            else if low == "новинка" || low == "new" || low == "новое" { kind = .new }
+            else { kind = .property }
+            out.append((s.prefix(1).uppercased() + s.dropFirst(), kind))
+        }
+        if p.isHalal == true { out.append(("Халяль", .property)) }
+        func rank(_ k: StickerKind) -> Int {
+            switch k { case .hit: return 0; case .new: return 1; case .property: return 2 }
+        }
+        return out.enumerated()
+            .sorted { a, b in
+                let ra = rank(a.element.1), rb = rank(b.element.1)
+                return ra != rb ? ra < rb : a.offset < b.offset
+            }
+            .map { $0.element }
     }
 }
 

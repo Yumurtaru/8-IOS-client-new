@@ -428,6 +428,12 @@ struct Product: Codable, Identifiable, Hashable {
     /// П-72 п.5: доля «понравилось» 0-100 (nil при < 5 оценок / старый сервер) и число оценок.
     @LenientInt var likesPercent: Int?
     @LenientInt var likesCount: Int?
+    /// Редизайн, этап 4: теги продавца («Хит», «Новинка», «Без сахара») — метки на плитке.
+    /// Строка/объект/мусор не роняют разбор меню; нет поля — nil.
+    @LenientTags var tags: [String]?
+    /// Заявка П-75: у товара есть обязательный выбор (добавки/набор). Пока сервер не
+    /// присылает — nil, тогда QuickAdd спрашивает карточку товара. Мусор — nil.
+    @LenientFlag var hasRequiredModifiers: Bool?
 }
 struct ComboItem: Codable {
     let name: String?; @LenientInt var qty: Int?; @LenientDecimal var price: Decimal?; let photo: String?
