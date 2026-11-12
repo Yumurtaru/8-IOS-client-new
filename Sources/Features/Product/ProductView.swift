@@ -145,6 +145,16 @@ struct ProductView: View {
     /// ♥ не сохранилось — причина коротким сообщением (раньше откат был молча).
     @State private var favError: String?
     @State private var photoIndex = 0
+    @State private var photoVisible = false      // фото проявляется из прозрачности (0,3 с)
+    @State private var descExpanded = false      // «Всё описание»
+    @State private var requiredFlash = false     // тап по неактивной «В корзину»: подпись группы краснеет
+    @State private var descShownH: CGFloat = 0
+    @State private var descFullH: CGFloat = 0
+    @State private var descTruncated = false
+    @State private var heartBump = false
+    @State private var heartSparkKey = 0
+    @State private var flashTick = 0             // триггер прокрутки к невыбранной группе
+    @Environment(\.colorScheme) private var scheme
 
     // product state
     @State private var selectedRadio: [Int: Int] = [:] // группа → выбранная радио-опция (у каждой группы свой выбор)
@@ -178,7 +188,7 @@ struct ProductView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            YMColor.bg.ignoresSafeArea()
+            YMUi.screenBg.ignoresSafeArea()
 
             if vm.loading && vm.detail == nil && vm.mode == .product {
                 loadingState
@@ -212,6 +222,8 @@ struct ProductView: View {
         // Предвыбор обязательных вариантов — тоже на появление детали: после
         // «Повторить» в ошибке он не выполнялся, и «В корзину» оставалась серой.
         .onChange(of: vm.detail?.id) { _ in syncQtyDefaults(); preselectRequired() }
+        // Обязательные группы выбраны — красная подсветка снимается.
+        .onChange(of: requiredChosen) { ok in if ok { requiredFlash = false } }
         .task {
             // Товар и рекомендации — один раз; избранное — при каждом появлении.
             if vm.detail == nil { await vm.load() }
@@ -277,85 +289,169 @@ struct ProductView: View {
     // MARK: Content
 
     private var content: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                gallery
-                sheet.padding(.top, -34)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    gallery
+                        .padding(.horizontal, YMForm.screenPadding)
+                        .padding(.top, 8)
+                    sheet
+                }
+            }
+            // Тап по неактивной «В корзину» (не выбрана обязательная группа): прокрутка к группе.
+            .onChange(of: flashTick) { _ in
+                guard let id = missingRequiredGroupId else { return }
+                withAnimation(reduceMotion ? nil : .easeOut(duration: YMDur.requiredHint)) {
+                    proxy.scrollTo("grp\(id)", anchor: .center)
+                }
             }
         }
-        .ignoresSafeArea(edges: .top)
     }
 
-    // MARK: Gallery 360pt (свайп + точки)
+    // MARK: Фото: крупное, на серой плитке, скругление 20, свайп + свои точки
+
+    private var galleryPhotos: [String] {
+        if vm.mode == .product {
+            let ph = (vm.detail?.photos ?? []).compactMap { $0.pathWebp }
+            if !ph.isEmpty { return ph }
+            if let p = vm.seedProduct?.photo { return [p] }
+            return [""]
+        } else {
+            return [vm.service?.name.map { _ in "" } ?? ""]
+        }
+    }
+
+    private func photoPage(_ p: String, _ i: Int) -> some View {
+        PhotoPlaceholder(url: API.imageURL(p.isEmpty ? nil : p),
+                         // Подпись видна, когда фото нет: служебное «ГАЛЕРЕЯ · СВАЙП» из макета не показываем.
+                         label: "ФОТО", radius: 0, tone: i, fit: true, maxPixel: 2000)
+            .padding(12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
 
     private var gallery: some View {
-        let photos: [String] = {
-            if vm.mode == .product {
-                let ph = (vm.detail?.photos ?? []).compactMap { $0.pathWebp }
-                if !ph.isEmpty { return ph }
-                if let p = vm.seedProduct?.photo { return [p] }
-                return [""]
-            } else {
-                return [vm.service?.name.map { _ in "" } ?? ""]
+        let photos = galleryPhotos
+        return Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: 340)
+            .background(YMUi.photoBg)
+            .overlay {
+                Group {
+                    if photos.count > 1 {
+                        TabView(selection: $photoIndex) {
+                            ForEach(Array(photos.enumerated()), id: \.offset) { i, p in
+                                photoPage(p, i).tag(i)
+                            }
+                        }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
+                        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: photoIndex)
+                    } else {
+                        photoPage(photos.first ?? "", 0)
+                    }
+                }
+                .opacity(photoVisible || reduceMotion ? 1 : 0)
+                // Белый фон фото сливается с серой плиткой (умножение), как в плитке меню; в тёмной теме — нет.
+                .blendMode(scheme == .dark ? .normal : .multiply)
             }
-        }()
-        return TabView(selection: $photoIndex) {
-            ForEach(Array(photos.enumerated()), id: \.offset) { i, p in
-                PhotoPlaceholder(url: API.imageURL(p.isEmpty ? nil : p),
-                                 // Подпись видна, когда фото нет: служебное «ГАЛЕРЕЯ · СВАЙП» из макета не показываем.
-                                 label: "ФОТО", radius: 0, tone: i, fit: true, maxPixel: 2000)
-                    .frame(maxWidth: .infinity)
-                    .tag(i)
+            .overlay(alignment: .bottom) {
+                if photos.count > 1 { photoDots(count: photos.count).padding(.bottom, 10) }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+            .onAppear {
+                if reduceMotion { photoVisible = true }
+                else { withAnimation(.easeOut(duration: YMDur.photoFade)) { photoVisible = true } }
+            }
+    }
+
+    /// Точки галереи: активная — тёмная вытянутая капсула, остальные — серые.
+    private func photoDots(count: Int) -> some View {
+        HStack(spacing: 5) {
+            ForEach(0..<count, id: \.self) { i in
+                Capsule()
+                    .fill(i == photoIndex ? YMUi.text : YMUi.textSecondary.opacity(0.45))
+                    .frame(width: i == photoIndex ? 18 : 6, height: 6)
             }
         }
-        .tabViewStyle(.page(indexDisplayMode: photos.count > 1 ? .automatic : .never))
-        .frame(height: heroHeight)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: photoIndex)
+        .accessibilityHidden(true)
     }
 
     // MARK: Sheet
 
     private var sheet: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Короткая обязательная группа одиночного выбора (2–4 опции) — равные пилюли над названием.
+            if let g = pillGroup { pillRow(g).padding(.top, 14) }
+
             // Название + ХАЛЯЛЬ.
             HStack(alignment: .center, spacing: 10) {
                 Text(titleText)
-                    .ymFont(24, weight: .heavy)
-                    .foregroundStyle(YMColor.text)
+                    .ymText(YMText.productTitle)
+                    .foregroundStyle(YMUi.text)
                     .lineLimit(3)
                 if isHalal { HalalBadge() }
                 Spacer(minLength: 0)
             }
-            .padding(.top, 22)
+            .padding(.top, 14)
             if vm.mode == .product, let l = LikesText.recommend(vm.detail?.likesPercent) {
                 Label(l, systemImage: "hand.thumbsup")
-                    .ymIcon(13).foregroundStyle(YMColor.muted)
+                    .ymIcon(13).foregroundStyle(YMUi.textSecondary)
                     .padding(.top, 4)
             }
 
-            // ★рейтинг · метаданные.
+            // ★рейтинг · метаданные (объём/вес/единица) — серым.
             HStack(spacing: 10) {
                 if let r = ratingValue, r > 0 {
                     HStack(spacing: 5) {
                         Text("★").foregroundStyle(YMColor.accent)
-                        Text(String(format: "%.1f", r)).foregroundStyle(YMColor.text)
+                        Text(String(format: "%.1f", r)).foregroundStyle(YMUi.text)
                     }
-                    .ymFont(13.5, weight: .bold)
+                    .ymText(YMText.caption)
                 }
                 if let meta = metaText, !meta.isEmpty {
                     Text(meta)
-                        .ymFont(13.5)
-                        .foregroundStyle(YMColor.muted)
+                        .ymText(YMText.caption)
+                        .foregroundStyle(YMUi.textSecondary)
                 }
             }
-            .padding(.top, 10)
+            .padding(.top, 6)
 
-            // Описание.
+            // Описание: 3 строки + «Всё описание».
             if let desc = descText, !desc.isEmpty {
-                Text(desc)
-                    .ymFont(14)
-                    .lineSpacing(4)
-                    .foregroundStyle(YMColor.muted)
-                    .padding(.top, 12)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(desc)
+                        .ymText(YMText.description)
+                        .lineSpacing(3)
+                        .foregroundStyle(YMUi.textSecondary)
+                        .lineLimit(descExpanded ? nil : 3)
+                        // Факт обрезки: высота показанного текста против полного (скрытая копия без лимита).
+                        .background(GeometryReader { g in
+                            Color.clear
+                                .onAppear { descShownH = g.size.height; updateDescTruncated() }
+                                .onChange(of: g.size.height) { h in descShownH = h; updateDescTruncated() }
+                        })
+                        .background(
+                            Text(desc)
+                                .ymText(YMText.description)
+                                .lineSpacing(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .hidden()
+                                .background(GeometryReader { g in
+                                    Color.clear
+                                        .onAppear { descFullH = g.size.height; updateDescTruncated() }
+                                        .onChange(of: g.size.height) { h in descFullH = h; updateDescTruncated() }
+                                })
+                        )
+                    if descTruncated || descExpanded {
+                        Button { descExpanded.toggle() } label: {
+                            Text(descExpanded ? "Свернуть" : "Всё описание")
+                                .ymText(YMText.description)
+                                .foregroundStyle(YMColor.accent)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.top, 10)
             }
 
             if vm.mode == .product {
@@ -367,9 +463,107 @@ struct ProductView: View {
             // Запас под нижнюю панель; с подсказкой «Выберите …» она выше.
             Color.clear.frame(height: missingRequiredGroup == nil ? 120 : 170)
         }
-        .padding(.horizontal, YMSpace.xl)
+        .padding(.horizontal, YMForm.screenPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(YMColor.bg.clipShape(RoundedRectangle(cornerRadius: YMRadius.sheet, style: .continuous)))
+    }
+
+    // MARK: Пилюли короткой обязательной группы
+
+    private func updateDescTruncated() {
+        guard !descExpanded else { return }
+        descTruncated = descFullH > descShownH + 1
+    }
+
+    private func isRadio(_ g: ModifierGroup) -> Bool {
+        (g.type ?? "") == "single" || (g.maxQty ?? 0) == 1
+    }
+
+    /// Первая обязательная группа одиночного выбора с 2–4 короткими (≤ 12 символов) опциями.
+    private var pillGroup: ModifierGroup? {
+        guard vm.mode == .product, let d = vm.detail else { return nil }
+        return (d.modifierGroups ?? []).first { g in
+            let opts = g.options ?? []
+            return g.isRequired == true && isRadio(g) && (2...4).contains(opts.count)
+                && opts.allSatisfy { ($0.name ?? "").count <= 12 }
+        }
+    }
+
+    private func pillRow(_ g: ModifierGroup) -> some View {
+        HStack(spacing: 8) {
+            ForEach(g.options ?? []) { opt in
+                let sel = selectedRadio[g.id] == opt.id
+                Button {
+                    Haptics.selection()
+                    selectedRadio[g.id] = opt.id
+                } label: {
+                    VStack(spacing: 0) {
+                        Text(opt.name ?? "—")
+                            .ymText(YMText.cardTitle)
+                            .foregroundStyle(YMUi.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                        if let pr = opt.price, pr > 0 {
+                            Text("+\(Money.format(Money.dec(pr)))")
+                                .ymText(YMText.caption)
+                                .foregroundStyle(YMUi.textSecondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .padding(.vertical, 2)
+                    .background(sel ? YMUi.card : YMUi.segmentBg, in: Capsule())
+                    .overlay(Capsule().strokeBorder(sel ? YMUi.accentFill : Color.clear, lineWidth: 1.5))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(sel ? .isSelected : [])
+            }
+        }
+        .id("grp\(g.id)")
+    }
+
+    /// Группа обязательная и выбор в ней ещё не сделан (то же правило, что requiredChosen).
+    private func isGroupMissing(_ g: ModifierGroup) -> Bool {
+        guard g.isRequired == true else { return false }
+        let opts = g.options ?? []
+        if opts.isEmpty { return false }
+        if isRadio(g) { return selectedRadio[g.id] == nil }
+        let need = min(max(1, g.minQty ?? 1), opts.count)
+        return opts.filter({ checkedAddons.contains($0.id) }).count < need
+    }
+
+    /// id первой обязательной группы без выбора (для прокрутки); nil — всё выбрано.
+    private var missingRequiredGroupId: Int? {
+        (vm.detail?.modifierGroups ?? []).first { isGroupMissing($0) }?.id
+    }
+
+    /// Тап по неактивной кнопке: подпись группы краснеет, экран прокручивается к ней.
+    private func flashRequired() {
+        Haptics.warning()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: YMDur.requiredHint)) { requiredFlash = true }
+        flashTick += 1
+    }
+
+    /// Белая карточка группы добавок: заголовок, подпись правила, строки.
+    @ViewBuilder private func groupCard<C: View>(_ g: ModifierGroup, title: String, caption: String?,
+                                                 @ViewBuilder rows: () -> C) -> some View {
+        let flash = requiredFlash && isGroupMissing(g)
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .ymText(YMText.sectionTitle)
+                .foregroundStyle(YMUi.text)
+            if let caption {
+                Text(caption)
+                    .ymText(YMText.caption)
+                    .foregroundStyle(flash ? YMColor.statusCancel : YMUi.textSecondary)
+                    .animation(reduceMotion ? nil : .easeOut(duration: YMDur.requiredHint), value: flash)
+            }
+            VStack(spacing: 0) { rows() }.padding(.top, 6)
+        }
+        .padding(YMForm.cardPadding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+        .id("grp\(g.id)")
+        .padding(.top, YMForm.cardGap)
     }
 
     // MARK: Product sections (Размер порции / Добавить к блюду)
@@ -379,16 +573,18 @@ struct ProductView: View {
         if let d = vm.detail, !wholesaleSteps.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 Text(Wholesale.blockTitle)
-                    .ymFont(16, weight: .heavy)
-                    .foregroundStyle(YMColor.text)
+                    .ymText(YMText.sectionTitle)
+                    .foregroundStyle(YMUi.text)
                 ForEach(wholesaleSteps, id: \.minQty) { s in
                     Text(Wholesale.tierRow(s, retail: Money.dec(d.price), unit: d.unit))
-                        .ymFont(14, weight: .semibold)
-                        .foregroundStyle(YMColor.text)
+                        .ymText(YMText.body)
+                        .foregroundStyle(YMUi.text)
                 }
             }
+            .padding(YMForm.cardPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 20)
+            .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+            .padding(.top, YMForm.cardGap)
         }
     }
 
@@ -402,54 +598,29 @@ struct ProductView: View {
         }
 
         let groups = vm.detail?.modifierGroups ?? []
-        // Радио-группа (Размер порции): type == "single" / isRequired.
-        let radioGroups = groups.filter { ($0.type ?? "") == "single" || ($0.maxQty ?? 0) == 1 }
+        let pillId = pillGroup?.id
+        // Радио-группа (Размер порции): type == "single" / isRequired. Группа в пилюлях над названием — не дублируется.
+        let radioGroups = groups.filter { isRadio($0) && $0.id != pillId }
         // Чекбокс-группы (Добавить к блюду).
-        let checkGroups = groups.filter { !(($0.type ?? "") == "single" || ($0.maxQty ?? 0) == 1) }
+        let checkGroups = groups.filter { !isRadio($0) }
 
         ForEach(radioGroups) { g in
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(g.name ?? "Размер порции")
-                        .ymFont(16, weight: .heavy)
-                        .foregroundStyle(YMColor.text)
-                    Spacer()
-                    Text((g.isRequired == true ? "Выберите 1" : "Не обязательно").uppercased())
-                        .ymFont(11, weight: .bold)
-                        .tracking(0.5)
-                        .foregroundStyle(YMColor.accent)
-                }
-                VStack(spacing: 8) {
-                    ForEach(g.options ?? []) { opt in
-                        radioRow(opt, groupId: g.id, groupOptions: g.options ?? [], required: g.isRequired == true)
-                    }
+            groupCard(g, title: g.name ?? "Размер порции",
+                      caption: g.isRequired == true ? "Выберите 1" : "Не обязательно") {
+                ForEach(g.options ?? []) { opt in
+                    radioRow(opt, groupId: g.id, groupOptions: g.options ?? [], required: g.isRequired == true)
                 }
             }
-            .padding(.top, 20)
         }
 
         ForEach(checkGroups) { g in
-            VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text(g.name ?? "Добавить к блюду")
-                        .ymFont(16, weight: .heavy)
-                        .foregroundStyle(YMColor.text)
-                    Spacer()
-                    if g.isRequired == true {
-                        let need = max(1, g.minQty ?? 1)
-                        Text((need > 1 ? "Выберите от \(need)" : "Обязательно").uppercased())
-                            .ymFont(11, weight: .bold)
-                            .tracking(0.5)
-                            .foregroundStyle(YMColor.accent)
-                    }
-                }
-                VStack(spacing: 8) {
-                    ForEach(g.options ?? []) { opt in
-                        checkRow(opt, groupOptions: g.options ?? [], maxQty: g.maxQty)
-                    }
+            let need = max(1, g.minQty ?? 1)
+            groupCard(g, title: g.name ?? "Добавить к блюду",
+                      caption: g.isRequired == true ? (need > 1 ? "Выберите от \(need)" : "Обязательно") : nil) {
+                ForEach(g.options ?? []) { opt in
+                    checkRow(opt, groupOptions: g.options ?? [], maxQty: g.maxQty)
                 }
             }
-            .padding(.top, 18)
         }
 
         // Похожие товары — секции нет, если список пуст.
@@ -502,8 +673,8 @@ struct ProductView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Вес")
-                    .ymFont(16, weight: .heavy)
-                    .foregroundStyle(YMColor.text)
+                    .ymText(YMText.sectionTitle)
+                    .foregroundStyle(YMUi.text)
                 Spacer()
                 // Цена за выбранный вес.
                 Text(Money.format(weightPrice(d, selectedWeight)))
@@ -520,7 +691,9 @@ struct ProductView: View {
                 }
             }
         }
-        .padding(.top, 20)
+        .padding(YMForm.cardPadding)
+        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+        .padding(.top, YMForm.cardGap)
     }
 
     private func weightChip(_ v: Double, unit: String?) -> some View {
@@ -547,119 +720,126 @@ struct ProductView: View {
     private var recommendedSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Похожие товары")
-                .ymFont(16, weight: .heavy)
-                .foregroundStyle(YMColor.text)
-                .padding(.top, 28)
+                .ymText(YMText.sectionTitle)
+                .foregroundStyle(YMUi.text)
+                .padding(.top, 24)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: YMSpace.md) {
+                HStack(alignment: .top, spacing: YMForm.cardGap) {
                     ForEach(Array(vm.recommended.enumerated()), id: \.element.id) { idx, p in
                         recommendedCard(p, tone: idx)
                     }
                 }
                 .padding(.vertical, YMSpace.sm)
             }
-            .padding(.top, 6)
+            .padding(.top, 4)
         }
     }
 
+    /// Лёгкая плитка в стиле меню: белая карточка 20, фото на сером квадрате, название и цена.
     private func recommendedCard(_ p: Product, tone: Int) -> some View {
         NavigationLink { ProductView(product: p) } label: {
-            VStack(alignment: .leading, spacing: 7) {
-                PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 16, tone: tone, fit: true)
-                    .frame(width: 150, height: 96)
+            VStack(alignment: .leading, spacing: 0) {
+                Color.clear
+                    .aspectRatio(1, contentMode: .fit)
+                    .background(YMUi.photoBg)
+                    .overlay {
+                        PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 0, tone: tone, fit: true)
+                            .padding(8)
+                            .blendMode(scheme == .dark ? .normal : .multiply)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 Text(p.name ?? "—")
-                    .ymFont(13.5, weight: .bold)
-                    .foregroundStyle(YMColor.text).lineLimit(1)
+                    .ymText(YMText.cardTitle)
+                    .foregroundStyle(YMUi.text)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .padding(.top, 8).padding(.horizontal, 2)
+                Spacer(minLength: 4)
                 Text(Money.format(Money.dec(p.price)))
-                    .ymFont(12, weight: .bold)
+                    .ymText(YMText.cardPrice)
+                    .foregroundStyle(YMUi.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                    .foregroundStyle(YMColor.accent)
+                    .padding(.horizontal, 2)
             }
-            .frame(width: 150, alignment: .leading)
+            .padding(8)
+            .frame(width: 150, height: 232, alignment: .topLeading)
+            .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
         }
         .buttonStyle(CardPressStyle())
     }
 
-    /// Радио-строка: выбранная — золотая рамка + золотая точка.
+    /// Общая строка варианта: фото-кружок (если есть), название, «+40 ₽» серым, справа кружок/квадратик.
+    private func optionRow(_ opt: ModifierOption, selected: Bool, square: Bool,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                if let ph = opt.photoWebp, !ph.isEmpty {
+                    PhotoPlaceholder(url: API.imageURL(ph), label: "", radius: 0, tone: opt.id, fit: true, maxPixel: 200)
+                        .frame(width: 32, height: 32)
+                        .clipShape(Circle())
+                }
+                Text(opt.name ?? "—")
+                    .ymText(YMText.body)
+                    .foregroundStyle(YMUi.text)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 8)
+                if let pr = opt.price, pr > 0 {
+                    Text("+\(Money.format(Money.dec(pr)))")
+                        .ymText(YMText.body)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .foregroundStyle(YMUi.textSecondary)
+                }
+                ZStack {
+                    if square {
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(selected ? YMUi.accentFill : Color.clear)
+                            .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .strokeBorder(selected ? YMUi.accentFill : YMUi.textSecondary, lineWidth: 1.5))
+                    } else {
+                        Circle()
+                            .fill(selected ? YMUi.accentFill : Color.clear)
+                            .overlay(Circle().strokeBorder(selected ? YMUi.accentFill : YMUi.textSecondary, lineWidth: 1.5))
+                    }
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .ymIcon(11, weight: .heavy)
+                            .foregroundStyle(YMColor.onAccent)
+                    }
+                }
+                .frame(width: 24, height: 24)
+            }
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    /// Радио-строка: выбранная — золотой кружок.
     private func radioRow(_ opt: ModifierOption, groupId: Int, groupOptions: [ModifierOption], required: Bool = false) -> some View {
         let selected = selectedRadio[groupId] == opt.id
-        return Button {
+        return optionRow(opt, selected: selected, square: false) {
             Haptics.selection()
             // Необязательная группа («Не обязательно»): повторное нажатие снимает
             // выбор. Раньше однажды выбранную платную добавку убрать было нельзя —
             // только закрыть карточку и открыть заново.
             if selected && !required { selectedRadio[groupId] = nil } else { selectedRadio[groupId] = opt.id }
-        } label: {
-            HStack(spacing: 12) {
-                Text(opt.name ?? "—")
-                    .ymFont(14.5, weight: .semibold)
-                    .foregroundStyle(YMColor.text)
-                Spacer(minLength: 8)
-                if let pr = opt.price, pr > 0 {
-                    Text(Money.format(Money.dec(pr)))
-                        .ymFont(14, weight: .bold)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .foregroundStyle(YMColor.muted)
-                }
-                ZStack {
-                    Circle().strokeBorder(selected ? YMColor.accent : YMColor.muted, lineWidth: 2)
-                        .frame(width: 22, height: 22)
-                    if selected {
-                        Circle().fill(YMColor.accent).frame(width: 11, height: 11)
-                    }
-                }
-            }
-            .padding(14)
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous)
-                .strokeBorder(selected ? YMColor.accent : YMColor.hairline, lineWidth: selected ? 1.5 : 1))
         }
-        .buttonStyle(.plain)
     }
 
-    /// Чекбокс-строка: выбранная — золотая галочка.
+    /// Чекбокс-строка: выбранная — золотой квадратик с галочкой.
     private func checkRow(_ opt: ModifierOption, groupOptions: [ModifierOption] = [], maxQty: Int? = nil) -> some View {
         let checked = checkedAddons.contains(opt.id)
-        return Button {
+        return optionRow(opt, selected: checked, square: true) {
             Haptics.selection()
             // «До 2 соусов»: больше лимита группы не отмечаем — иначе отказ на оформлении.
             if checked { checkedAddons.remove(opt.id) } else {
                 let inGroup = groupOptions.filter { checkedAddons.contains($0.id) }.count
                 if (maxQty ?? 0) <= 0 || inGroup < (maxQty ?? 0) { checkedAddons.insert(opt.id) } else { Haptics.warning() }
             }
-        } label: {
-            HStack(spacing: 12) {
-                Text(opt.name ?? "—")
-                    .ymFont(14.5, weight: .semibold)
-                    .foregroundStyle(YMColor.text)
-                Spacer(minLength: 8)
-                if let pr = opt.price, pr > 0 {
-                    Text("+\(Money.format(Money.dec(pr)))")
-                        .ymFont(14, weight: .bold)
-                        .foregroundStyle(YMColor.muted)
-                }
-                ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .strokeBorder(checked ? YMColor.accent : YMColor.muted, lineWidth: 2)
-                        .frame(width: 22, height: 22)
-                    if checked {
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(YMColor.accent)
-                            .frame(width: 22, height: 22)
-                        Image(systemName: "checkmark")
-                            .ymIcon(12, weight: .heavy)
-                            .foregroundStyle(YMColor.onAccent)
-                    }
-                }
-            }
-            .padding(14)
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous)
-                .strokeBorder(YMColor.hairline, lineWidth: 1))
         }
-        .buttonStyle(.plain)
     }
 
     // MARK: Service sections (Дата записи / Свободное время / Вызов на дом)
@@ -777,12 +957,12 @@ struct ProductView: View {
         HStack {
             Button { Haptics.light(); dismiss() } label: {
                 Image(systemName: "chevron.left")
+                    .ymIcon(15, weight: .semibold)
+                    .foregroundStyle(YMUi.text)
+                    .frame(width: YMForm.closeButton, height: YMForm.closeButton)
+                    .background(Color.white, in: Circle())
+                    .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
                     .accessibilityLabel("Назад")
-                    .ymIcon(16, weight: .semibold)
-                    .foregroundStyle(.white)
-                    .frame(width: 38, height: 38)
-                    .background(Color.black.opacity(0.4), in: Circle())
-                    .background(.ultraThinMaterial, in: Circle())
             }
             .buttonStyle(.plain)
             Spacer()
@@ -790,17 +970,46 @@ struct ProductView: View {
             if vm.mode == .product {
                 // Гостю — сначала вход: раньше сердечко загоралось, запрос получал
                 // 401 и молча гасло обратно, без объяснения.
-                HeartButton(isFav: Binding(
-                    get: { isFav },
-                    set: { v in
-                        if !Session.shared.isLoggedIn { showAuth = true } else if !favBusy { isFav = v }
+                Button {
+                    Haptics.light()
+                    if !Session.shared.isLoggedIn { showAuth = true } else if !favBusy {
+                        let becomesFav = !isFav
+                        isFav.toggle()
+                        // Поп и искры — только при включении и без Reduce Motion (как в HeartButton).
+                        if becomesFav && !reduceMotion {
+                            withAnimation(.spring(response: 0.16, dampingFraction: 0.55)) { heartBump = true }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                                withAnimation(.spring(response: 0.32, dampingFraction: 0.5)) { heartBump = false }
+                            }
+                            heartSparkKey += 1
+                        }
                     }
-                ), size: 38, favColor: YMColor.statusCancel)
-                    .onChange(of: isFav) { _ in toggleFav() }
+                } label: {
+                    Image(systemName: isFav ? "heart.fill" : "heart")
+                        .ymIcon(16, weight: .semibold)
+                        .foregroundStyle(isFav ? YMColor.statusCancel : Color(hex: "#111111"))
+                        .frame(width: YMForm.closeButton, height: YMForm.closeButton)
+                        .background(Color.white, in: Circle())
+                        .shadow(color: .black.opacity(0.12), radius: 4, y: 1)
+                        .scaleEffect(heartBump ? 1.35 : 1)
+                        .overlay(
+                            Group {
+                                if heartSparkKey > 0 {
+                                    YMBurst(config: .sparks(size: YMForm.closeButton, colors: [YMColor.statusCancel, YMPalette.goldBright]))
+                                        .id(heartSparkKey)
+                                        .frame(width: YMForm.closeButton * 2.4, height: YMForm.closeButton * 2.4)
+                                }
+                            }
+                            .allowsHitTesting(false)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isFav ? "Убрать из избранного" : "Добавить в избранное")
+                .onChange(of: isFav) { _ in toggleFav() }
             }
         }
-        .padding(.horizontal, YMSpace.xl)
-        .padding(.top, 8)
+        .padding(.horizontal, YMForm.screenPadding + 12)
+        .padding(.top, 8 + 12)
     }
 
     // MARK: Bottom bar
@@ -817,90 +1026,90 @@ struct ProductView: View {
         }
     }
 
-    /// Обязательный выбор не сделан — «В корзину» серая. Раньше у кнопки не
-    /// было ни слова (пометка «Обязательно» могла остаться выше за экраном),
-    /// и казалось, что кнопка не работает. Подсказка — прямо над кнопкой.
+    /// Обязательный выбор не сделан — «В корзину» серая. Подпись-причина прямо над кнопкой;
+    /// после тапа по кнопке краснеет (и экран прокручивается к группе).
     @ViewBuilder private var requiredHint: some View {
         if !isStopped, let g = missingRequiredGroup {
             Text("Выберите «\(g)», чтобы добавить в корзину")
-                .ymFont(13, weight: .semibold)
-                .foregroundStyle(YMColor.text)
+                .ymText(YMText.caption)
+                .foregroundStyle(requiredFlash ? YMColor.statusCancel : YMUi.textSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(YMColor.surface2, in: Capsule())
-                .overlay(Capsule().strokeBorder(YMColor.hairline, lineWidth: 1))
-                .padding(.horizontal, YMSpace.xl)
+                .padding(.vertical, 6)
+                .background(YMUi.card, in: Capsule())
+                .shadow(color: .black.opacity(0.08), radius: 4, y: 1)
+                .padding(.horizontal, YMForm.screenPadding)
                 // Подсказка не должна перехватывать тап по варианту под ней.
                 .allowsHitTesting(false)
         }
     }
 
-    // Степпер −/N/+ + кнопка «В корзину · СУММА».
+    /// Нужен ли сейчас тап-перехват на неактивной кнопке (причина — невыбранная группа).
+    private var tapHintsRequired: Bool {
+        vm.detail != nil && !requiredChosen && !isStopped && !added
+    }
+
+    @ViewBuilder private var addLabel: some View {
+        if isOutOfStock {
+            Text("Закончился")
+        } else if isStopped {
+            Text("Нет в наличии")
+        } else if added {
+            Text("Добавлено ✓")
+        } else {
+            HStack(spacing: 6) {
+                Text(Money.format(lineTotal) + " +").ymNumeric(lineTotal)
+                if cardTier != nil, retailTotal > lineTotal {
+                    Text(Money.format(retailTotal)).strikethrough().opacity(0.7)
+                }
+            }
+        }
+    }
+
+    private var addA11y: String {
+        if isOutOfStock { return "Закончился" }
+        if isStopped { return "Нет в наличии" }
+        if added { return "Добавлено" }
+        return "В корзину, \(Money.format(lineTotal))"
+    }
+
+    // Степпер −/N/+ и кнопка «<цена> +».
     private var productBottomBar: some View {
         VStack(spacing: 8) {
-        wholesaleNote
-        HStack(spacing: 12) {
-            // Степпер −/N/+ показываем только для штучных: у весового кол-во задаёт чип-пресет.
-            if !isWeighedProduct {
-                HStack(spacing: 4) {
-                    Button { decQty() } label: {
-                        Image(systemName: "minus")
-                            .accessibilityLabel("Уменьшить количество")
-                            .ymIcon(18, weight: .bold)
-                            .foregroundStyle(YMColor.text)
-                            .frame(width: 38, height: 38)
-                    }
-                    .buttonStyle(.plain)
-                    Text(qtyLabel)
-                        .ymFont(17, weight: .heavy)
-                        .foregroundStyle(YMColor.text)
-                        .frame(minWidth: 28)
-                    Button { incQty() } label: {
-                        Image(systemName: "plus")
-                            .accessibilityLabel("Увеличить количество")
-                            .ymIcon(18, weight: .bold)
-                            .foregroundStyle(YMColor.onAccent)
-                            .frame(width: 38, height: 38)
-                            .background(YMColor.accent, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
+            wholesaleNote
+            HStack(spacing: 12) {
+                // Степпер показываем только для штучных: у весового кол-во задаёт чип-пресет.
+                if !isWeighedProduct {
+                    QtyStepper(qtyText: qtyLabel, height: YMForm.buttonHeight,
+                               onMinus: { decQty() }, onPlus: { incQty() })
                 }
-                .padding(4)
-                .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
-            }
 
-            Button {
-                addToCart()
-            } label: {
-                HStack(spacing: 8) {
-                    if isOutOfStock {
-                        Text("Закончился")
-                    } else if isStopped {
-                        Text("Нет в наличии")
-                    } else {
-                        Text(added ? "Добавлено ✓" : "В корзину")
-                        Text("·").opacity(0.6)
-                        Text(Money.format(lineTotal))
-                        if cardTier != nil, retailTotal > lineTotal {
-                            Text(Money.format(retailTotal)).strikethrough().opacity(0.7)
-                        }
+                Button {
+                    addToCart()
+                } label: {
+                    addLabel
+                }
+                .buttonStyle(YMPrimaryButtonStyle())
+                // `added` — окно закрывается через 0.7 с, второе нажатие за это время
+                // добавляло товар ещё раз.
+                // isStopped — позиция в стоп-листе или выключена продавцом: раньше
+                // кнопка работала, корзина набиралась, а отказ приходил только на
+                // оформлении («Часть товаров закончилась»), без указания позиции.
+                .disabled(vm.detail == nil || !requiredChosen || added || isStopped || effectiveQty <= 0)
+                .accessibilityLabel(addA11y)
+                .overlay {
+                    // Неактивная из-за невыбранной группы: тап подсвечивает группу и прокручивает к ней.
+                    if tapHintsRequired && missingRequiredGroupId != nil && effectiveQty > 0 {
+                        Color.clear.contentShape(Rectangle()).onTapGesture { flashRequired() }
                     }
                 }
             }
-            .buttonStyle(YMPrimaryButtonStyle())
-            // `added` — окно закрывается через 0.7 с, второе нажатие за это время
-            // добавляло товар ещё раз.
-            // isStopped — позиция в стоп-листе или выключена продавцом: раньше
-            // кнопка работала, корзина набиралась, а отказ приходил только на
-            // оформлении («Часть товаров закончилась»), без указания позиции.
-            .disabled(vm.detail == nil || !requiredChosen || added || isStopped || effectiveQty <= 0)
         }
-        }
-        .padding(.horizontal, YMSpace.xl)
+        .padding(.horizontal, YMForm.screenPadding)
         .padding(.top, 12)
         .padding(.bottom, 10)
-        .background(.bar)
+        .background(YMUi.card.ignoresSafeArea(edges: .bottom)
+            .shadow(color: .black.opacity(0.06), radius: 8, y: -2))
     }
 
     // Кнопка «Записаться · от СУММА».
