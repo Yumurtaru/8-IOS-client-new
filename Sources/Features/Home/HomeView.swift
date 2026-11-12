@@ -449,7 +449,7 @@ struct HomeView: View {
             // «Вы заказывали» — заведения, где клиент уже заказывал (у гостя пусто — блока нет).
             let again = vm.orderedAgain.filter { !($0.slug ?? "").isEmpty }.prefix(10)
             if !again.isEmpty {
-                SectionHeader(title: "Вы заказывали", actionTitle: nil, action: nil)
+                SectionHeader(title: "Вам как всегда?", actionTitle: nil, action: nil)
                     .padding(.top, 16)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: YMSpace.md) {
@@ -1011,9 +1011,17 @@ private struct OrderedAgainCard: View {
             }
             .padding(12)
             .frame(width: 132)
-            // Фон из темы: белый в светлой, графит в тёмной (как Android c.surface).
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: YMRadius.card))
-            .overlay(RoundedRectangle(cornerRadius: YMRadius.card).strokeBorder(YMColor.hairline, lineWidth: 1))
+            // Редизайн (этап 12): белая карточка, радиус 20, «+» в углу (тап по карточке открывает заведение, как раньше).
+            .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "plus")
+                    .ymIcon(13, weight: .bold)
+                    .foregroundStyle(YMColor.onAccent)
+                    .frame(width: 28, height: 28)
+                    .background(YMColor.accent, in: Circle())
+                    .padding(8)
+                    .accessibilityHidden(true)
+            }
         }
         .buttonStyle(CardPressStyle())
         .accessibilityElement(children: .combine)

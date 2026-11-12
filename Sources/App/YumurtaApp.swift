@@ -25,7 +25,7 @@ struct YumurtaApp: App {
     @AppStorage(AppStorageKey.onboarded) private var onboarded = false
 
     /// Анимация запуска. Показывается один раз за холодный старт.
-    @State private var splashVisible = splashEnabled
+    @State private var splashVisible = SplashSchedule.shouldShowAndMark()
 
     var body: some Scene {
         WindowGroup {
@@ -78,7 +78,11 @@ struct YumurtaApp: App {
                 .onContinueUserActivity(SpotlightIndex.activityType) { activity in
                     SpotlightIndex.handle(activity: activity)
                 }
-                .onAppear { AppRoute.markReady() }
+                .onAppear {
+                    AppRoute.markReady()
+                    // Заставка сегодня уже была — окно обновления не ждёт её конца.
+                    if !splashVisible { AppUpdateStore.shared.splashDidFinish() }
+                }
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     if let url = activity.webpageURL { router.handle(url: url) }
                 }

@@ -100,8 +100,8 @@ struct OrgCard: View {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline) {
                         Text(shop.name ?? "—")
-                            .ymFont(17, weight: .heavy)
-                            .foregroundStyle(YMColor.text)
+                            .ymText(YMText.sectionTitle)
+                            .foregroundStyle(YMUi.text)
                             .lineLimit(1)
                         Spacer(minLength: 8)
                         if let r = shop.rating, r > 0 {
@@ -109,13 +109,13 @@ struct OrgCard: View {
                                 Text("★").foregroundStyle(YMColor.accent)
                                 Text(String(format: "%.1f", r)).foregroundStyle(YMColor.text)
                             }
-                            .ymFont(13.5, weight: .bold)
+                            .ymText(YMText.cardTitle)
                         }
                     }
                     if let cuisine = subtitleText {
                         Text(cuisine)
-                            .ymFont(13)
-                            .foregroundStyle(YMColor.muted)
+                            .ymText(YMText.description)
+                            .foregroundStyle(YMUi.textSecondary)
                             .lineLimit(1)
                     }
                     HStack(spacing: 8) {
@@ -127,8 +127,8 @@ struct OrgCard: View {
                         }
                         if let fulfillment = fulfillmentText {
                             Text(fulfillment)
-                                .ymFont(12.5)
-                                .foregroundStyle(YMColor.muted)
+                                .ymText(YMText.caption)
+                                .foregroundStyle(YMUi.textSecondary)
                         }
                     }
                     .padding(.top, 4)
@@ -140,7 +140,9 @@ struct OrgCard: View {
             }
         }
         .buttonStyle(CardPressStyle())
-        .ymCard(radius: YMRadius.card)
+        // Редизайн (этап 12): белая карточка с радиусом 20, без обводки.
+        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(a11yLabel)
         .accessibilityHint("Открыть заведение")
@@ -179,7 +181,7 @@ struct PopularCard: View {
         Button(action: { Haptics.light(); onTap() }) {
             VStack(alignment: .leading, spacing: 8) {
                 // Подпись видна без фото: «· БЛЮДО» из макета неверно у товаров магазина.
-                PhotoPlaceholder(url: photoURL, label: "ФОТО", radius: YMRadius.card, tone: tone, fit: true)
+                PhotoPlaceholder(url: photoURL, label: "ФОТО", radius: YMForm.cardRadius, tone: tone, fit: true)
                     .frame(width: 146, height: 104)
                     .overlay(alignment: .topLeading) {
                         if let r = rating, r > 0 {
@@ -193,19 +195,19 @@ struct PopularCard: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .ymFont(14, weight: .bold)
-                        .foregroundStyle(YMColor.text)
+                        .ymText(YMText.cardTitle)
+                        .foregroundStyle(YMUi.text)
                         .lineLimit(1)
                     if let tag, !tag.isEmpty {
                         Text(tag)
-                            .ymFont(12)
-                            .foregroundStyle(YMColor.muted)
+                            .ymText(YMText.caption)
+                            .foregroundStyle(YMUi.textSecondary)
                             .lineLimit(1)
                     }
                     if let priceText, !priceText.isEmpty {
                         Text(priceText)
-                            .ymFont(13, weight: .bold)
-                            .foregroundStyle(YMColor.accent)
+                            .ymText(YMText.cardPrice)
+                            .foregroundStyle(YMUi.text)
                             .lineLimit(1)
                     }
                     if let wholesaleLabel, !wholesaleLabel.isEmpty {

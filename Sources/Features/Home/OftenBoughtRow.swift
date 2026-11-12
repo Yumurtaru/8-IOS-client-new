@@ -35,7 +35,7 @@ struct OftenBoughtRow: View {
             Haptics.light(); onOpen(item.id)
         } label: {
             VStack(alignment: .leading, spacing: 8) {
-                PhotoPlaceholder(url: API.imageURL(item.photo), label: "ФОТО", radius: YMRadius.card, tone: item.id, fit: true)
+                PhotoPlaceholder(url: API.imageURL(item.photo), label: "ФОТО", radius: YMForm.cardRadius, tone: item.id, fit: true)
                     .frame(width: 146, height: 104)
                     .overlay(alignment: .bottomTrailing) {
                         Button {
@@ -59,12 +59,12 @@ struct OftenBoughtRow: View {
                     }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(item.name ?? "—")
-                        .ymFont(14, weight: .bold).foregroundStyle(YMColor.text).lineLimit(1)
+                        .ymText(YMText.cardTitle).foregroundStyle(YMUi.text).lineLimit(1)
                     if let tag = item.category ?? item.shopName, !tag.isEmpty {
-                        Text(tag).ymFont(12).foregroundStyle(YMColor.muted).lineLimit(1)
+                        Text(tag).ymText(YMText.caption).foregroundStyle(YMUi.textSecondary).lineLimit(1)
                     }
                     Text(Money.format(Money.dec(item.price)))
-                        .ymFont(13, weight: .bold).foregroundStyle(YMColor.accent).lineLimit(1)
+                        .ymText(YMText.cardPrice).foregroundStyle(YMUi.text).lineLimit(1)
                 }
             }
             .frame(width: 146, alignment: .leading)

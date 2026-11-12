@@ -24,6 +24,26 @@ import UIKit
 /// Рубильник. false — приложение стартует сразу, как до анимации.
 let splashEnabled = true
 
+/// Не чаще раза в день: дата последнего показа в UserDefaults. Первый запуск
+/// (даты нет) показываем, дальше онбординг идёт как раньше.
+enum SplashSchedule {
+    private static let key = "ym.splash.lastShownDay"
+    private static func today() -> String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+    /// Решить при старте и сразу отметить показ.
+    static func shouldShowAndMark() -> Bool {
+        guard splashEnabled else { return false }
+        let t = today()
+        if UserDefaults.standard.string(forKey: key) == t { return false }
+        UserDefaults.standard.set(t, forKey: key)
+        return true
+    }
+}
+
 // Цвет текста задаётся через Text.foregroundColor, а не foregroundStyle:
 // вариант foregroundStyle, возвращающий Text (он нужен для GraphicsContext.resolve),
 // появился только в iOS 17, а цель сборки — iOS 16.0.
@@ -419,10 +439,18 @@ struct SplashView: View {
     /// Защита от повторного onFinished (тап + конец анимации).
     @State private var finished = false
 
+    /// Прозрачность всей заставки: уход растворением 0,45 с (ТЗ 5.1).
+    @State private var fade: Double = 1
+
     private func finish() {
         guard !finished else { return }
         finished = true
-        onFinished()
+        if reduceMotion {
+            onFinished()
+            return
+        }
+        withAnimation(.easeOut(duration: YMDur.splashFade)) { fade = 0 }
+        DispatchQueue.main.asyncAfter(deadline: .now() + YMDur.splashFade) { onFinished() }
     }
 
     var body: some View {
@@ -436,6 +464,7 @@ struct SplashView: View {
             }
         }
         .ignoresSafeArea()
+        .opacity(fade)
         // Пока сплэш на экране, касания до приложения не доходят.
         .contentShape(Rectangle())
         .onTapGesture { finish() }

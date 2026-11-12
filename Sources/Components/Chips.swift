@@ -22,6 +22,8 @@ struct ChipRow: View {
     /// становится активным — только вызывает action. nil — чипа нет.
     var extra: (label: String, action: () -> Void)? = nil
     var onChange: ((OrgKind) -> Void)? = nil
+    /// Белая плашка активного чипа переезжает между чипами (этап 12).
+    @Namespace private var plateNS
 
     /// Раньше ряд был горизонтальным ScrollView без индикатора прокрутки, и на
     /// обычном телефоне последний чип («Жильё») целиком уезжал за правый край.
@@ -85,15 +87,53 @@ struct ChipRow: View {
         }
     }
 
+    /// Серая подложка вокруг группы чипов.
+    private func plate<C: View>(@ViewBuilder _ content: () -> C) -> some View {
+        HStack(spacing: 2) { content() }
+            .padding(4)
+            .background(YMUi.segmentBg, in: Capsule())
+    }
+
     @ViewBuilder
     private func chips(_ kinds: [OrgKind]) -> some View {
+        plate { chipItems(kinds) }
+    }
+
+    @ViewBuilder
+    private func chipItems(_ kinds: [OrgKind]) -> some View {
         ForEach(kinds) { kind in
-            Chip(label: kind.rawValue, active: kind == selected) {
+            SegChip(label: kind.rawValue, active: kind == selected, ns: plateNS) {
                 Haptics.selection()
                 withAnimation(YMMotion.snappy) { selected = kind }
                 onChange?(kind)
             }
         }
+    }
+}
+
+/// Чип ряда категорий (этап 12): на серой подложке, активный — белая плашка (matchedGeometryEffect).
+struct SegChip: View {
+    let label: String
+    let active: Bool
+    let ns: Namespace.ID
+    var action: () -> Void = {}
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .ymText(YMText.button)
+                .foregroundStyle(active ? YMUi.text : YMUi.textSecondary)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background {
+                    if active {
+                        Capsule().fill(YMUi.segmentSelected)
+                            .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
+                            .matchedGeometryEffect(id: "chipPlate", in: ns)
+                    }
+                }
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 

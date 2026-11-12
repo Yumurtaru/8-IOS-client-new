@@ -253,6 +253,8 @@ struct OrgView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var activeCat: Int = 0
+    /// Открытая подборка (лист поверх заведения).
+    @State private var activePick: QuickPick?
     @State private var pushedProduct: Int?
     @State private var pushedService: ServiceItem?
     @State private var showAuth = false
@@ -303,6 +305,12 @@ struct OrgView: View {
     /// сеттер (тап по вкладке, программный возврат), pushedProduct «висел», и
     /// тап по блюду ничего не открывал. Сначала сбрасываем, потом идём.
     private func openProduct(_ id: Int) {
+        // Лист подборки закрываем до перехода, иначе экран товара откроется под ним.
+        if activePick != nil {
+            activePick = nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { openProduct(id) }
+            return
+        }
         if pushedProduct == nil && pushedService == nil { pushedProduct = id; return }
         pushedProduct = nil; pushedService = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { pushedProduct = id }
@@ -318,6 +326,8 @@ struct OrgView: View {
     @State private var topTick = 0
 
     private let heroHeight: CGFloat = 308
+    /// «Дыхание» обложки (этап 12): включается один раз, анимация автоповтором.
+    @State private var coverBreath = false
 
     init(shop: Shop) { _vm = StateObject(wrappedValue: OrgViewModel(shop: shop)) }
     init(shopSlug: String) { _vm = StateObject(wrappedValue: OrgViewModel(shopSlug: shopSlug)) }
@@ -339,6 +349,10 @@ struct OrgView: View {
             topControls
         }
         .navigationBarHidden(true)
+        .onAppear {
+            guard !reduceMotion, !coverBreath else { return }
+            withAnimation(.easeInOut(duration: 12).repeatForever(autoreverses: true)) { coverBreath = true }
+        }
         // Причина отказа ♥ — над липкой корзиной.
         .errorToast($vm.favError, bottom: 96)
         .cartConflictDialog(
@@ -381,16 +395,36 @@ struct OrgView: View {
                 GeometryReader { geo in
                     let minY = geo.frame(in: .named("scroll")).minY
                     let stretch = max(0, minY)
-                    PhotoPlaceholder(
-                        url: API.imageURL(vm.detail?.cover ?? vm.detail?.banner ?? seedCover),
-                        // Подпись видна, когда у заведения нет обложки: служебное
-                        // «· ПАРАЛЛАКС» из макета человеку не показываем.
-                        label: "ОБЛОЖКА",
-                        radius: 0, tone: 0,
-                        maxPixel: 2000
-                    )
+                    // Этап 12 (ТЗ 5.3): видео-обложка без звука по кругу, если оно есть в данных;
+                    // иначе фото с «дыханием» (scale 1.0 -> 1.06, 12 с). Reduce Motion — без движения.
+                    Group {
+                        if let v = coverVideoURL, !reduceMotion {
+                            CoverVideoView(url: v)
+                        } else {
+                            PhotoPlaceholder(
+                                url: API.imageURL(vm.detail?.cover ?? vm.detail?.banner ?? seedCover),
+                                // Подпись видна, когда у заведения нет обложки: служебное
+                                // «· ПАРАЛЛАКС» из макета человеку не показываем.
+                                label: "ОБЛОЖКА",
+                                radius: 0, tone: 0,
+                                maxPixel: 2000
+                            )
+                            .scaleEffect(coverBreath ? 1.06 : 1.0)
+                        }
+                    }
                     .frame(width: geo.size.width, height: heroHeight + stretch)
                     .clipped()
+                    .overlay(alignment: .bottomLeading) {
+                        if let t = serviceTimeText {
+                            Text(t)
+                                .ymText(YMText.badge)
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(Color.black.opacity(0.45), in: Capsule())
+                                .padding(.leading, YMSpace.xl)
+                                .padding(.bottom, 52)
+                        }
+                    }
                     .overlay(
                         // Градиент-фейд к фону снизу.
                         LinearGradient(
@@ -414,6 +448,20 @@ struct OrgView: View {
             withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.4)) { proxy.scrollTo("orgTop", anchor: .top) }
         }
         }
+    }
+
+    /// Видео-обложка: в данных заведения поля с видео пока нет, поэтому nil и работает фото.
+    /// Когда сервер начнёт отдавать ссылку, подставить её сюда (плеер уже готов).
+    private var coverVideoURL: URL? { nil }
+
+    /// Плашка на обложке: «Доставка от N минут» / «Самовывоз от N минут» — только если данные есть.
+    private var serviceTimeText: String? {
+        let methods = vm.detail?.fulfillment ?? vm.seed?.fulfillment ?? []
+        let zoneMin = (vm.detail?.deliveryZones ?? []).compactMap { $0.deliveryTimeMin }.filter { $0 > 0 }.min()
+        if methods.contains("delivery"), let m = zoneMin { return "Доставка от \(m) минут" }
+        let cook = vm.detail?.avgCookTime ?? vm.seed?.avgCookTime
+        if methods.contains("pickup"), let m = cook, m > 0 { return "Самовывоз от \(m) минут" }
+        return nil
     }
 
     private var seedCover: String? { vm.seed?.cover ?? vm.seed?.banner ?? vm.seed?.logo }
@@ -576,7 +624,7 @@ struct OrgView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             YMColor.bg
-                .clipShape(RoundedRectangle(cornerRadius: YMRadius.sheet, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: YMForm.sheetRadius, style: .continuous))
         )
     }
 
@@ -685,6 +733,21 @@ struct OrgView: View {
 
     private var menuSection: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Быстрые подборки (этап 12): только признаки, реально есть в меню.
+            QuickPicksRow(products: vm.products, active: $activePick) { p in
+                ProductTile(
+                    product: p,
+                    line: simpleLine(p.id),
+                    busy: quickBusy == p.id,
+                    reduceMotion: reduceMotion,
+                    onOpen: { Haptics.light(); openProduct(p.id) },
+                    onPlus: { Haptics.light(); onTilePlus(p) },
+                    onMinus: { if let l = simpleLine(p.id) { cart.dec(l.key) } },
+                    onInc: { if let l = simpleLine(p.id) { cart.inc(l.key) } }
+                )
+            }
+            .padding(.bottom, 14)
+
             // Липкая навигация по разделам меню — золотое подчёркивание активного.
             if !categories.isEmpty {
                 // Лента-капсула (редизайн): серая рамка, активная вкладка — белая капсула.
