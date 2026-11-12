@@ -136,3 +136,12 @@ enum YMDur {
     static let requiredHint: Double = 0.20
     static let splashFade: Double = 0.45
 }
+
+// MARK: - Переключатель «новый вид / старый вид» (ТЗ, раздел 2; этапы 9–10)
+
+/// Корзина и оформление — рискованные экраны: новый вид включён по умолчанию, но его можно вернуть
+/// к прежнему в «Профиль → Новый вид корзины» без новой сборки. Логика экранов одна и та же.
+/// Использование: `@AppStorage(YMFlags.newOrderLookKey) private var newOrderLook = true`.
+enum YMFlags {
+    static let newOrderLookKey = "ui_new_order_look"
+}

@@ -237,6 +237,7 @@ func fetchShopMenu(slug: String, pages: ClosedRange<Int> = 1...20) async throws 
         guard more, page < pages.upperBound else { break }
         page += 1
     }
+    await MainActor.run { CartV2Menu.remember(slug: slug, items: all) }
     return (all, more)
 }
 

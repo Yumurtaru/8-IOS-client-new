@@ -34,6 +34,10 @@ struct CartView: View {
     @State private var groupBusy = false
     @State private var groupError: String?
     @State private var groupChoice = false
+    /// Редизайн, этап 9: новый вид корзины (Профиль -> «Новый вид корзины и оформления»).
+    @AppStorage(YMFlags.newOrderLookKey) private var newOrderLook = true
+    @State private var v2Sheet: CartV2Sheet?
+    @State private var quickBusy: Int?
 
     private var serviceFee: Decimal { Fees.service(subtotal: cart.total, shop: feeShop) }
     private var cartGrand: Decimal { cart.total + serviceFee }
@@ -50,11 +54,17 @@ struct CartView: View {
 
     var body: some View {
         ZStack {
-            YMColor.bg.ignoresSafeArea()
+            (newOrderLook ? YMUi.screenBg : YMColor.bg).ignoresSafeArea()
             if cart.isEmpty {
-                emptyState
+                if newOrderLook { emptyStateV2 } else { emptyState }
             } else {
-                content
+                if newOrderLook { contentV2 } else { content }
+            }
+        }
+        .sheet(item: $v2Sheet) { sh in
+            switch sh {
+            case .product(let id):
+                NavigationStack { ProductView(id: id) }
             }
         }
         .navigationBarHidden(true)
@@ -139,21 +149,8 @@ struct CartView: View {
         .padding(.bottom, YMSpace.md)
     }
 
-    // MARK: - Filled content
-
-    private var content: some View {
-        VStack(spacing: 0) {
-            header
-            if let e = groupError {
-                Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, YMSpace.xl).padding(.bottom, YMSpace.sm)
-            }
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    storeBanner
-                        .padding(.bottom, YMSpace.lg)
-
+    // Плашки AT-3 (общие для старого и нового вида).
+    @ViewBuilder private var pendingNotices: some View {
                     // AT-3: исход прошлого оформления неизвестен — корзина не меняется.
                     // Пока запрос ещё летит — без плашки (уйти с оформления в это время нельзя).
                     if cart.pendingOrder?.unknown == true {
@@ -192,6 +189,24 @@ struct CartView: View {
                         .buttonStyle(.plain)
                         .padding(.bottom, YMSpace.lg)
                     }
+    }
+
+    // MARK: - Filled content
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            header
+            if let e = groupError {
+                Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, YMSpace.xl).padding(.bottom, YMSpace.sm)
+            }
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    storeBanner
+                        .padding(.bottom, YMSpace.lg)
+
+                    pendingNotices
 
                     SectionKicker("Ваш заказ")
                         .padding(.bottom, YMSpace.md)
@@ -204,7 +219,7 @@ struct CartView: View {
 
                     // Раньше это была плашка-подсказка без ввода: нажатие не давало
                     // написать комментарий. Теперь поле, текст уходит в оформление.
-                    commentField
+                    commentField()
                         .padding(.top, YMSpace.lg)
 
                     totalsCard
@@ -270,7 +285,7 @@ struct CartView: View {
     }
 
     // Поле «Комментарий к заказу…» (dashed, как в макете и на оформлении).
-    private var commentField: some View {
+    private func commentField(card: Bool = false) -> some View {
         HStack(spacing: YMSpace.sm) {
             Image(systemName: "square.and.pencil")
                 .ymIcon(15)
@@ -296,11 +311,13 @@ struct CartView: View {
             }
         }
         .padding(14)
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(card ? YMUi.card : YMColor.surface,
+                    in: RoundedRectangle(cornerRadius: card ? YMForm.cardRadius : 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
                 .foregroundStyle(YMColor.hairline)
+                .opacity(card ? 0 : 1)
         )
     }
 
@@ -413,6 +430,107 @@ struct CartView: View {
             .padding(.horizontal, YMSpace.xxxl)
             Spacer()
             Spacer()
+        }
+    }
+    // MARK: - Новый вид (редизайн, этап 9, ТЗ 5.8). Разметка — CartV2.swift, логика — выше.
+
+    private var lineLocked: Bool { cart.pendingOrder != nil }
+
+    private var suggestionItems: [Product] {
+        guard !lineLocked else { return [] }
+        return CartV2Menu.suggestions(slug: cart.shopSlug, excluding: Set(cart.lines.map(\.productId)))
+    }
+
+    private var contentV2: some View {
+        VStack(spacing: 0) {
+            CartV2Header(showGroup: !cart.isEmpty, groupBusy: groupBusy,
+                         onBack: { Haptics.light(); onClose() },
+                         onGroup: { Haptics.light(); startGroup() })
+                .confirmationDialog("Общий заказ", isPresented: $groupChoice, titleVisibility: .visible) {
+                    if let last = GroupCartMemory.lastCode {
+                        Button("Открыть текущий общий заказ") { NavCoordinator.shared.openGroup(code: last) }
+                    }
+                    Button("Создать новый из корзины") { createGroup() }
+                    Button("Не сейчас", role: .cancel) {}
+                }
+            if let e = groupError {
+                Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, YMForm.screenPadding).padding(.bottom, YMSpace.sm)
+            }
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: YMForm.cardGap) {
+                    CartV2Shop(name: cart.shopName ?? "Магазин", count: cart.count,
+                               onMenu: { Haptics.light(); if let m = onMenu { m() } else { onClose() } })
+                    pendingNotices
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(cart.lines.enumerated()), id: \.element.id) { idx, line in
+                            CartV2Line(line: line,
+                                       lineTotal: Wholesale.lineTotal(line, in: cart.lines),
+                                       lines: cart.lines, locked: lineLocked,
+                                       onDec: { cart.dec(line.key) },
+                                       onInc: { cart.inc(line.key) })
+                            if idx < cart.lines.count - 1 { Divider().padding(.leading, YMForm.cardPadding) }
+                        }
+                    }
+                    .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+
+                    commentField(card: true)
+
+                    let sug = suggestionItems
+                    if !sug.isEmpty {
+                        CartV2Suggestions(items: sug, busyId: quickBusy,
+                                          onOpen: { v2Sheet = .product($0.id) },
+                                          onPlus: { addSuggestion($0) })
+                            .padding(.horizontal, -YMForm.screenPadding)
+                            .padding(.top, 6)
+                    }
+
+                    CartV2Totals(count: cart.count, total: cart.total, fee: serviceFee)
+                    Color.clear.frame(height: YMSpace.lg)
+                }
+                .ymReadableWidth()
+                .padding(.horizontal, YMForm.screenPadding)
+            }
+            .scrollDismissesKeyboard(.interactively)
+            if commentFocused {
+                keyboardDoneRow
+            } else {
+                CartV2PayBar(title: "К оплате · \(Money.format(cartGrand))",
+                             action: { Haptics.medium(); onCheckout() })
+            }
+        }
+    }
+
+    private var emptyStateV2: some View {
+        VStack(spacing: 0) {
+            CartV2Header(showGroup: false, groupBusy: false,
+                         onBack: { Haptics.light(); onClose() }, onGroup: {})
+            Spacer()
+            CartV2Empty(onClose: { Haptics.light(); onClose() })
+            Spacer()
+            Spacer()
+        }
+    }
+
+    /// «+» в ленте «Добавьте к заказу»: тот же путь, что у плитки меню (QuickAdd -> Cart.add);
+    /// с обязательным выбором или при неясности - карточка товара.
+    private func addSuggestion(_ p: Product) {
+        if quickBusy != nil { return }
+        let open = feeShop?.isOpen != false && !ShopPause.isPaused(feeShop?.paused)
+        guard feeShop != nil, open, !Cart.shared.checkLocked() else { v2Sheet = .product(p.id); return }
+        quickBusy = p.id
+        Task { @MainActor in
+            let needs = await QuickAdd.needsCard(p)
+            if needs == false, let d = await QuickAdd.detail(p.id), d.shopId == cart.shopId {
+                let ok = Cart.shared.add(product: d, modifierIds: [], options: [],
+                                         shopId: d.shopId ?? 0, shopName: d.shopName, qty: 1)
+                if ok { Haptics.success() } else { Haptics.warning(); v2Sheet = .product(p.id) }
+            } else {
+                v2Sheet = .product(p.id)
+            }
+            quickBusy = nil
         }
     }
 }

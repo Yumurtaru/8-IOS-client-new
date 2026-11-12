@@ -274,6 +274,8 @@ struct CheckoutView: View {
     /// до «Готово», чтобы не закрывать поле над клавиатурой.
     private enum Field: Hashable { case table, promo, comment, change }
     @FocusState private var field: Field?
+    /// Редизайн, этап 10 (ТЗ 5.9): новый вид оформления. false — прежний вид без изменений.
+    @AppStorage(YMFlags.newOrderLookKey) private var newOrderLook = true
 
     // Город из настроек — клиент его НЕ вводит (шапка «Ваш город»).
     private var cityName: String { Session.shared.cityName ?? "" }
@@ -563,7 +565,7 @@ struct CheckoutView: View {
 
     var body: some View {
         ZStack {
-            YMColor.bg.ignoresSafeArea()
+            (newOrderLook ? YMUi.screenBg : YMColor.bg).ignoresSafeArea()
             // AT-3: исход оформления неизвестен (обрыв связи, таймаут, 5xx,
             // выгрузка приложения). Раньше форма оставалась редактируемой, а
             // повтор тем же ключом возвращал СТАРЫЙ заказ — новые адрес, оплата и
@@ -574,8 +576,13 @@ struct CheckoutView: View {
                 pendingPanel(po)
             } else {
                 VStack(spacing: 0) {
-                    header
-                    scrollContent
+                    if newOrderLook {
+                        headerV2
+                        scrollContentV2
+                    } else {
+                        header
+                        scrollContent
+                    }
                     bottomCTA
                 }
             }
@@ -837,7 +844,7 @@ struct CheckoutView: View {
 
     // MARK: - Выбор сохранённого адреса (радио-строки) + «＋ Добавить новый адрес»
 
-    private var addressSelector: some View {
+    private var addressSelectorContent: some View {
         VStack(spacing: YMSpace.xs) {
             if addresses.isEmpty, let e = addressesError {
                 // Сбой сети — не «нет адресов»: иначе человек заводил адрес заново.
@@ -905,9 +912,13 @@ struct CheckoutView: View {
                     .padding(.horizontal, 10).padding(.vertical, 2)
             }
         }
-        .padding(YMSpace.xs)
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+    }
+
+    private var addressSelector: some View {
+        addressSelectorContent
+            .padding(YMSpace.xs)
+            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
     }
 
     /// «30–45 мин»; нижняя граница 0 — «до 30 мин»; равные границы — «~30 мин».
@@ -952,9 +963,7 @@ struct CheckoutView: View {
                 // П-25 №6: table_number сервер хранит до 20 знаков.
                 .ymMaxLength($tableNumber, 20)
         }
-        .padding(14)
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+        .modifier(CheckoutFieldBox(v2: newOrderLook))
     }
 
     /// Самовывоз: «Заберёте заказ в заведении» и адрес заведения (как Android).
@@ -1001,9 +1010,7 @@ struct CheckoutView: View {
                 .tint(YMColor.accent)
                 .ymMaxLength($changeFrom, 9)
         }
-        .padding(14)
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+        .modifier(CheckoutFieldBox(v2: newOrderLook))
     }
 
     private var promoCodeField: some View {
@@ -1036,9 +1043,7 @@ struct CheckoutView: View {
                     .disabled(checkingCode || promoInput.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .padding(14)
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+            .modifier(CheckoutFieldBox(v2: newOrderLook))
             if let m = codeMsg {
                 Text(m).font(YMFont.caption)
                     .foregroundStyle(appliedCode != nil ? YMColor.accent : YMColor.statusCancel)
@@ -1059,23 +1064,20 @@ struct CheckoutView: View {
                 // П-25 №6: comment заказа сервер молча режет до 490 знаков.
                 .ymMaxLength($comment, 490)
         }
-        .padding(14)
-        .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                .foregroundStyle(YMColor.hairline)
-        )
+        .modifier(CheckoutFieldBox(v2: newOrderLook, dashedOld: true))
     }
 
     // Акции, подарки и списание баллов — то, что посчитал сервер.
     // Карточки нет, если движок ничего не нашёл: экран остаётся прежним (и на
     // старом сервере без ручки предпросмотра — тоже).
+    private var promoCard: some View { promoCardView(withPoints: true) }
+
+    /// withPoints == false — новый вид: переключатель баллов вынесен в карточку «Бонусы».
     @ViewBuilder
-    private var promoCard: some View {
+    private func promoCardView(withPoints: Bool) -> some View {
         let applied = promo?.applied ?? []
         let gifts = promo?.gifts ?? []
-        if !applied.isEmpty || !gifts.isEmpty || pointsMax > 0 {
+        if !applied.isEmpty || !gifts.isEmpty || (withPoints && pointsMax > 0) {
             VStack(alignment: .leading, spacing: 9) {
                 if !applied.isEmpty {
                     Text("Акции").font(YMFont.headline).foregroundStyle(YMColor.text)
@@ -1105,7 +1107,7 @@ struct CheckoutView: View {
                         }
                     }
                 }
-                if pointsMax > 0 {
+                if withPoints && pointsMax > 0 {
                     Toggle(isOn: $spendPoints) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Оплатить баллами").ymFont(13.5).foregroundStyle(YMColor.text)
@@ -1119,10 +1121,12 @@ struct CheckoutView: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(YMSpace.lg)
-            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
-            .padding(.top, YMSpace.lg)
+            .padding(newOrderLook ? YMForm.cardPadding : YMSpace.lg)
+            .background(newOrderLook ? YMUi.card : YMColor.surface,
+                        in: RoundedRectangle(cornerRadius: newOrderLook ? YMForm.cardRadius : 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(newOrderLook ? Color.clear : YMColor.hairline, lineWidth: 1))
+            .padding(.top, newOrderLook ? 0 : YMSpace.lg)
         }
     }
 
@@ -1222,6 +1226,8 @@ struct CheckoutView: View {
             // комментария нет клавиши, которая убирает клавиатуру.
             if field != nil {
                 keyboardDoneRow
+            } else if newOrderLook {
+                ctaContentV2
             } else {
                 ctaContent
             }
@@ -1294,6 +1300,253 @@ struct CheckoutView: View {
             .disabled(!ctaEnabled)
         }
         // Причина серой кнопки — прямо под ней (см. ctaHint).
+        if session.isLoggedIn, errorText == nil, let hint = ctaHint {
+            Text(hint).font(YMFont.caption).foregroundStyle(YMColor.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    // MARK: - Новый вид (редизайн, этап 10; ТЗ 5.9). Только компоновка: данные и обработчики — прежние.
+
+    private var headerV2: some View {
+        HStack(spacing: YMSpace.md) {
+            Button(action: { Haptics.light(); onBack() }) {
+                Image(systemName: "chevron.left")
+                    .accessibilityLabel("Назад")
+                    .ymIcon(18, weight: .semibold)
+                    .foregroundStyle(YMUi.text)
+                    .frame(width: YMForm.closeButton, height: YMForm.closeButton)
+                    .background(YMUi.card, in: Circle())
+            }
+            .buttonStyle(.plain)
+            // Пока заказ создаётся, назад нельзя (как в прежнем виде).
+            .disabled(placing)
+            YMSegmented(options: allowedFulfillment, selection: $fulfillment) { $0.title }
+                .background(YMUi.segmentBg, in: Capsule())
+        }
+        .padding(.horizontal, YMForm.screenPadding)
+        .padding(.top, YMSpace.xs)
+        .padding(.bottom, YMSpace.md)
+    }
+
+    /// Пояснения под адресом: пересчёт доставки, вне зоны, нет точки на карте.
+    @ViewBuilder private var deliveryNotesV2: some View {
+        if quoteMissing {
+            Button {
+                Task { await quoteDelivery() }
+            } label: {
+                Text(quoteError == nil
+                     ? "Считаем стоимость доставки… Нажмите, чтобы повторить"
+                     : "Не удалось рассчитать доставку: \(quoteError!). Нажмите, чтобы повторить")
+                    .font(YMFont.caption)
+                    .foregroundStyle(quoteError == nil ? YMColor.muted : YMColor.statusCancel)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+        }
+        if outOfZone {
+            Text(quote?.reason?.isEmpty == false ? quote!.reason! : "Доставка по этому адресу недоступна")
+                .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        if selectedAddress != nil && noAddress && (shop != nil || cart.shopSlug == nil) {
+            Text("У этого адреса нет точки на карте — зону доставки не определить. Добавьте адрес заново, выбрав улицу из подсказок.")
+                .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var placeLinesV2: [String] {
+        var out: [String] = ["В заказе \(cart.count) \(ruItemsWord(cart.count))"]
+        if fulfillment == .pickup {
+            if let a = pickupAddress { out.append(a) }
+            if let c = shop?.pickupComment?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { out.append(c) }
+        }
+        return out
+    }
+
+    private var sumBeforeV2: [CheckoutV2Row] {
+        var r: [CheckoutV2Row] = [CheckoutV2Row(label: "Товары (\(cart.count))", value: Money.format(subtotal))]
+        if fulfillment == .delivery { r.append(CheckoutV2Row(label: "Доставка", value: deliveryLabel)) }
+        if serviceFee > 0 { r.append(CheckoutV2Row(label: "Сервисный сбор", value: Money.format(serviceFee))) }
+        let promoOnly = promoDiscount - (promo?.loyaltyDiscountValue ?? 0)
+        if promoOnly > 0 {
+            r.append(CheckoutV2Row(label: "Скидка по акции", value: "−" + Money.format(promoOnly), accent: true))
+        }
+        return r
+    }
+
+    private var sumAfterV2: [CheckoutV2Row] {
+        var r: [CheckoutV2Row] = []
+        if codeOff > 0 { r.append(CheckoutV2Row(label: "Промокод", value: "−" + Money.format(codeOff), accent: true)) }
+        if pointsSpent > 0 { r.append(CheckoutV2Row(label: "Оплачено баллами", value: "−" + Money.format(pointsSpent), accent: true)) }
+        if pointsEarned > 0 { r.append(CheckoutV2Row(label: "Вернётся баллами", value: Money.format(pointsEarned), accent: true)) }
+        return r
+    }
+
+    private var scrollContentV2: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: YMForm.cardGap) {
+                if shop == nil, let e = shopLoadError, let slug = cart.shopSlug {
+                    Button {
+                        Task {
+                            await loadShop(slug)
+                            await MainActor.run {
+                                let fs = allowedFulfillment
+                                if !fs.contains(fulfillment), let first = fs.first { fulfillment = first }
+                                let ps = allowedPayments
+                                if !ps.contains(payment), let first = ps.first { payment = first }
+                            }
+                            await quoteDelivery()
+                        }
+                    } label: {
+                        Text("Не удалось загрузить условия заведения: \(e). Нажмите, чтобы повторить")
+                            .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+
+                // 1. Откуда / Куда (самовывоз — «Заберу здесь»; за столик — номер стола)
+                CheckoutV2Card {
+                    CheckoutV2PlaceRow(kicker: fulfillment == .pickup ? "Заберу здесь" : "Откуда",
+                                       name: cart.shopName ?? "Магазин",
+                                       lines: placeLinesV2,
+                                       icon: fulfillment == .pickup ? "bag" : "storefront")
+                    if fulfillment == .dineIn {
+                        tableField
+                    }
+                    if fulfillment == .delivery {
+                        Divider()
+                        Text("Куда").ymText(YMText.caption).foregroundStyle(YMUi.textSecondary)
+                        addressSelectorContent
+                        deliveryNotesV2
+                    }
+                }
+
+                // 2. Когда (пауза приёма — баннер, как раньше)
+                if shopPaused {
+                    ShopPauseBanner(title: ShopPause.title(statusText: shop?.statusText, until: shop?.pauseUntil, untilTs: shop?.pauseUntilTs),
+                                    reason: ShopPause.reason(shop?.pauseReason))
+                } else if shop != nil {
+                    CheckoutV2WhenCard(title: whenTitle,
+                                       closed: shopClosed,
+                                       statusText: shop?.statusText,
+                                       etaMax: (fulfillment == .delivery && quote?.available == true) ? quote?.timeMax : nil,
+                                       days: allPreorderDaysV2,
+                                       selectionValid: preorderValid,
+                                       byTime: $byTime,
+                                       preorderAt: $preorderAt)
+                }
+
+                // 3. Оплата (+ «Сдача с» для наличных, пояснение СБП)
+                CheckoutV2PaymentCard(options: allowedPayments, selection: $payment, title: { $0.title }) {
+                    if payment == .sbp {
+                        Text("После подтверждения заказа продавец пришлёт QR-код для оплаты по СБП.")
+                            .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if payment == .cash {
+                        changeField
+                    }
+                }
+
+                // 4. Бонусы (тот же spendPoints; расчёт — сервер)
+                if pointsMax > 0 {
+                    CheckoutV2BonusCard(spend: $spendPoints,
+                                        availableText: Money.format(pointsMax),
+                                        spentText: (spendPoints && pointsSpent > 0) ? Money.format(pointsSpent) : nil)
+                }
+
+                // Состав заказа: позиции, комментарии к блюдам, подсказки опта
+                CheckoutV2Card(title: "Ваш заказ") {
+                    ForEach(cart.lines) { line in
+                        VStack(alignment: .leading, spacing: YMSpace.xs) {
+                            CheckoutRow(line: line, lines: cart.lines)
+                            DishCommentField(text: Binding(
+                                get: { dishComments[line.key] ?? "" },
+                                set: { dishComments[line.key] = $0 }
+                            ))
+                        }
+                    }
+                    if !promoPending, promoFor == cartSig, let hs = promo?.wholesaleHints, !hs.isEmpty {
+                        WholesaleHintsView(hints: hs)
+                    }
+                }
+
+                // П-72 п.4: что делать, если товара не окажется (услуги — без замен).
+                if shop?.mode != "service" {
+                    SubstitutionPickerBlock()
+                }
+
+                CheckoutV2Card {
+                    commentField
+                }
+
+                // Акции и подарки сервера (переключатель баллов — в «Бонусах»)
+                promoCardView(withPoints: false)
+
+                // 5. Сумма заказа + промокод
+                CheckoutV2SumCard(before: sumBeforeV2, after: sumAfterV2, total: grandTotal) {
+                    LoyaltySummaryRows(promo: promo)
+                } promo: {
+                    promoCodeField
+                }
+
+                Color.clear.frame(height: YMSpace.lg)
+            }
+            .ymReadableWidth()
+            .padding(.horizontal, YMForm.screenPadding)
+        }
+        .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// Дни для листа «Ко времени» в новом виде: независимо от needTime (preorderDays при byTime=false пуст).
+    private var allPreorderDaysV2: [PreorderDay] {
+        PreorderSlots.build(shop?.statusSchedule, tz: ShopTime.zone(shop?.timezone))
+    }
+
+    private var ctaTitleV2: String {
+        let sum = Money.format(grandTotal)
+        if shopClosed { return "Оформить предзаказ · " + sum }
+        return (payment == .cash ? "Оформить заказ · " : "Оплатить · ") + sum
+    }
+
+    @ViewBuilder private var ctaContentV2: some View {
+        if let n = priceNote {
+            Text(n).ymFont(13.5, weight: .semibold).foregroundStyle(YMColor.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, YMSpace.md).padding(.vertical, YMSpace.sm)
+                .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(YMColor.accent.opacity(0.6), lineWidth: 1))
+        }
+        if let e = errorText {
+            Text(e).font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        if !session.isLoggedIn && !placing {
+            Button(action: { Haptics.light(); showAuth = true }) {
+                Text("Войти, чтобы оформить заказ")
+            }
+            .buttonStyle(YMPrimaryButtonStyle())
+        } else {
+            Button(action: placeOrder) {
+                if placing {
+                    ProgressView().tint(YMColor.onAccent)
+                } else {
+                    Text(ctaTitleV2).ymNumeric(grandTotal)
+                }
+            }
+            .buttonStyle(YMPrimaryButtonStyle())
+            .disabled(!ctaEnabled)
+            .accessibilityLabel(placing ? "Оформляем заказ" : ctaTitleV2)
+        }
+        // Причина серой кнопки — текстом под ней.
         if session.isLoggedIn, errorText == nil, let hint = ctaHint {
             Text(hint).font(YMFont.caption).foregroundStyle(YMColor.muted)
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -52,6 +52,7 @@ struct ProfileView: View {
     }
 
     @AppStorage(AppStorageKey.theme) private var theme = "light"
+    @AppStorage(YMFlags.newOrderLookKey) private var newOrderLook = true
     /// Тема экрана из выбранного оформления (реактивно через @AppStorage).
     private var themeScheme: ColorScheme? {
         switch theme { case "light": return .light; case "dark": return .dark; default: return nil }
@@ -426,6 +427,9 @@ struct ProfileView: View {
                                    get: { ThemeOption(storage: theme).index },
                                    set: { theme = ThemeOption(index: $0).storage }
                                ))
+            Toggle("Новый вид корзины и оформления", isOn: $newOrderLook)
+                .ymFont(13.5)
+                .tint(YMColor.accent)
         }
         .padding(14)
         .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
