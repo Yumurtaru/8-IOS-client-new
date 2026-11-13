@@ -109,82 +109,90 @@ struct ProfileView: View {
     private var displayName: String { profile?.name?.isEmpty == false ? profile!.name! : "Профиль" }
     private var avatarLetter: String { String((profile?.name ?? "U").prefix(1)).uppercased() }
 
+    /// Содержимое стека навигации профиля (корень листа).
+    private var rootScreen: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                if session.isLoggedIn {
+                    AnyView(header)
+                    // Светлый лист со скруглением сверху 38; пункты — белыми карточками.
+                    VStack(spacing: YMForm.cardGap) {
+                        if profileFailed && profile == nil {
+                            HStack(spacing: YMSpace.sm) {
+                                Text("Не удалось загрузить профиль. Проверьте связь.")
+                                    .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
+                                Spacer(minLength: 0)
+                                Button("Повторить") { Task { await load() } }
+                                    .font(YMFont.caption)
+                            }
+                            .padding(.top, YMSpace.xs)
+                        }
+                        if let note = emailNote { emailNoteRow(note) }
+                        AnyView(ordersCard)
+                        // Карта клиента: тап открывает лист «Код для бонусов». Блок сам
+                        // ничего не рисует, если код не пришёл.
+                        if let code = profile?.clientCode {
+                            ClientCardBlock(code: code, balance: profile?.bonusBalance)
+                            LoyaltySpendDefaultToggle()
+                        }
+                        AnyView(menu)
+                        AnyView(themeSwitcher)
+                        AnyView(deleteAccountButton)
+                    }
+                    .padding(.horizontal, YMForm.screenPadding)
+                    .padding(.top, 22)
+                    .padding(.bottom, YMSpace.xxxl)
+                    .frame(maxWidth: .infinity)
+                    .background(YMUi.screenBg, in: RoundedCorner(tl: YMForm.sheetRadius, tr: YMForm.sheetRadius))
+                } else {
+                    AnyView(loggedOut)
+                    // Паритет с Android: гостю доступны разделы, которым вход не
+                    // нужен (оформление, подарочная карта, вакансии, избранное,
+                    // настройки, поддержка). Раньше профиль гостя был тупиком.
+                    VStack(spacing: YMForm.cardGap) {
+                        AnyView(themeSwitcher)
+                        AnyView(guestMenu)
+                    }
+                    .padding(.horizontal, YMForm.screenPadding)
+                    .padding(.top, 22)
+                    .padding(.bottom, YMSpace.xxxl)
+                    .frame(maxWidth: .infinity)
+                    .background(YMUi.screenBg, in: RoundedCorner(tl: YMForm.sheetRadius, tr: YMForm.sheetRadius))
+                }
+            }
+            .ymReadableWidth()
+        }
+        // Чёрная шапка уходит под строку навигации; ниже — светлый фон.
+        .background(
+            ZStack(alignment: .top) {
+                YMUi.screenBg
+                YMUi.header.frame(height: 340)
+            }
+            .ignoresSafeArea()
+        )
+        .navigationTitle("Профиль")
+        .navigationBarTitleDisplayMode(.inline)
+        // Заголовок строки навигации скрыт: имя уже в шапке (на чёрном он был бы нечитаем).
+        .toolbar { ToolbarItem(placement: .principal) { Text("").accessibilityHidden(true) } }
+        .navigationDestination(for: ProfileRoute.self) { route in
+            profileDestination(route)
+        }
+        .navigationDestination(for: ParcelRoute.self) { route in
+            ParcelRouteView(route: route,
+                            open: { path.append($0) },
+                            replace: { next in
+                                if !path.isEmpty { path.removeLast() }
+                                path.append(next)
+                            })
+        }
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                VStack(spacing: 0) {
-                    if session.isLoggedIn {
-                        header
-                        // Светлый лист со скруглением сверху 38; пункты — белыми карточками.
-                        VStack(spacing: YMForm.cardGap) {
-                            if profileFailed && profile == nil {
-                                HStack(spacing: YMSpace.sm) {
-                                    Text("Не удалось загрузить профиль. Проверьте связь.")
-                                        .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
-                                    Spacer(minLength: 0)
-                                    Button("Повторить") { Task { await load() } }
-                                        .font(YMFont.caption)
-                                }
-                                .padding(.top, YMSpace.xs)
-                            }
-                            if let note = emailNote { emailNoteRow(note) }
-                            ordersCard
-                            // Карта клиента: тап открывает лист «Код для бонусов». Блок сам
-                            // ничего не рисует, если код не пришёл.
-                            if let code = profile?.clientCode {
-                                ClientCardBlock(code: code, balance: profile?.bonusBalance)
-                                LoyaltySpendDefaultToggle()
-                            }
-                            menu
-                            themeSwitcher
-                            deleteAccountButton
-                        }
-                        .padding(.horizontal, YMForm.screenPadding)
-                        .padding(.top, 22)
-                        .padding(.bottom, YMSpace.xxxl)
-                        .frame(maxWidth: .infinity)
-                        .background(YMUi.screenBg, in: RoundedCorner(tl: YMForm.sheetRadius, tr: YMForm.sheetRadius))
-                    } else {
-                        loggedOut
-                        // Паритет с Android: гостю доступны разделы, которым вход не
-                        // нужен (оформление, подарочная карта, вакансии, избранное,
-                        // настройки, поддержка). Раньше профиль гостя был тупиком.
-                        VStack(spacing: YMForm.cardGap) {
-                            themeSwitcher
-                            guestMenu
-                        }
-                        .padding(.horizontal, YMForm.screenPadding)
-                        .padding(.top, 22)
-                        .padding(.bottom, YMSpace.xxxl)
-                        .frame(maxWidth: .infinity)
-                        .background(YMUi.screenBg, in: RoundedCorner(tl: YMForm.sheetRadius, tr: YMForm.sheetRadius))
-                    }
-                }
-                .ymReadableWidth()
-            }
-            // Чёрная шапка уходит под строку навигации; ниже — светлый фон.
-            .background(
-                ZStack(alignment: .top) {
-                    YMUi.screenBg
-                    YMUi.header.frame(height: 340)
-                }
-                .ignoresSafeArea()
-            )
-            .navigationTitle("Профиль")
-            .navigationBarTitleDisplayMode(.inline)
-            // Заголовок строки навигации скрыт: имя уже в шапке (на чёрном он был бы нечитаем).
-            .toolbar { ToolbarItem(placement: .principal) { Text("").accessibilityHidden(true) } }
-            .navigationDestination(for: ProfileRoute.self) { route in
-                profileDestination(route)
-            }
-            .navigationDestination(for: ParcelRoute.self) { route in
-                ParcelRouteView(route: route,
-                                open: { path.append($0) },
-                                replace: { next in
-                                    if !path.isEmpty { path.removeLast() }
-                                    path.append(next)
-                                })
-            }
+            // Падение при открытии профиля (iPhone): тип всего экрана со всеми строками и
+            // модификаторами строился одним значением на стеке главного потока и переполнял
+            // его. AnyView обрывает это накопление; вид и поведение те же.
+            AnyView(rootScreen)
         }
         // Профиль открывается модально (sheet) и НЕ наследует preferredColorScheme
         // корневого экрана — применяем тему здесь же, чтобы смена «Светлая/Тёмная»
@@ -558,7 +566,7 @@ struct ProfileView: View {
 
     private func menuRow(icon: String, label: String, badge: String? = nil, detail: String? = nil,
                          danger: Bool = false, chevron: Bool = true,
-                         action: @escaping () -> Void) -> some View {
+                         action: @escaping () -> Void) -> AnyView {
         menuRow(icon: icon, label: label, badge: badge, detail: detail, danger: danger, chevron: chevron,
                 action: action, trailing: { EmptyView() })
     }
@@ -566,8 +574,9 @@ struct ProfileView: View {
     private func menuRow<Trailing: View>(icon: String, label: String, badge: String? = nil, detail: String? = nil,
                                          danger: Bool = false, chevron: Bool = true,
                                          action: @escaping () -> Void,
-                                         @ViewBuilder trailing: () -> Trailing) -> some View {
-        HStack(spacing: 0) {
+                                         @ViewBuilder trailing: () -> Trailing) -> AnyView {
+        // AnyView: см. AnyView(rootScreen) в body — строк 22, без стирания тип экрана раздувал стек.
+        AnyView(HStack(spacing: 0) {
             Button(action: { Haptics.light(); action() }) {
                 HStack(spacing: YMSpace.md) {
                     Image(systemName: icon)
@@ -601,7 +610,7 @@ struct ProfileView: View {
                     .padding(.leading, 8)
             }
         }
-        .padding(.horizontal, 16).padding(.vertical, 13)
+        .padding(.horizontal, 16).padding(.vertical, 13))
     }
 
     // ── Меню гостя: разделы без входа (как в Android) ──
