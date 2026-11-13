@@ -32,6 +32,13 @@ enum GroupCartMemory {
         get { UserDefaults.standard.string(forKey: key) }
         set { UserDefaults.standard.set(newValue, forKey: key) }
     }
+    /// Ошибка переноса позиций при создании группы из корзины: показывается на экране группы.
+    /// С кодом группы: ошибка не всплывает на другой (чужой) группе, если экран этой уже был открыт.
+    static var pendingError: (code: String, text: String)?
+    static func takePendingError(for code: String) -> String? {
+        let e = pendingError; pendingError = nil
+        return e?.code == code ? e?.text : nil
+    }
 }
 
 /// Какой общий заказ оформляет неотвеченный заказ с этим ключом повтора: повтор после
@@ -67,7 +74,7 @@ final class GroupCartViewModel: ObservableObject {
     @Published var toast: String?
     private var triedJoin = false
 
-    init(code: String) { self.code = code }
+    init(code: String) { self.code = code; self.actionError = GroupCartMemory.takePendingError(for: code) }
 
     /// Гость: грузить нечего, показываем «Войти».
     func markGuest() { loading = false }
@@ -434,6 +441,9 @@ struct GroupCartView: View {
                 merged[i].qty = ((merged[i].qty + q) * 1000).rounded() / 1000
                 continue
             }
+            // CartLine.unitPrice на iOS — цена единицы ВМЕСТЕ с добавками (Cart.swift: price + modPrice),
+            // а у сервера `price` = база + добавки. Поэтому берём `price` как есть (на Android добавки
+            // в строке корзины хранятся отдельно — там своё правило). Нет `price` — line_total / qty.
             var unit = it.price ?? 0
             if it.price == nil, let lt = it.lineTotal, let qq = it.qty, qq > 0 {
                 // Копейки — тем же округлением, что и MoneyFormat (его rounded(_:) объявлен private в том файле).

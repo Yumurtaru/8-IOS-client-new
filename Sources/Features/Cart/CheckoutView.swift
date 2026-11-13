@@ -563,7 +563,10 @@ struct CheckoutView: View {
         return nil
     }
 
-    var body: some View {
+    var body: some View { AnyView(rootScreenBody) }
+
+    // Стирание типа корня (как в ProfileView, 4847301): глубокий тип View переполнял стек.
+    @ViewBuilder private var rootScreenBody: some View {
         ZStack {
             (newOrderLook ? YMUi.screenBg : YMColor.bg).ignoresSafeArea()
             // AT-3: исход оформления неизвестен (обрыв связи, таймаут, 5xx,

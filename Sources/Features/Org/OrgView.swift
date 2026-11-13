@@ -333,7 +333,10 @@ struct OrgView: View {
     init(shop: Shop) { _vm = StateObject(wrappedValue: OrgViewModel(shop: shop)) }
     init(shopSlug: String) { _vm = StateObject(wrappedValue: OrgViewModel(shopSlug: shopSlug)) }
 
-    var body: some View {
+    var body: some View { AnyView(rootScreenBody) }
+
+    // Стирание типа корня (как в ProfileView, 4847301): глубокий тип View переполнял стек.
+    @ViewBuilder private var rootScreenBody: some View {
         ZStack(alignment: .top) {
             YMColor.bg.ignoresSafeArea()
 

@@ -132,10 +132,10 @@ enum GroupCartAPI {
         "api/v1/group-carts/\(code)\(tail)"
     }
 
-    /// Допустимый код: латиница/цифры (регистр приводим к верхнему).
+    /// Допустимый код: алфавит сервера A-Z и 2-9 (без 0/1), 6-12 символов; регистр приводим к верхнему.
     static func clean(_ raw: String) -> String? {
         let c = raw.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard c.range(of: "^[A-Z0-9]{4,20}$", options: .regularExpression) != nil else { return nil }
+        guard c.range(of: "^[A-Z2-9]{6,12}$", options: .regularExpression) != nil else { return nil }
         return c
     }
 

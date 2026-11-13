@@ -118,7 +118,10 @@ final class ReviewExtras: ObservableObject {
         } catch is CancellationError {
             videos.removeAll { $0.id == entry.id }
         } catch {
+            // Пользователь сам снял видео (крестик) — запись уже убрана, ошибку не показываем.
+            let wasRemoved = !videos.contains { $0.id == entry.id }
             videos.removeAll { $0.id == entry.id }
+            if wasRemoved || (error as? URLError)?.code == .cancelled { return }
             self.error = (error as? LocalizedError)?.errorDescription ?? "Не удалось загрузить видео"
         }
     }

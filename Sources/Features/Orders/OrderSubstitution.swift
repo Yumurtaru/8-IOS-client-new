@@ -178,11 +178,20 @@ struct OrderSubstitutionsSection: View {
 
     var body: some View {
         let list = all.filter { $0.isPending || ($0.needsCall == true && !$0.isReplaced && !$0.isRemoved) }
-        if !list.isEmpty || errorText != nil {
+        if !list.isEmpty || errorText != nil || !refundNote.isEmpty {
             // Таймер тикает раз в секунду только пока есть что подтверждать.
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 VStack(spacing: YMSpace.md) {
                     ForEach(list) { s in card(s, now: ctx.date) }
+                    // «Разницу вернёт продавец» живёт в общем блоке: после ответа заказ
+                    // перечитывается, карточка замены пропадает, а надпись остаётся.
+                    ForEach(refundNote.keys.sorted(), id: \.self) { id in
+                        if let refund = refundNote[id], refund > 0 {
+                            Text("Разницу \(Money.format(refund)) вернёт продавец")
+                                .font(YMFont.callout).foregroundStyle(YMColor.statusDone)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                     if let e = errorText {
                         Text(e).font(YMFont.callout).foregroundStyle(YMColor.statusCancel)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -216,11 +225,7 @@ struct OrderSubstitutionsSection: View {
                     Button("Отказаться") { answer(s, accept: false) }
                         .buttonStyle(YMSecondaryButtonStyle())
                 }
-                .disabled(busyItem != nil)
-            }
-            if let id = s.itemId, let refund = refundNote[id], refund > 0 {
-                Text("Разницу \(Money.format(refund)) вернёт продавец")
-                    .font(YMFont.callout).foregroundStyle(YMColor.statusDone)
+                .disabled(busyItem != nil || expired(s, now: now))
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -228,10 +233,16 @@ struct OrderSubstitutionsSection: View {
         .ymCard(radius: YMRadius.card)
     }
 
+    /// Дедлайн ответа прошёл: решение применит сервер («Если товара нет»), кнопки гасим.
+    private func expired(_ s: OrderSubstitute, now: Date) -> Bool {
+        guard let d = s.deadline else { return false }
+        return SubstituteTimer.text(until: d, now: now) == nil
+    }
+
     private func qtyText(_ q: Decimal?) -> String { "\(q ?? 1)".replacingOccurrences(of: ".", with: ",") }
 
     private func answer(_ s: OrderSubstitute, accept: Bool) {
-        guard let item = s.itemId else { return }
+        guard let item = s.itemId, busyItem == nil else { return }
         busyItem = item; errorText = nil
         Task {
             do {

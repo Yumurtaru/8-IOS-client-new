@@ -25,7 +25,8 @@ final class DeepLinkRouter: ObservableObject {
         var groupRaw: String?
         if url.scheme == "yumurta" {
             if url.host == "g" { groupRaw = parts.first }
-        } else if parts.count >= 2, parts[0] == "g" {
+        } else if parts.count >= 2, parts[0] == "g",
+                  ["yumurta.ru", "www.yumurta.ru"].contains(url.host?.lowercased() ?? "") {
             groupRaw = parts[1]
         }
         if let raw = groupRaw {

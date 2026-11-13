@@ -186,7 +186,10 @@ struct ProductView: View {
 
     private let heroHeight: CGFloat = 360
 
-    var body: some View {
+    var body: some View { AnyView(rootScreenBody) }
+
+    // Стирание типа корня (как в ProfileView, 4847301): глубокий тип View переполнял стек.
+    @ViewBuilder private var rootScreenBody: some View {
         ZStack(alignment: .top) {
             YMUi.screenBg.ignoresSafeArea()
 

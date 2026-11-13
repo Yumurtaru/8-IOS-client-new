@@ -407,7 +407,10 @@ struct OrderDetailView: View {
         return CLLocationCoordinate2D(latitude: lat, longitude: lng)
     }
 
-    var body: some View {
+    var body: some View { AnyView(rootScreenBody) }
+
+    // Стирание типа корня (как в ProfileView, 4847301): глубокий тип View переполнял стек.
+    @ViewBuilder private var rootScreenBody: some View {
         ScrollView {
             if vm.loading && vm.order == nil {
                 VStack(spacing: YMSpace.md) {

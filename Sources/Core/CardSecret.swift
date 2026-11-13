@@ -66,7 +66,8 @@ enum TOTP {
 // MARK: - Секрет карты
 
 struct CardSecretResponse: Decodable {
-    let clientCode: String?
+    /// Строка или число от сервера — в любом случае строка.
+    @LenientText var clientCode: String?
     let secret: String?
     @LenientInt var digits: Int?
     @LenientInt var period: Int?
@@ -177,9 +178,10 @@ final class CardCodeModel: ObservableObject {
             case .server: status = 503   // ошибка уровня приложения (card_unavailable) - секрета нет
             default: break
             }
-            // 503 / 404 / прочие отказы - секрет не действует: удаляем и показываем EAN-13.
-            // Нет связи, таймаут и остальные 5xx - работаем по сохранённому секрету.
-            if status == 503 || status == 404 || (status >= 400 && status < 500 && status != 401) {
+            // 403 / 404 / 410 / 503 (доступ закрыт, старый сервер, card_unavailable) - секрет не действует:
+            // стираем и показываем EAN-13. 401 (сессия обновляется; при выходе секрет стирается и так),
+            // нет связи, таймаут и остальное - работаем по сохранённому секрету.
+            if status == 403 || status == 404 || status == 410 || status == 503 {
                 dropSecret()
             } else {
                 useCachedOrFallback()
@@ -189,7 +191,7 @@ final class CardCodeModel: ObservableObject {
         }
     }
 
-    /// 503 card_unavailable / 404 / старый сервер: секрет не действует - удаляем и показываем EAN-13.
+    /// 403 / 404 / 410 / 503 card_unavailable / старый сервер: секрет не действует - удаляем и показываем EAN-13.
     private func dropSecret() {
         CardSecretStore.clear()
         state = .fallback

@@ -228,7 +228,10 @@ struct HomeView: View {
     // Флаг живёт в NavCoordinator (profileOpen): пуш и ссылка закрывают
     // шторку перед переходом, иначе заказ/чат открывались под ней.
 
-    var body: some View {
+    var body: some View { AnyView(rootScreenBody) }
+
+    // Стирание типа корня (как в ProfileView, 4847301): глубокий тип View переполнял стек.
+    @ViewBuilder private var rootScreenBody: some View {
         NavigationStack {
             ScrollViewReader { proxy in
             ScrollView {

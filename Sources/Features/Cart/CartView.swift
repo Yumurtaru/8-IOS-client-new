@@ -52,7 +52,10 @@ struct CartView: View {
         await MainActor.run { if cart.shopSlug == slug { feeShop = d } }
     }
 
-    var body: some View {
+    var body: some View { AnyView(rootScreenBody) }
+
+    // Стирание типа корня (как в ProfileView, 4847301): глубокий тип View переполнял стек.
+    @ViewBuilder private var rootScreenBody: some View {
         ZStack {
             (newOrderLook ? YMUi.screenBg : YMColor.bg).ignoresSafeArea()
             if cart.isEmpty {
@@ -94,10 +97,16 @@ struct CartView: View {
             do {
                 let created = try await GroupCartAPI.create(shopId: sid)
                 guard let code = created.code, !code.isEmpty else { throw APIError.decoding }
-                try await GroupCartAPI.putItems(code, lines: lines)
+                // Группа уже создана: код запоминаем и открываем её в любом случае, иначе она
+                // «осиротеет» и займёт лимит открытых. Сбой переноса позиций — ошибка на экране группы.
+                var putError: String?
+                do { try await GroupCartAPI.putItems(code, lines: lines) }
+                catch { putError = GroupCartText.message(error) }
+                let pending = putError   // var в @Sendable-замыкании MainActor.run - ошибка компиляции
                 await MainActor.run {
                     groupBusy = false
                     GroupCartMemory.lastCode = code
+                    GroupCartMemory.pendingError = pending.map { (code: code, text: $0) }
                     NavCoordinator.shared.openGroup(code: code)
                 }
             } catch {
