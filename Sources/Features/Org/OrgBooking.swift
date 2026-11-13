@@ -1059,7 +1059,7 @@ struct OrgBookingSection: View {
         var out: [Slot] = []
         for i in slots.indices {
             var ok = true
-            for k in 0..<hours {
+            for k in 0..<max(0, hours) {
                 let idx = i + k
                 guard idx < slots.count else { ok = false; break }
                 if slots[idx].freeValue < guests { ok = false; break }

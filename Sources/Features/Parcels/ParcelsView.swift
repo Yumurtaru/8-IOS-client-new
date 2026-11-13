@@ -271,7 +271,59 @@ struct ParcelDetailView: View {
     @State private var showRate = false
     @State private var showComplaint = false
 
+    /// Цепочка из 19 модификаторов делала тип вью слишком глубоким (риск переполнения стека
+    /// при разборе типа): первая половина вынесена и обёрнута в AnyView, как в HomeView/ProfileView.
     var body: some View {
+        AnyView(scrollCore)
+            .onChange(of: p?.courier?.lat) { _ in recenter() }
+            .onChange(of: p?.courier?.lng) { _ in recenter() }
+            .confirmationDialog("Отменить вызов курьера?", isPresented: $askCancel, titleVisibility: .visible) {
+                Button("Отменить вызов", role: .destructive) { act("cancel") }
+                Button("Не отменять", role: .cancel) {}
+            }
+            .confirmationDialog("Снять курьера и искать другого?", isPresented: $askUnassign, titleVisibility: .visible) {
+                Button("Курьер не едет — искать другого", role: .destructive) { act("unassign") }
+                Button("Отмена", role: .cancel) {}
+            }
+            .alert("Поднять цену", isPresented: $askFee) {
+                TextField("Цена, ₽", text: $feeText).keyboardType(.decimalPad)
+                Button("Отмена", role: .cancel) {}
+                Button("Сохранить") { act("fee", fee: feeText, required: true) }
+            } message: {
+                Text("Новая цена доставки. Чем выше — тем быстрее возьмут.")
+            }
+            .alert("Повторить поиск", isPresented: $askRetry) {
+                TextField("Цена, ₽", text: $feeText).keyboardType(.decimalPad)
+                Button("Отмена", role: .cancel) {}
+                Button("Искать снова") { act("fee", fee: feeText, required: false) }
+            } message: {
+                Text("Можно оставить прежнюю цену или предложить больше.")
+            }
+            .sheet(isPresented: $showRate) {
+                ParcelRateSheet { rating, comment in
+                    var b: [String: Any] = ["rating": rating]
+                    if !comment.isEmpty { b["comment"] = comment }
+                    act("rate", body: b)
+                }
+            }
+            // А81: «Пожаловаться» на курьера.
+            .sheet(isPresented: $showComplaint) {
+                ParcelComplaintSheet(parcelId: id, onSent: { fresh in
+                    p = fresh
+                    message = "Жалоба отправлена администратору"
+                    // Список «Мои посылки» и эта карточка перечитываются (строка «Жалоба: …»).
+                    NotificationCenter.default.post(name: .ymParcelPushed, object: id)
+                }, onExists: { text in
+                    message = text
+                    Task { await load() }
+                }, onStale: {
+                    Task { await load() }
+                })
+            }
+            .errorToast($message)
+    }
+
+    private var scrollCore: some View {
         ScrollView {
             if let p {
                 card(p)
@@ -304,52 +356,6 @@ struct ParcelDetailView: View {
         }
         .onAppear { ParcelLive.cardId = id }
         .onDisappear { if ParcelLive.cardId == id { ParcelLive.cardId = nil } }
-        .onChange(of: p?.courier?.lat) { _ in recenter() }
-        .onChange(of: p?.courier?.lng) { _ in recenter() }
-        .confirmationDialog("Отменить вызов курьера?", isPresented: $askCancel, titleVisibility: .visible) {
-            Button("Отменить вызов", role: .destructive) { act("cancel") }
-            Button("Не отменять", role: .cancel) {}
-        }
-        .confirmationDialog("Снять курьера и искать другого?", isPresented: $askUnassign, titleVisibility: .visible) {
-            Button("Курьер не едет — искать другого", role: .destructive) { act("unassign") }
-            Button("Отмена", role: .cancel) {}
-        }
-        .alert("Поднять цену", isPresented: $askFee) {
-            TextField("Цена, ₽", text: $feeText).keyboardType(.decimalPad)
-            Button("Отмена", role: .cancel) {}
-            Button("Сохранить") { act("fee", fee: feeText, required: true) }
-        } message: {
-            Text("Новая цена доставки. Чем выше — тем быстрее возьмут.")
-        }
-        .alert("Повторить поиск", isPresented: $askRetry) {
-            TextField("Цена, ₽", text: $feeText).keyboardType(.decimalPad)
-            Button("Отмена", role: .cancel) {}
-            Button("Искать снова") { act("fee", fee: feeText, required: false) }
-        } message: {
-            Text("Можно оставить прежнюю цену или предложить больше.")
-        }
-        .sheet(isPresented: $showRate) {
-            ParcelRateSheet { rating, comment in
-                var b: [String: Any] = ["rating": rating]
-                if !comment.isEmpty { b["comment"] = comment }
-                act("rate", body: b)
-            }
-        }
-        // А81: «Пожаловаться» на курьера.
-        .sheet(isPresented: $showComplaint) {
-            ParcelComplaintSheet(parcelId: id, onSent: { fresh in
-                p = fresh
-                message = "Жалоба отправлена администратору"
-                // Список «Мои посылки» и эта карточка перечитываются (строка «Жалоба: …»).
-                NotificationCenter.default.post(name: .ymParcelPushed, object: id)
-            }, onExists: { text in
-                message = text
-                Task { await load() }
-            }, onStale: {
-                Task { await load() }
-            })
-        }
-        .errorToast($message)
     }
 
     // MARK: Карточка

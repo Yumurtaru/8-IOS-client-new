@@ -88,9 +88,9 @@ struct ParcelVehicleDrawing: View {
             ctx.stroke(ground, with: .color(line), style: stroke)
             wheel(x0 + 24, base + 6, 10); wheel(xe + d + 26, base + 6, 10)
             if b?.known == true {
-                label("\(Int(L)) см", x0 + l / 2 + d / 2, y0 - d - 8)
-                label("\(Int(H))", x0 - 6, y0 + h / 2, .trailing)
-                label("\(Int(W))", xe + d + 6, y0 - d + 2, .leading)
+                label("\(Int(min(L, 100000))) см", x0 + l / 2 + d / 2, y0 - d - 8)
+                label("\(Int(min(H, 100000)))", x0 - 6, y0 + h / 2, .trailing)
+                label("\(Int(min(W, 100000)))", xe + d + 6, y0 - d + 2, .leading)
             }
         }
         .accessibilityLabel(vehicle.label + (vehicle.body.map { ", кузов " + $0.text } ?? ""))
@@ -193,7 +193,7 @@ struct ParcelCargoPicker: View {
             .buttonStyle(.plain)
             if m.destCityId > 0, let e = errs["dest_city_id"] { ParcelErrorLine(text: e) }
             if m.destCityId > 0, let km = q.cargo?.distanceKm, km > 0 {
-                Text("≈ \(Int(km.rounded())) км по дороге").font(YMFont.callout).foregroundStyle(YMColor.text)
+                Text("≈ \(Int(min(km, 1_000_000).rounded())) км по дороге").font(YMFont.callout).foregroundStyle(YMColor.text)
             }
             if m.destCityId > 0, errs["dest_city_id"] == nil, errs["cargo_kg"] == nil {
                 Text("Водители — цена по их тарифу").font(YMFont.subhead).foregroundStyle(YMColor.text).padding(.top, 4)

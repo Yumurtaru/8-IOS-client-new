@@ -40,9 +40,13 @@ final class ParcelFormModel: ObservableObject {
 
     // Поля
     @Published var cityId = 0
-    @Published var from = ""
+    /// Координаты выбранных подсказок адреса (сервер считает расстояние только по ним).
+    /// Ручная правка текста адреса сбрасывает пару: подсказка при выборе сначала ставит
+    /// текст, потом координаты, так что выбранный адрес координаты сохраняет.
+    var fromLat: Double?, fromLng: Double?, toLat: Double?, toLng: Double?
+    @Published var from = "" { didSet { if from != oldValue { fromLat = nil; fromLng = nil } } }
     @Published var senderPhone = ""
-    @Published var to = ""
+    @Published var to = "" { didSet { if to != oldValue { toLat = nil; toLng = nil } } }
     @Published var recipientName = ""
     @Published var recipientPhone = ""
     @Published var what = ""
@@ -152,6 +156,15 @@ final class ParcelFormModel: ObservableObject {
 
     /// Подсказки по текущим полям. Вызывается из .task(id: quoteKey): смена
     /// полей отменяет прежний запрос, а seq отбрасывает запоздавший ответ.
+    func pickFrom(_ s: AddrSuggest) { fromLat = s.lat; fromLng = s.lng; refreshTick += 1 }
+    func pickTo(_ s: AddrSuggest) { toLat = s.lat; toLng = s.lng; refreshTick += 1 }
+
+    /// Пара координат уходит только целиком и только конечная (как на Android).
+    private func pair(_ a: Double?, _ b: Double?) -> (Double, Double)? {
+        guard let a, let b, a.isFinite, b.isFinite else { return nil }
+        return (a, b)
+    }
+
     func requery() async {
         if loadedOnce { try? await Task.sleep(nanoseconds: 350_000_000) }
         if Task.isCancelled { return }
@@ -164,6 +177,8 @@ final class ParcelFormModel: ObservableObject {
         q["loaders"] = String(loaders)
         if let kg = Int(cargoKg), kg > 0 { q["cargo_kg"] = String(kg) }
         if trip == "intercity", destCityId > 0 { q["dest_city_id"] = String(destCityId) }
+        if let f = pair(fromLat, fromLng) { q["pickup_lat"] = String(f.0); q["pickup_lng"] = String(f.1) }
+        if let t = pair(toLat, toLng) { q["drop_lat"] = String(t.0); q["drop_lng"] = String(t.1) }
         quoting = true
         do {
             let r = try await ParcelAPI.quote(q)
@@ -227,7 +242,7 @@ final class ParcelFormModel: ObservableObject {
         }
         if q.cargo?.suggestedFee != nil {
             var t = "Подсказка для выбранной машины"
-            if let km = q.cargo?.distanceKm, km > 0 { t += " (≈ \(Int(km.rounded())) км)" }
+            if let km = q.cargo?.distanceKm, km > 0 { t += " (≈ \(Int(min(km, 1_000_000).rounded())) км)" }
             return t + ". Можно предложить больше — быстрее возьмут."
         }
         var t = "Предлагаем \(ParcelFmt.rub(q.suggestedFee))"
@@ -285,6 +300,8 @@ final class ParcelFormModel: ObservableObject {
         ]
         // Город не выбран — сервер возьмёт город аккаунта.
         if cityId > 0 { b["city_id"] = cityId }
+        if let f = pair(fromLat, fromLng) { b["pickup_lat"] = f.0; b["pickup_lng"] = f.1 }
+        if let t = pair(toLat, toLng) { b["drop_lat"] = t.0; b["drop_lng"] = t.1 }
         let f = t(fee).replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: " ", with: "")
         if !f.isEmpty { b["fee"] = f }
         // Размер «документы / в руках / на сиденье» — у легковой; у кузова S…XXL его задаёт кузов.
@@ -414,13 +431,13 @@ struct ParcelFormView: View {
                 section("Откуда") {
                     pickerField("Город", value: m.originName.isEmpty ? "Город аккаунта" : m.originName, error: m.error("city_id")) { showCity = true }
                     field("Адрес", text: $m.from, prompt: "Улица, дом, подъезд", limit: 255, error: m.error("pickup_address"), focusID: .from)
-                    AddressSuggestBox(text: $m.from, city: m.originName.isEmpty ? (Session.shared.cityName ?? "") : m.originName, focused: focus == .from)
+                    AddressSuggestBox(text: $m.from, city: m.originName.isEmpty ? (Session.shared.cityName ?? "") : m.originName, focused: focus == .from, onPick: { m.pickFrom($0) })
                     field("Телефон отправителя", text: $m.senderPhone, prompt: "По умолчанию — телефон аккаунта", limit: 32,
                           keyboard: .phonePad, error: m.error("pickup_phone"))
                 }
                 section("Куда") {
                     field("Адрес", text: $m.to, prompt: "Улица, дом, квартира", limit: 500, error: m.error("drop_address"), focusID: .to)
-                    AddressSuggestBox(text: $m.to, city: m.trip == "intercity" ? "" : (m.originName.isEmpty ? (Session.shared.cityName ?? "") : m.originName), focused: focus == .to)
+                    AddressSuggestBox(text: $m.to, city: m.trip == "intercity" ? "" : (m.originName.isEmpty ? (Session.shared.cityName ?? "") : m.originName), focused: focus == .to, onPick: { m.pickTo($0) })
                     field("Получатель", text: $m.recipientName, prompt: "Имя", limit: 120, error: m.error("recipient_name"))
                     field("Телефон получателя", text: $m.recipientPhone, prompt: "+7 900 000-00-00", limit: 32,
                           keyboard: .phonePad, error: m.error("recipient_phone"))

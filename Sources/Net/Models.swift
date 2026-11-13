@@ -198,6 +198,8 @@ struct Category: Codable, Identifiable, Hashable {
 struct Shop: Codable, Identifiable, Hashable {
     let id: Int; let slug: String?; let name: String?; let logo: String?; let cover: String?; let banner: String?
     @LenientDouble var rating: Double?; let category: String?; let deliveryTime: String?; @LenientBool var isOpen: Bool?; let shopMode: String?; let address: String?
+    /// Сервер в /shops, /organizations, /favorites отдаёт тип как `mode`, а не `shop_mode` (аддитивно).
+    let mode: String?
     @LenientInt var avgCookTime: Int?; @LenientInt var reviewsCount: Int?
     /// Тип заведения (shop | cafe | service …, ключ type — api_v1.php shops/organizations).
     /// Паритет с Android; аддитивно, нет ключа — nil.

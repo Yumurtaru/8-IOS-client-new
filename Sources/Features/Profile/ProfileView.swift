@@ -686,10 +686,13 @@ struct ProfileView: View {
         // signOut() успевал стереть токен до отправки, и сервер не знал, КТО
         // выходит, — сессия не закрывалась, push продолжали приходить сюда.
         // push_token — чтобы уведомления прежнего аккаунта сюда больше не шли.
-        let body: [String: String] = Push.shared.fcmToken.map { ["push_token": $0] } ?? [:]
+        var body: [String: String] = Push.shared.fcmToken.map { ["push_token": $0] } ?? [:]
+        // П-48 №2: сервер закрывает сессию по refresh-токену; читаем его ДО signOut (он стирает токены).
+        if let rt = TokenStore.refresh, !rt.isEmpty { body["refresh_token"] = rt }
+        let logoutBody = body
         Task {
             // Ждём ответ не дольше 3 секунд: без сети выход не должен «висеть».
-            let req = Task { try? await API.shared.postVoid("api/v1/auth/logout", body: body) }
+            let req = Task { try? await API.shared.postVoid("api/v1/auth/logout", body: logoutBody) }
             // Раньше ждали через группу задач — а группа ждёт ВСЕХ детей, и выход
             // без сети висел до 40 с. Теперь ждём, что наступит раньше: ответ или
             // 3 секунды. Сам запрос не отменяем — он уже несёт токен и доведёт

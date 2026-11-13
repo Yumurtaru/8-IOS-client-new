@@ -6,7 +6,7 @@ import Foundation
 enum MoneyLegacy {
     static func rub(_ v: Double?) -> String {
         let d = v ?? 0
-        let s = d.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(d)) : String(format: "%.0f", d)
+        let s = d.truncatingRemainder(dividingBy: 1) == 0 && abs(d) < 1e15 ? String(Int(d)) : String(format: "%.0f", d)
         return s + " ₽"
     }
 }

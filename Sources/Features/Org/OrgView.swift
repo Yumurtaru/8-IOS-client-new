@@ -75,7 +75,7 @@ final class OrgViewModel: ObservableObject {
     /// фолбэк на эвристику (есть услуги и нет товаров) — на случай старого ответа без `mode`.
     var isService: Bool {
         if let m = detail?.mode?.lowercased() { return m == "service" }
-        if let sm = seed?.shopMode?.lowercased() { return sm == "service" }
+        if let sm = (seed?.shopMode ?? seed?.mode)?.lowercased() { return sm == "service" }
         return !services.isEmpty && products.isEmpty
     }
 
