@@ -435,7 +435,12 @@ struct GroupCartView: View {
                 continue
             }
             var unit = it.price ?? 0
-            if it.price == nil, let lt = it.lineTotal, let qq = it.qty, qq > 0 { unit = (lt / qq).rounded(2) }
+            if it.price == nil, let lt = it.lineTotal, let qq = it.qty, qq > 0 {
+                // Копейки — тем же округлением, что и MoneyFormat (его rounded(_:) объявлен private в том файле).
+                var r = Decimal(); var v = lt / qq
+                NSDecimalRound(&r, &v, 2, .plain)
+                unit = r
+            }
             let mods = (it.modifiers ?? []).compactMap { $0.name }.joined(separator: ", ")
             merged.append(CartLine(key: it.key, productId: pid, name: it.name ?? "", unitPrice: unit, qty: q,
                                    modifierIds: it.modifierIds, modsLabel: mods, photo: nil))
