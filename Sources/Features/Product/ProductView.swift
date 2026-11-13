@@ -292,12 +292,13 @@ struct ProductView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 0) {
+                    // Фото — во всю ширину экрана и под статус-бар, без полей по краям
+                    // (как у скелетона загрузки ниже); кнопки «Назад» и ♥ — поверх фото.
                     gallery
-                        .padding(.horizontal, YMForm.screenPadding)
-                        .padding(.top, 8)
                     sheet
                 }
             }
+            .ignoresSafeArea(.container, edges: .top)
             // Тап по неактивной «В корзину» (не выбрана обязательная группа): прокрутка к группе.
             .onChange(of: flashTick) { _ in
                 guard let id = missingRequiredGroupId else { return }
@@ -322,18 +323,21 @@ struct ProductView: View {
     }
 
     private func photoPage(_ p: String, _ i: Int) -> some View {
+        // Фото заполняет квадрат целиком (без внутренних полей и «рамок»): фото товаров
+        // квадратные, поэтому обрезки нет; у неквадратного срежется только край.
         PhotoPlaceholder(url: API.imageURL(p.isEmpty ? nil : p),
                          // Подпись видна, когда фото нет: служебное «ГАЛЕРЕЯ · СВАЙП» из макета не показываем.
-                         label: "ФОТО", radius: 0, tone: i, fit: true, maxPixel: 2000)
-            .padding(12)
+                         label: "ФОТО", radius: 0, tone: i, fit: false, maxPixel: 2000)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
     }
 
     private var gallery: some View {
         let photos = galleryPhotos
+        // Квадрат во всю ширину экрана (только iPhone: TARGETED_DEVICE_FAMILY = 1).
         return Color.clear
+            .aspectRatio(1, contentMode: .fit)
             .frame(maxWidth: .infinity)
-            .frame(height: 340)
             .background(YMUi.photoBg)
             .overlay {
                 Group {
@@ -344,19 +348,19 @@ struct ProductView: View {
                             }
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never))
+                        // Страницы не сдвигаются вниз на высоту статус-бара: фото начинается от верха экрана.
+                        .ignoresSafeArea(.container, edges: .top)
                         .animation(reduceMotion ? nil : .easeOut(duration: YMDur.photoFade), value: photoIndex)
                     } else {
                         photoPage(photos.first ?? "", 0)
                     }
                 }
                 .opacity(photoVisible || reduceMotion ? 1 : 0)
-                // Белый фон фото сливается с серой плиткой (умножение), как в плитке меню; в тёмной теме — нет.
-                .blendMode(scheme == .dark ? .normal : .multiply)
             }
             .overlay(alignment: .bottom) {
                 if photos.count > 1 { photoDots(count: photos.count).padding(.bottom, 10) }
             }
-            .clipShape(RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+            .clipped()
             .onAppear {
                 if reduceMotion { photoVisible = true }
                 else { withAnimation(.easeOut(duration: YMDur.photoFade)) { photoVisible = true } }
@@ -735,36 +739,36 @@ struct ProductView: View {
         }
     }
 
-    /// Лёгкая плитка в стиле меню: белая карточка 20, фото на сером квадрате, название и цена.
+    /// Лёгкая плитка в стиле меню: белая карточка 20, фото во всю ширину карточки (без рамок), название и цена.
     private func recommendedCard(_ p: Product, tone: Int) -> some View {
         NavigationLink { ProductView(product: p) } label: {
             VStack(alignment: .leading, spacing: 0) {
+                // Фото до краёв карточки и заполняет квадрат: без серой плитки и белой рамки вокруг.
                 Color.clear
                     .aspectRatio(1, contentMode: .fit)
                     .background(YMUi.photoBg)
                     .overlay {
-                        PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 0, tone: tone, fit: true)
-                            .padding(8)
-                            .blendMode(scheme == .dark ? .normal : .multiply)
+                        PhotoPlaceholder(url: API.imageURL(p.photo), label: "ФОТО", radius: 0, tone: tone, fit: false)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .clipped()
                 Text(p.name ?? "—")
                     .ymText(YMText.cardTitle)
                     .foregroundStyle(YMUi.text)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
-                    .padding(.top, 8).padding(.horizontal, 2)
+                    .padding(.top, 8).padding(.horizontal, 10)
                 Spacer(minLength: 4)
                 Text(Money.format(Money.dec(p.price)))
                     .ymText(YMText.cardPrice)
                     .foregroundStyle(YMUi.text)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
             }
-            .padding(8)
-            .frame(width: 150, height: 232, alignment: .topLeading)
-            .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+            .frame(width: 150, height: 242, alignment: .topLeading)
+            .background(YMUi.card)
+            .clipShape(RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
         }
         .buttonStyle(CardPressStyle())
     }
@@ -1008,8 +1012,9 @@ struct ProductView: View {
                 .onChange(of: isFav) { _ in toggleFav() }
             }
         }
-        .padding(.horizontal, YMForm.screenPadding + 12)
-        .padding(.top, 8 + 12)
+        // Фото теперь от края до края: кнопки — в углах фото, ниже статус-бара (область безопасности).
+        .padding(.horizontal, YMForm.screenPadding)
+        .padding(.top, 8)
     }
 
     // MARK: Bottom bar

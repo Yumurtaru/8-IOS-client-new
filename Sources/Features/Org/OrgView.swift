@@ -1148,32 +1148,29 @@ struct ProductTile: View {
                         .background(YMUi.photoBg)
                         .overlay {
                             PhotoPlaceholder(url: API.imageURL(product.photo), label: "ФОТО",
-                                             radius: 0, tone: product.id, fit: true)
-                                .padding(8)
-                                // Белый фон фото продавцов сливается с серой плиткой (умножение): единый
-                                // вид витрины без «рамок». В тёмной теме не применяем — затемнило бы товар.
-                                .blendMode(tileScheme == .dark ? .normal : .multiply)
+                                             radius: 0, tone: product.id, fit: false)
+                            // Фото до краёв карточки и заполняет квадрат: без серой плитки и белой рамки вокруг.
                         }
                         .overlay(alignment: .bottomLeading) {
                             let st = Self.stickers(product)
-                            if !st.isEmpty { StickerStack(items: st).padding(6) }
+                            if !st.isEmpty { StickerStack(items: st).padding(8) }
                         }
-                        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .clipped()
                     Text(product.name ?? "—")
                         .ymText(YMText.cardTitle)
                         .foregroundStyle(YMUi.text)
                         .lineLimit(2)
                         .truncationMode(.tail)
                         .multilineTextAlignment(.leading)
-                        .padding(.horizontal, 4).padding(.top, 8)
+                        .padding(.horizontal, 12).padding(.top, 8)
                     if !unavailable {
                         if let l = LikesText.recommend(product.likesPercent) {
                             Text(l).ymText(YMText.caption).foregroundStyle(YMUi.textSecondary)
-                                .lineLimit(1).padding(.horizontal, 4)
+                                .lineLimit(1).padding(.horizontal, 12)
                         }
                         if let w = product.wholesaleLabel, !w.isEmpty {
                             Text(w).ymText(YMText.caption).foregroundStyle(YMUi.textSecondary)
-                                .lineLimit(1).padding(.horizontal, 4)
+                                .lineLimit(1).padding(.horizontal, 12)
                         }
                     }
                     Spacer(minLength: 6)
@@ -1225,11 +1222,12 @@ struct ProductTile: View {
                     .animation(reduceMotion ? nil : .easeOut(duration: YMDur.plusToStepper), value: line != nil)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 12)
             .frame(minHeight: 34)
+            .padding(.bottom, 8)
         }
-        .padding(8)
-        .background(YMUi.card, in: RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
+        .background(YMUi.card)
+        .clipShape(RoundedRectangle(cornerRadius: YMForm.cardRadius, style: .continuous))
         .opacity(unavailable ? 0.55 : 1)
     }
 
