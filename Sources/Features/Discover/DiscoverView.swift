@@ -1215,7 +1215,7 @@ private struct FavOrgCard: View {
                     .frame(height: 120).frame(maxWidth: .infinity).clipped()
                     .opacity(isOpen ? 1 : 0.55)   // закрытую приглушаем
                     .overlay(alignment: .topLeading) {
-                        StatusPill(text: isPaused ? "На паузе" : (isOpen ? "Открыто" : "Закрыто"),
+                        StatusPill(text: isPaused ? "На паузе" : shop.statusLabel(open: isOpen),
                                    kind: isOpen ? .open : .cancel, solid: true).padding(11)
                     }
                 VStack(alignment: .leading, spacing: 4) {

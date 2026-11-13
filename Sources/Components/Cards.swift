@@ -69,7 +69,7 @@ struct OrgCard: View {
                     // Закрытую организацию приглушаем (фото). Клик/сердечко остаются активны.
                     .opacity(isOpen ? 1 : 0.55)
                     .overlay(alignment: .topLeading) {
-                        StatusPill(text: isOpen ? "Открыто" : "Закрыто",
+                        StatusPill(text: shop.statusLabel(open: isOpen),
                                    kind: isOpen ? .open : .cancel, solid: true)
                             .padding(12)
                     }

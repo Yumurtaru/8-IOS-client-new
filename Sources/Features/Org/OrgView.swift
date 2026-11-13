@@ -403,7 +403,11 @@ struct OrgView: View {
                     // иначе фото с «дыханием» (scale 1.0 -> 1.06, 12 с). Reduce Motion — без движения.
                     Group {
                         if let v = coverVideoURL, !reduceMotion {
-                            CoverVideoView(url: v)
+                            CoverVideoView(url: v) {
+                                PhotoPlaceholder(
+                                    url: API.imageURL(vm.detail?.coverVideoPoster ?? vm.detail?.cover ?? vm.detail?.banner ?? seedCover),
+                                    label: "ОБЛОЖКА", radius: 0, tone: 0, maxPixel: 2000)
+                            }
                         } else {
                             PhotoPlaceholder(
                                 url: API.imageURL(vm.detail?.cover ?? vm.detail?.banner ?? seedCover),
@@ -454,18 +458,30 @@ struct OrgView: View {
         }
     }
 
-    /// Видео-обложка: в данных заведения поля с видео пока нет, поэтому nil и работает фото.
-    /// Когда сервер начнёт отдавать ссылку, подставить её сюда (плеер уже готов).
-    private var coverVideoURL: URL? { nil }
+    /// Видео-обложка (П-76): `cover_video` из карточки; нет/пусто - работает фото.
+    private var coverVideoURL: URL? {
+        guard let s = vm.detail?.coverVideo?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else { return nil }
+        return API.imageURL(s)
+    }
 
     /// Плашка на обложке: «Доставка от N минут» / «Самовывоз от N минут» — только если данные есть.
     private var serviceTimeText: String? {
         let methods = vm.detail?.fulfillment ?? vm.seed?.fulfillment ?? []
-        let zoneMin = (vm.detail?.deliveryZones ?? []).compactMap { $0.deliveryTimeMin }.filter { $0 > 0 }.min()
+        // П-76: берём значение сервера, иначе прежний расчёт по зонам.
+        let zoneCalc = (vm.detail?.deliveryZones ?? []).compactMap { $0.deliveryTimeMin }.filter { $0 > 0 }.min()
+        let srvMin = (vm.detail?.deliveryTimeMin).flatMap { $0 > 0 ? $0 : nil }
+        let zoneMin = srvMin ?? zoneCalc
         if methods.contains("delivery"), let m = zoneMin { return "Доставка от \(m) минут" }
         let cook = vm.detail?.avgCookTime ?? vm.seed?.avgCookTime
         if methods.contains("pickup"), let m = cook, m > 0 { return "Самовывоз от \(m) минут" }
         return nil
+    }
+
+    /// «Круглосуточно» / «Откроется в 9:00» (сервер, П-76) вместо «Открыто» / «Закрыто»; нет полей - как раньше.
+    private var orgStatusLabel: String {
+        if let d = vm.detail { return d.statusLabel(open: isOpen) }
+        if let s = vm.seed { return s.statusLabel(open: isOpen) }
+        return isOpen ? "Открыто" : "Закрыто"
     }
 
     private var seedCover: String? { vm.seed?.cover ?? vm.seed?.banner ?? vm.seed?.logo }
@@ -501,7 +517,7 @@ struct OrgView: View {
                         .lineLimit(2)
                     // Пауза приёма (сервер А719): is_open уже false, но «Закрыто» неверно —
                     // заведение работает, просто не берёт заказы.
-                    StatusPill(text: isPaused ? "На паузе" : (isOpen ? "Открыто" : "Закрыто"),
+                    StatusPill(text: isPaused ? "На паузе" : orgStatusLabel,
                                kind: (isOpen && !isPaused) ? .open : .cancel, solid: false)
                 }
                 Spacer(minLength: 0)
@@ -518,7 +534,8 @@ struct OrgView: View {
             // Баннер нерабочего времени: «Сейчас закрыто. Откроется <день> в <время>».
             // Корзину собрать можно, оформить — предзаказом ко времени работы.
             else if !isOpen {
-                ClosedBanner(opensLabel: OrgHours.nextOpenLabel(vm.detail?.hours, tz: ShopTime.zone(vm.detail?.timezone)), preorder: !vm.isService)
+                ClosedBanner(opensLabel: OrgHours.nextOpenLabel(vm.detail?.hours, tz: ShopTime.zone(vm.detail?.timezone)), preorder: !vm.isService,
+                             serverLabel: vm.detail?.opensAtLabel ?? vm.seed?.opensAtLabel)
                     .padding(.top, 12)
             }
 
@@ -1317,11 +1334,18 @@ struct ClosedBanner: View {
     let opensLabel: String?
     /// true — товары/еда: подсказка про предзаказ; false — услуги (запись по окнам).
     var preorder: Bool = true
+    /// П-76: готовая подпись сервера («Откроется завтра в 9:00») - приоритетнее расчёта по часам.
+    var serverLabel: String? = nil
+    private var closedTitle: String {
+        if let s = serverLabel?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty { return "Сейчас закрыто. \(s)" }
+        if let l = opensLabel { return "Сейчас закрыто. Откроется \(l)" }
+        return "Сейчас закрыто"
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Text("🕑")
-                Text(opensLabel != nil ? "Сейчас закрыто. Откроется \(opensLabel!)" : "Сейчас закрыто")
+                Text(closedTitle)
                     .ymFont(14.5, weight: .bold)
                     .foregroundStyle(YMColor.text)
             }

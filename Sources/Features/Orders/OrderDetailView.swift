@@ -718,6 +718,9 @@ struct OrderDetailView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Курьер · \(vm.track?.courierName ?? "в пути")")
                     .font(YMFont.headline).foregroundStyle(YMColor.text)
+                if let car = vm.track?.courierCar {
+                    Text(car).font(YMFont.subhead).foregroundStyle(YMColor.muted)
+                }
                 HStack(spacing: 6) {
                     StatusDot(color: YMColor.accent, pulsing: true, size: 6)
                     Text(etaLine).font(YMFont.subhead).foregroundStyle(YMColor.accent)

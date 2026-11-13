@@ -104,6 +104,8 @@ struct OrderSubstitute: Codable, Identifiable {
     @LenientText var deadlineAt: String?
     @LenientBool var needsCall: Bool?
     @LenientObject var original: OrderSubstituteOriginal?
+    /// П-77 п.4: сколько вернёт продавец по этой замене (null - ещё не решено / замена старого образца).
+    @LenientDecimal var refundDue: Decimal?
 
     var id: Int { itemId ?? ((productId ?? 0) &* 31) }
     var isPending: Bool { status == "pending" }
@@ -176,17 +178,28 @@ struct OrderSubstitutionsSection: View {
         return out
     }
 
+    /// Возвраты по заменам: из данных заказа (переживают перезаход) + локальные из ответа POST
+    /// (локальные важнее по тому же item_id) - без дублей.
+    private var refunds: [Int: Decimal] {
+        var out: [Int: Decimal] = [:]
+        // Ключ - id позиции заказа; запись без itemId не берём (иначе дубль с локальной).
+        for s in all { if let k = s.itemId, let d = s.refundDue, d > 0 { out[k] = d } }
+        for (k, v) in refundNote { out[k] = v }
+        return out
+    }
+
     var body: some View {
         let list = all.filter { $0.isPending || ($0.needsCall == true && !$0.isReplaced && !$0.isRemoved) }
-        if !list.isEmpty || errorText != nil || !refundNote.isEmpty {
+        let refunds = self.refunds
+        if !list.isEmpty || errorText != nil || !refunds.isEmpty {
             // Таймер тикает раз в секунду только пока есть что подтверждать.
             TimelineView(.periodic(from: .now, by: 1)) { ctx in
                 VStack(spacing: YMSpace.md) {
                     ForEach(list) { s in card(s, now: ctx.date) }
                     // «Разницу вернёт продавец» живёт в общем блоке: после ответа заказ
                     // перечитывается, карточка замены пропадает, а надпись остаётся.
-                    ForEach(refundNote.keys.sorted(), id: \.self) { id in
-                        if let refund = refundNote[id], refund > 0 {
+                    ForEach(refunds.keys.sorted(), id: \.self) { id in
+                        if let refund = refunds[id], refund > 0 {
                             Text("Разницу \(Money.format(refund)) вернёт продавец")
                                 .font(YMFont.callout).foregroundStyle(YMColor.statusDone)
                                 .frame(maxWidth: .infinity, alignment: .leading)

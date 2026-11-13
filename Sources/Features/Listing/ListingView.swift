@@ -634,7 +634,7 @@ struct OrgListRow: View {
                         StatusPill(text: "Реклама", kind: .pending, solid: false)
                     }
                     HStack(spacing: 8) {
-                        Text(isOpen ? "Открыто" : "Закрыто")
+                        Text(shop.statusLabel(open: isOpen))
                             .ymFont(11.5, weight: .bold)
                             .foregroundStyle(isOpen ? YMColor.statusDone : YMColor.statusCancel)
                         // Способы получения — готовой строкой с сервера.

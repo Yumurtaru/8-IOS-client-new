@@ -21,7 +21,10 @@ enum QuickAdd {
     /// Флаг сервера `true` - быстрый ответ "нужна карточка"; `false` не окончателен (пока сайт не
     /// подтвердил, что флаг учитывает наборы, П-75) - проверяем карточку. Весовой товар - всегда карточка.
     static func needsCard(_ p: Product) async -> Bool? {
-        if p.hasRequiredModifiers == true { return true }
+        // П-75 подтверждён сайтом: поле учитывает и обязательные добавки, и наборы - верим обоим значениям.
+        // Серверный флаг не знает про весовые товары: по данным списка весовой/с пресетами - всегда карточка.
+        if isWeighed(p) { return true }
+        if let flag = p.hasRequiredModifiers { return flag }
         if let c = needsCardCache[p.id], Date().timeIntervalSince(c.at) < needsTTL { return c.needs }
         guard let d = await detail(p.id) else { return nil }
         let presets = (d.qtyPresets ?? "").split(separator: ",")
@@ -32,6 +35,15 @@ enum QuickAdd {
             || (d.modifierGroups ?? []).contains { $0.isRequired == true || ($0.minQty ?? 0) > 0 }
         needsCardCache[p.id] = (Date(), needs)
         return needs
+    }
+
+    private static func isWeighed(_ p: Product) -> Bool {
+        if (p.qtyFractional ?? 0) == 1 { return true }
+        let presets = (p.qtyPresets ?? "").split(separator: ",")
+            .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.filter { $0 > 0 }
+        // Как Android (QuickAdd.kt): дробное количество или 2+ пресета. Единица («л», «г») не признак:
+        // напиток «0,5 л» продаётся штучно. Сервер шлёт qty_fractional/qty_presets в строке меню.
+        return presets.count >= 2
     }
 
     /// Карточка товара тем же вызовом API, что у ProductView. Короткий кэш (цены не «стареют»).

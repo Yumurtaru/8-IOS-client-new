@@ -201,6 +201,11 @@ struct Shop: Codable, Identifiable, Hashable {
     /// Сервер в /shops, /organizations, /favorites отдаёт тип как `mode`, а не `shop_mode` (аддитивно).
     let mode: String?
     @LenientInt var avgCookTime: Int?; @LenientInt var reviewsCount: Int?
+    /// П-76 (аддитивно): режим «Круглосуточно» и подпись открытия у закрытого («Откроется в 9:00»).
+    @LenientBool var is24h: Bool?
+    /// convertFromSnakeCase делает из `is_24h` ключ `is24H`, поэтому читаем оба написания.
+    @LenientBool var is24H: Bool?
+    var opensAtLabel: String?
     /// Тип заведения (shop | cafe | service …, ключ type — api_v1.php shops/organizations).
     /// Паритет с Android; аддитивно, нет ключа — nil.
     let type: String?
@@ -350,6 +355,15 @@ struct ShopDetail: Codable, Identifiable {
     /// IANA-пояс города заведения ("Asia/Yekaterinburg"): часы работы, слоты
     /// предзаказа и «Сегодня» записи считаем в нём (Core/ShopTime). Нет — Москва.
     var timezone: String?
+    /// П-76 (аддитивно): видео-обложка (mp4/mov) и её постер; нет — только фото.
+    var coverVideo: String?
+    var coverVideoPoster: String?
+    /// П-76: минимальное время доставки, мин (сервер считает по зонам / плоской доставке).
+    @LenientInt var deliveryTimeMin: Int?
+    @LenientBool var is24h: Bool?
+    /// convertFromSnakeCase делает из `is_24h` ключ `is24H`, поэтому читаем оба написания.
+    @LenientBool var is24H: Bool?
+    var opensAtLabel: String?
 }
 /// День графика заведения: open/close — "HH:MM[:SS]" или nil (часы не заданы).
 struct ScheduleDay: Codable, Hashable {
@@ -408,6 +422,10 @@ struct Product: Codable, Identifiable, Hashable {
     let id: Int; let name: String?; @LenientDecimal var price: Decimal?; @LenientDecimal var oldPrice: Decimal?
     let description: String?; let photo: String?; @LenientInt var categoryId: Int?; let hasMods: Bool?; @LenientInt var shopId: Int?
     let unit: String?
+    /// Признаки весового товара в списке (если сервер их шлёт; нет - nil).
+    @LenientInt var qtyFractional: Int?
+    // Терпимо: число вместо строки не роняет разбор всего меню.
+    @LenientText var qtyPresets: String?
     @LenientBool var isHalal: Bool?
     /// Позиция в стоп-листе (закончилась). Сервер отдаёт stopped в меню магазина;
     /// раньше приложение его не знало — товар клали в корзину, а оформление
@@ -751,6 +769,8 @@ struct TrackData: Codable {
         let updatedAt: String?
         let name: String?
         let phone: String?
+        /// П-78 п.11: «модель, цвет, номер» - только у курьера площадки; нет - nil.
+        let car: String?
     }
     let status: String?
     let courier: CourierLoc?
@@ -760,6 +780,10 @@ struct TrackData: Codable {
     var courierLng: Double? { courier?.lng }
     var courierName: String? { courier?.name }
     var courierPhone: String? { courier?.phone }
+    var courierCar: String? {
+        let c = (courier?.car ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return c.isEmpty ? nil : c
+    }
 }
 struct ChatMessage: Codable, Identifiable {
     @LenientInt var id: Int?; let message: String?; let sender: String?; let createdAt: String?
@@ -1494,4 +1518,17 @@ struct PromoCheckBody: Encodable {
         try c.encode(Money.wireNumber(subtotal), forKey: .subtotal)
         try c.encodeIfPresent(shopId, forKey: .shopId)
     }
+}
+
+// П-76: подписи статуса списков/карточки. Нет is_24h / opens_at_label - прежние «Открыто» / «Закрыто».
+private func ymStatusLabel(open: Bool, is24h: Bool?, opensAt: String?) -> String {
+    if open { return is24h == true ? "Круглосуточно" : "Открыто" }
+    let t = (opensAt ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    return t.isEmpty ? "Закрыто" : t
+}
+extension Shop {
+    func statusLabel(open: Bool) -> String { ymStatusLabel(open: open, is24h: is24H ?? is24h, opensAt: opensAtLabel) }
+}
+extension ShopDetail {
+    func statusLabel(open: Bool) -> String { ymStatusLabel(open: open, is24h: is24H ?? is24h, opensAt: opensAtLabel) }
 }

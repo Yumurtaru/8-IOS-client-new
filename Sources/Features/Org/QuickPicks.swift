@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Network
 
 //  QuickPicks.swift
 //  Редизайн, этап 12 (ТЗ 5.3/5.5): быстрые подборки заведения и видео-обложка.
@@ -138,31 +139,104 @@ struct QuickPicksRow<Tile: View>: View {
 
 // MARK: - Видео-обложка
 
-/// Беззвучное видео по кругу. Пауза при уходе с экрана, при Reduce Motion не запускаем.
-struct CoverVideoView: View {
+/// Когда видео-обложку НЕ запускаем: «Энергосбережение», «Экономия данных» (сеть constrained),
+/// «Уменьшить движение». Тогда остаётся постер/картинка. Паритет с Android.
+@MainActor
+final class CoverVideoPolicy {
+    static let shared = CoverVideoPolicy()
+    private(set) var dataSaver = false
+    /// false, пока NWPathMonitor не дал первый путь: «неизвестно» - не играем.
+    private(set) var known = false
+    /// Вызывается один раз после первого пути - плееры, ждавшие, запускаются.
+    var onKnown: [() -> Void] = []
+    private let monitor = NWPathMonitor()
+    private init() {
+        monitor.pathUpdateHandler = { [weak self] path in
+            let constrained = path.isConstrained
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.dataSaver = constrained
+                if !self.known {
+                    self.known = true
+                    let cbs = self.onKnown
+                    self.onKnown = []
+                    cbs.forEach { $0() }
+                }
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "ru.marketplace.client.covervideo.path"))
+    }
+    var canPlay: Bool {
+        known
+            && !ProcessInfo.processInfo.isLowPowerModeEnabled
+            && !UIAccessibility.isReduceMotionEnabled
+            && !dataSaver
+    }
+}
+
+/// Беззвучное видео по кругу (`cover_video`). Пока грузится, при ошибке и при запрете политики
+/// (см. CoverVideoPolicy) показывается `poster` (cover_video_poster или прежняя картинка).
+/// Пауза при уходе с экрана. Аудиосессию не захватываем: категория .ambient + mixWithOthers.
+struct CoverVideoView<Poster: View>: View {
     let url: URL
+    let poster: Poster
     @State private var player: AVQueuePlayer?
     @State private var looper: AVPlayerLooper?
+    @State private var ready = false
+    @State private var watch: Task<Void, Never>?
+
+    init(url: URL, @ViewBuilder poster: () -> Poster) {
+        self.url = url
+        self.poster = poster()
+    }
 
     var body: some View {
-        Group {
+        ZStack {
             if let player {
                 CoverPlayerLayer(player: player)
-            } else {
-                Color.clear
+            }
+            if !ready { poster }
+        }
+        .onAppear { start() }
+        .onDisappear {
+            watch?.cancel()
+            player?.pause()
+        }
+    }
+
+    private func start() {
+        let policy = CoverVideoPolicy.shared
+        if !policy.known {
+            policy.onKnown.append { start() }
+            return
+        }
+        guard policy.canPlay else { return }
+        if player == nil {
+            try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
+            let item = AVPlayerItem(url: url)
+            let q = AVQueuePlayer()
+            q.isMuted = true
+            looper = AVPlayerLooper(player: q, templateItem: item)
+            player = q
+        }
+        guard let q = player else { return }
+        q.play()
+        watch?.cancel()
+        watch = Task { @MainActor in
+            // Постер снимаем, когда пошёл кадр; ошибка/таймаут 20 с - постер остаётся.
+            for _ in 0..<80 {
+                if Task.isCancelled { return }
+                if q.timeControlStatus == .playing { ready = true; return }
+                if q.currentItem?.status == .failed { break }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            // Ошибка или таймаут: остановить и отпустить, чтобы невидимое видео не качало трафик.
+            if !Task.isCancelled && !ready {
+                q.pause()
+                q.removeAllItems()
+                looper = nil
             }
         }
-        .onAppear {
-            if player == nil {
-                let item = AVPlayerItem(url: url)
-                let q = AVQueuePlayer()
-                q.isMuted = true
-                looper = AVPlayerLooper(player: q, templateItem: item)
-                player = q
-            }
-            player?.play()
-        }
-        .onDisappear { player?.pause() }
     }
 }
 
