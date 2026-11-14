@@ -135,6 +135,7 @@ struct ProductView: View {
     @EnvironmentObject private var coord: NavCoordinator
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var isFav = false
     // Флаг: isFav меняется программно (загрузка с сервера) — не слать тоггл в ответ.
@@ -507,7 +508,7 @@ struct ProductView: View {
                         Text(opt.name ?? "—")
                             .ymText(YMText.cardTitle)
                             .foregroundStyle(YMUi.text)
-                            .lineLimit(1)
+                            .lineLimit(dynamicTypeSize >= .xxLarge ? 3 : 1)
                             .minimumScaleFactor(0.8)
                         if let pr = opt.price, pr > 0 {
                             Text("+\(Money.format(Money.dec(pr)))")

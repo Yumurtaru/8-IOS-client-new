@@ -547,6 +547,7 @@ struct CartView: View {
 // MARK: - Строка товара со степпером −/N/+
 
 private struct CartRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let line: CartLine
     @ObservedObject private var cart = Cart.shared
 
@@ -570,7 +571,7 @@ private struct CartRow: View {
                     Text(line.modsLabel)
                         .font(YMFont.caption)
                         .foregroundStyle(YMColor.muted)
-                        .lineLimit(1)
+                        .lineLimit(dynamicTypeSize >= .xxLarge ? 2 : 1)
                 } else if let u = line.unit, !u.isEmpty {
                     Text(fmtQty(line.qty, u))
                         .font(YMFont.caption)

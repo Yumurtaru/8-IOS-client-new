@@ -82,6 +82,7 @@ struct CartV2Header: View {
 // MARK: - Карточка заведения
 
 struct CartV2Shop: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let name: String
     let count: Int
     var onMenu: () -> Void
@@ -96,7 +97,7 @@ struct CartV2Shop: View {
             }
             .frame(width: 40, height: 40)
             VStack(alignment: .leading, spacing: 2) {
-                Text(name).ymText(YMText.cardTitle).foregroundStyle(YMUi.text).lineLimit(1)
+                Text(name).ymText(YMText.cardTitle).foregroundStyle(YMUi.text).lineLimit(dynamicTypeSize >= .xxLarge ? 3 : 1)
                 Text("В корзине \(count) \(ruItemsWord(count))")
                     .ymText(YMText.caption).foregroundStyle(YMUi.textSecondary)
             }

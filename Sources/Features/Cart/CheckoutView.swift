@@ -2289,6 +2289,7 @@ private struct AddAddressSheet: View {
 // MARK: - Строка товара (read-only, без степпера — как в макете checkout)
 
 private struct CheckoutRow: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let line: CartLine
     let lines: [CartLine]
     // Как Cart.total и сервер: каждая строка округляется до копейки отдельно,
@@ -2301,10 +2302,10 @@ private struct CheckoutRow: View {
             PhotoPlaceholder(url: API.imageURL(line.photo), label: "ФОТО", radius: 14, tone: line.productId, fit: true)
                 .frame(width: 56, height: 56)
             VStack(alignment: .leading, spacing: 2) {
-                Text(line.name).ymFont(14.5, weight: .bold).foregroundStyle(YMColor.text).lineLimit(1)
+                Text(line.name).ymFont(14.5, weight: .bold).foregroundStyle(YMColor.text).lineLimit(dynamicTypeSize >= .xxLarge ? 3 : 1)
                 let sub = subtitle
                 if !sub.isEmpty {
-                    Text(sub).font(YMFont.caption).foregroundStyle(YMColor.muted).lineLimit(1)
+                    Text(sub).font(YMFont.caption).foregroundStyle(YMColor.muted).lineLimit(dynamicTypeSize >= .xxLarge ? 2 : 1)
                 }
                 WholesaleBadge(line: line, lines: lines)
             }
