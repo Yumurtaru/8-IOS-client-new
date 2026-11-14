@@ -1011,7 +1011,7 @@ struct ProductView: View {
                         )
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(isFav ? "Убрать из избранного" : "Добавить в избранное")
+                .accessibilityLabel(isFav ? "Убрать из избранного" : "В избранное")
                 .onChange(of: isFav) { _ in toggleFav() }
             }
         }

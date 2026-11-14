@@ -83,6 +83,9 @@ final class LodgingSearchVM: ObservableObject {
         } catch is CancellationError {
             // Отмена (быстро сменили фильтр) — состояние не трогаем: его
             // выставит следующая задача, иначе экран мигнёт пустым списком.
+            // Но если новой задачи нет (ушли с экрана) — индикатор не оставляем
+            // висеть: сбрасываем только для текущего поколения.
+            if myGen == gen { loading = false }
             return
         } catch {
             guard myGen == gen else { return }

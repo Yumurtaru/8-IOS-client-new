@@ -786,6 +786,7 @@ struct OrderDetailView: View {
             if OrderFlow.isCancelled(shownStatus(o)) {
                 HStack(spacing: YMSpace.sm) {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(YMColor.statusCancel)
+                        .accessibilityHidden(true)
                     // А115: бронь, отмеченная «Незаезд», — так и пишем.
                     Text(stayCode(o) == "no_show" ? "Незаезд"
                          : (o.shopType == "lodging" ? "Бронь отменена" : (o.shopType == "service" ? "Запись отменена" : "Заказ отменён")))

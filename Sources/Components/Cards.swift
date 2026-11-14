@@ -146,7 +146,7 @@ struct OrgCard: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(a11yLabel)
         .accessibilityHint("Открыть заведение")
-        .accessibilityAction(named: isFav ? "Убрать из избранного" : "Добавить в избранное") { isFav.toggle() }
+        .accessibilityAction(named: isFav ? "Убрать из избранного" : "В избранное") { isFav.toggle() }
     }
 
     /// Голосовая подпись карточки: название, статус, рейтинг, время, способ получения.
@@ -224,7 +224,7 @@ struct PopularCard: View {
         .buttonStyle(CardPressStyle())
         .accessibilityElement(children: .combine)
         .accessibilityLabel(a11yLabel)
-        .accessibilityAction(named: isFav ? "Убрать из избранного" : "Добавить в избранное") { isFav.toggle() }
+        .accessibilityAction(named: isFav ? "Убрать из избранного" : "В избранное") { isFav.toggle() }
     }
 
     /// Название, цена, оптовая цена, рейтинг — одной фразой для VoiceOver.

@@ -373,6 +373,7 @@ private struct SearchSection: View {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 14))
                             .foregroundStyle(YMColor.muted)
+                            .accessibilityHidden(true)
                         highlighted(s)
                             .font(.custom(YMFont.golosName(.regular), fixedSize: 14.5))
                             .foregroundStyle(YMColor.text)
@@ -380,6 +381,7 @@ private struct SearchSection: View {
                         Image(systemName: "arrow.up.left")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(YMColor.muted)
+                            .accessibilityHidden(true)
                     }
                     .padding(.horizontal, YMSpace.xl)
                     .padding(.vertical, 11)

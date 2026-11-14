@@ -883,7 +883,7 @@ struct OrgView: View {
 
     private var topControls: some View {
         HStack {
-            circleControl("chevron.left") { Haptics.light(); dismiss() }
+            circleControl("chevron.left", label: "Назад") { Haptics.light(); dismiss() }
             Spacer()
             HStack(spacing: 10) {
                 BonusCodeButton {
@@ -894,7 +894,7 @@ struct OrgView: View {
                         .background(Color.black.opacity(0.4), in: Circle())
                         .background(.ultraThinMaterial, in: Circle())
                 }
-                circleControl("square.and.arrow.up") { share() }
+                circleControl("square.and.arrow.up", label: "Поделиться") { share() }
                 // Избранное организации — красное сердечко (heart.fill, YMColor.statusCancel).
                 // Гостю — сначала вход: раньше сердечко загоралось, запрос получал
                 // 401 и молча гасло обратно, без объяснения.
@@ -911,7 +911,7 @@ struct OrgView: View {
         .padding(.top, 8)
     }
 
-    private func circleControl(_ system: String, _ action: @escaping () -> Void) -> some View {
+    private func circleControl(_ system: String, label: String, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: system)
                 .ymIcon(16, weight: .semibold)
@@ -921,6 +921,7 @@ struct OrgView: View {
                 .background(.ultraThinMaterial, in: Circle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     // MARK: Bottom bar (StickyCartBar + чат-FAB)
