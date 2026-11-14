@@ -21,6 +21,16 @@ final class DeepLinkRouter: ObservableObject {
         if url.scheme == "yumurta", let host = url.host, ["order", "orders", "bonuses"].contains(host) {
             return handleOrderWidgetLink(host: host, parts: parts, url: url)
         }
+        // Как на Android: yumurta://search[?q=…] (q игнорируется), yumurta://cart,
+        // yumurta://parcel — тот же путь, что у быстрых действий иконки (AppRoute).
+        if url.scheme?.lowercased() == "yumurta", let host = url.host?.lowercased() {
+            switch host {
+            case "search": AppRoute.perform(.search); return true
+            case "cart": AppRoute.perform(.cart); return true
+            case "parcel": AppRoute.perform(.sendParcel); return true
+            default: break
+            }
+        }
         // Общий заказ (П-72 п.3): https://yumurta.ru/g/КОД и yumurta://g/КОД.
         var groupRaw: String?
         if url.scheme == "yumurta" {
