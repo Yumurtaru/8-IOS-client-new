@@ -254,6 +254,8 @@ struct OrgView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var activeCat: Int = 0
+    /// Активный чип подкатегории (0 — «Все»).
+    @State private var activeSub: Int = 0
     /// Открытая подборка (лист поверх заведения).
     @State private var activePick: QuickPick?
     @State private var pushedProduct: Int?
@@ -753,6 +755,7 @@ struct OrgView: View {
     // MARK: Menu (магазин)
 
     private var menuSection: some View {
+        ScrollViewReader { subProxy in
         VStack(alignment: .leading, spacing: 0) {
             // Быстрые подборки (этап 12): только признаки, реально есть в меню.
             QuickPicksRow(products: vm.products, active: $activePick) { p in
@@ -789,6 +792,9 @@ struct OrgView: View {
                 }
             }
 
+            let subs = activeSubcategories
+            if activeCat != 0, !subs.isEmpty { subChipsRow(subs, subProxy) }
+
             let shown = shownProducts
             LazyVStack(spacing: YMForm.cardGap) {
                 if !shown.isEmpty {
@@ -799,29 +805,16 @@ struct OrgView: View {
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                         .padding(.top, 20).padding(.bottom, 10 - YMForm.cardGap)
+                        .id("catHead")
                 }
-                // Сетка в два столбца (ТЗ 5.4): строки по 2 внутри той же ленивой колонки.
-                // Раздел по-прежнему выбирается через activeCat -> shownProducts: якорей нет, id не меняются.
-                ForEach(menuRows(shown)) { row in
-                    HStack(alignment: .top, spacing: YMForm.cardGap) {
-                        ForEach(row.items) { p in
-                            ProductTile(
-                                product: p,
-                                line: simpleLine(p.id),
-                                busy: quickBusy == p.id,
-                                reduceMotion: reduceMotion,
-                                onOpen: { Haptics.light(); openProduct(p.id) },
-                                onPlus: { Haptics.light(); onTilePlus(p) },
-                                onMinus: { if let l = simpleLine(p.id) { cart.dec(l.key) } },
-                                onInc: { if let l = simpleLine(p.id) { cart.inc(l.key) } }
-                            )
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                        if row.items.count == 1 { Color.clear.frame(maxWidth: .infinity) }
+                if activeCat != 0, !subs.isEmpty {
+                    // Товары категории, затем подкатегории подзаголовками (А1326).
+                    productGrid(ownProducts)
+                    ForEach(subs) { sub in
+                        subSection(sub)
                     }
-                    .fixedSize(horizontal: false, vertical: true)
-                    // Поля экрана 16 (лист заведения даёт 20).
-                    .padding(.horizontal, YMForm.screenPadding - YMSpace.xl)
+                } else {
+                    productGrid(shown)
                 }
                 if shown.isEmpty, vm.products.isEmpty, let pe = vm.productsError {
                     // Меню не загрузилось — это не «пусто»: даём повторить.
@@ -849,12 +842,114 @@ struct OrgView: View {
                 }
             }
             .padding(.top, 12)
+            .onPreferenceChange(SubHeadOffsetKey.self) { offs in syncActiveSub(offs) }
+        }
+        .onChange(of: activeCat) { _ in activeSub = 0 }
         }
     }
 
     // MARK: Category tab (золотое подчёркивание)
 
     @Namespace private var catNS
+
+    /// Сетка в два столбца (ТЗ 5.4): строки по 2 внутри той же ленивой колонки.
+    @ViewBuilder private func productGrid(_ list: [Product]) -> some View {
+        ForEach(menuRows(list)) { row in
+            HStack(alignment: .top, spacing: YMForm.cardGap) {
+                ForEach(row.items) { p in
+                    ProductTile(
+                        product: p,
+                        line: simpleLine(p.id),
+                        busy: quickBusy == p.id,
+                        reduceMotion: reduceMotion,
+                        onOpen: { Haptics.light(); openProduct(p.id) },
+                        onPlus: { Haptics.light(); onTilePlus(p) },
+                        onMinus: { if let l = simpleLine(p.id) { cart.dec(l.key) } },
+                        onInc: { if let l = simpleLine(p.id) { cart.inc(l.key) } }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                if row.items.count == 1 { Color.clear.frame(maxWidth: .infinity) }
+            }
+            .fixedSize(horizontal: false, vertical: true)
+            // Поля экрана 16 (лист заведения даёт 20).
+            .padding(.horizontal, YMForm.screenPadding - YMSpace.xl)
+        }
+    }
+
+    /// Подкатегория: подзаголовок (меньше заголовка раздела) и её товары.
+    private func subSection(_ sub: Category) -> some View {
+        VStack(spacing: YMForm.cardGap) {
+            Text(sub.name ?? "—")
+                .ymText(YMTextStyle(fontName: "GolosText-SemiBold", size: 15, relativeTo: .subheadline))
+                .foregroundStyle(YMUi.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, YMForm.screenPadding - YMSpace.xl)
+                .padding(.top, 14)
+                .background(
+                    GeometryReader { g in
+                        Color.clear.preference(key: SubHeadOffsetKey.self,
+                                               value: [sub.id: g.frame(in: .named("scroll")).minY])
+                    }
+                )
+            productGrid(productsOf(sub.id))
+        }
+        // id — на элементе ленивого стека (не на вложенном тексте): иначе scrollTo
+        // не находит ещё не созданную подкатегорию ниже экрана.
+        .id("sub-\(sub.id)")
+    }
+
+    /// Ряд чипов «Все · подкатегория · …» под лентой вкладок.
+    private func subChipsRow(_ subs: [Category], _ proxy: ScrollViewProxy) -> some View {
+        ScrollViewReader { chipProxy in
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    subChip("Все", id: 0) {
+                        withAnimation { proxy.scrollTo("catHead", anchor: .top) }
+                    }
+                    ForEach(subs) { sub in
+                        subChip(sub.name ?? "—", id: sub.id) {
+                            withAnimation { proxy.scrollTo("sub-\(sub.id)", anchor: .top) }
+                        }
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+            .padding(.top, 10)
+            .onChange(of: activeSub) { id in
+                withAnimation(YMMotion.adaptive(.easeInOut(duration: YMDur.tabSwitch), reduceMotion: reduceMotion)) {
+                    chipProxy.scrollTo("chip-\(id)", anchor: .center)
+                }
+            }
+        }
+    }
+
+    private func subChip(_ title: String, id: Int, action: @escaping () -> Void) -> some View {
+        let active = activeSub == id
+        return Button {
+            Haptics.selection()
+            activeSub = id
+            action()
+        } label: {
+            Text(title)
+                .font(.custom(YMFont.golosName(active ? .heavy : .semibold), fixedSize: 13.5))
+                .foregroundStyle(active ? YMUi.text : YMUi.textSecondary)
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(active ? YMUi.segmentSelected : YMUi.segmentBg, in: Capsule())
+                .overlay(Capsule().strokeBorder(YMColor.hairline, lineWidth: active ? 1 : 0))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .id("chip-\(id)")
+    }
+
+    /// Активный чип по положению подзаголовков: последний, дошедший до верха экрана.
+    private func syncActiveSub(_ offs: [Int: CGFloat]) {
+        guard activeCat != 0 else { return }
+        let passed = offs.filter { $0.value <= 220 }
+        let id = passed.max { $0.value < $1.value }?.key ?? 0
+        if id != activeSub { activeSub = id }
+    }
 
     private func catTab(_ title: String, _ id: Int) -> some View {
         let active = activeCat == id
@@ -1083,10 +1178,34 @@ struct OrgView: View {
     /// Паритет с Android: раздел без товаров не показываем — вкладка открывала
     /// «В этом разделе пока пусто» (подкатегории, скрытые позиции).
     private var categories: [Category] {
+        let all = vm.productCategories
+        let ids = Set(all.map { $0.id })
         let used = Set(vm.products.compactMap { $0.categoryId })
-        return vm.productCategories.filter { used.contains($0.id) }
+        // Верхний уровень: без parent_id или «сирота» (родитель не пришёл). Старый сервер — все такие.
+        let tops = all.filter { c in
+            guard let p = c.parentId, p != c.id else { return true }
+            return !ids.contains(p)
+        }
+        return tops.filter { c in
+            used.contains(c.id) || all.contains { $0.parentId == c.id && $0.id != c.id && used.contains($0.id) }
+        }
     }
 
+    /// Непустые подкатегории активной категории.
+    private var activeSubcategories: [Category] {
+        guard activeCat != 0 else { return [] }
+        let used = Set(vm.products.compactMap { $0.categoryId })
+        return vm.productCategories.filter { $0.parentId == activeCat && $0.id != activeCat && used.contains($0.id) }
+    }
+    private func productsOf(_ catId: Int) -> [Product] { vm.products.filter { $0.categoryId == catId } }
+    private var ownProducts: [Product] { productsOf(activeCat) }
+
+    private struct SubHeadOffsetKey: PreferenceKey {
+        static var defaultValue: [Int: CGFloat] = [:]
+        static func reduce(value: inout [Int: CGFloat], nextValue: () -> [Int: CGFloat]) {
+            value.merge(nextValue()) { $1 }
+        }
+    }
     private struct MenuRow: Identifiable { let id: Int; let items: [Product] }
     private func menuRows(_ list: [Product]) -> [MenuRow] {
         stride(from: 0, to: list.count, by: 2).map { i in
@@ -1100,7 +1219,9 @@ struct OrgView: View {
     }
 
     private var shownProducts: [Product] {
-        activeCat == 0 ? vm.products : vm.products.filter { $0.categoryId == activeCat }
+        if activeCat == 0 { return vm.products }
+        let kids = Set(activeSubcategories.map { $0.id })
+        return vm.products.filter { $0.categoryId == activeCat || ($0.categoryId.map { kids.contains($0) } ?? false) }
     }
 
     // MARK: Actions

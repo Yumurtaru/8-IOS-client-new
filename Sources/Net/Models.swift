@@ -193,6 +193,9 @@ struct Category: Codable, Identifiable, Hashable {
     /// что должна показать номер лицензии. У категорий товаров этих полей нет.
     let slug: String?
     @LenientBool var requiresLicense: Bool?
+    /// А1326 (сайт): родительская категория меню (`parent_id`) — подкатегории в два уровня; nil — верхний уровень.
+    /// `/api/v1/categories` отдаёт список деревом: категория, сразу за ней её подкатегории.
+    @LenientInt var parentId: Int?
 }
 
 struct Shop: Codable, Identifiable, Hashable {
