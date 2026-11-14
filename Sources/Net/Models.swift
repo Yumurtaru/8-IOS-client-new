@@ -203,7 +203,8 @@ struct Shop: Codable, Identifiable, Hashable {
     @LenientInt var avgCookTime: Int?; @LenientInt var reviewsCount: Int?
     /// П-76 (аддитивно): режим «Круглосуточно» и подпись открытия у закрытого («Откроется в 9:00»).
     @LenientBool var is24h: Bool?
-    /// convertFromSnakeCase делает из `is_24h` ключ `is24H`, поэтому читаем оба написания.
+    /// `is_24h` + convertFromSnakeCase: старый Foundation даёт `is24H` («24h».capitalized → «24H»), новый может дать `is24h` —
+    /// читаем оба написания (statusLabel: `is24H ?? is24h`). Сверка моделей отметит одно из них — это ожидаемо.
     @LenientBool var is24H: Bool?
     var opensAtLabel: String?
     /// Тип заведения (shop | cafe | service …, ключ type — api_v1.php shops/organizations).
@@ -361,7 +362,8 @@ struct ShopDetail: Codable, Identifiable {
     /// П-76: минимальное время доставки, мин (сервер считает по зонам / плоской доставке).
     @LenientInt var deliveryTimeMin: Int?
     @LenientBool var is24h: Bool?
-    /// convertFromSnakeCase делает из `is_24h` ключ `is24H`, поэтому читаем оба написания.
+    /// `is_24h` + convertFromSnakeCase: старый Foundation даёт `is24H` («24h».capitalized → «24H»), новый может дать `is24h` —
+    /// читаем оба написания (statusLabel: `is24H ?? is24h`). Сверка моделей отметит одно из них — это ожидаемо.
     @LenientBool var is24H: Bool?
     var opensAtLabel: String?
 }
