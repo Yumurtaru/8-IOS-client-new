@@ -27,14 +27,18 @@ enum QuickAdd {
         if let flag = p.hasRequiredModifiers { return flag }
         if let c = needsCardCache[p.id], Date().timeIntervalSince(c.at) < needsTTL { return c.needs }
         guard let d = await detail(p.id) else { return nil }
-        let presets = (d.qtyPresets ?? "").split(separator: ",")
-            .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.filter { $0 > 0 }
-        let weighed = (d.qtyFractional ?? 0) == 1 || presets.count >= 2
-        let needs = weighed
+        let needs = isWeighed(detail: d)
             || !(d.comboItems ?? []).isEmpty
             || (d.modifierGroups ?? []).contains { $0.isRequired == true || ($0.minQty ?? 0) > 0 }
         needsCardCache[p.id] = (Date(), needs)
         return needs
+    }
+
+    /// Весовой по карточке товара: дробное количество или 2+ пресета (в рекомендациях списка этих полей нет).
+    static func isWeighed(detail d: ProductDetail) -> Bool {
+        let presets = (d.qtyPresets ?? "").split(separator: ",")
+            .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.filter { $0 > 0 }
+        return (d.qtyFractional ?? 0) == 1 || presets.count >= 2
     }
 
     private static func isWeighed(_ p: Product) -> Bool {

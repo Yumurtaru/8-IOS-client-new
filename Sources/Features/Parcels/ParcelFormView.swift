@@ -44,9 +44,9 @@ final class ParcelFormModel: ObservableObject {
     /// Ручная правка текста адреса сбрасывает пару: подсказка при выборе сначала ставит
     /// текст, потом координаты, так что выбранный адрес координаты сохраняет.
     var fromLat: Double?, fromLng: Double?, toLat: Double?, toLng: Double?
-    @Published var from = "" { didSet { if from != oldValue { fromLat = nil; fromLng = nil } } }
+    @Published var from = "" { didSet { if from != oldValue { if fromLat != nil { refreshTick += 1 }; fromLat = nil; fromLng = nil } } }
     @Published var senderPhone = ""
-    @Published var to = "" { didSet { if to != oldValue { toLat = nil; toLng = nil } } }
+    @Published var to = "" { didSet { if to != oldValue { if toLat != nil { refreshTick += 1 }; toLat = nil; toLng = nil } } }
     @Published var recipientName = ""
     @Published var recipientPhone = ""
     @Published var what = ""

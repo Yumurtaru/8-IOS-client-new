@@ -274,7 +274,7 @@ struct OrgView: View {
         quickTask = Task { @MainActor in
             let needs = await QuickAdd.needsCard(p)
             if Task.isCancelled { quickBusy = nil; return }
-            if needs == false, let d = await QuickAdd.detail(p.id) {
+            if needs == false, let d = await QuickAdd.detail(p.id), !QuickAdd.isWeighed(detail: d) {
                 if Task.isCancelled { quickBusy = nil; return }
                 addQuick(d)
             } else { openProduct(p.id) }

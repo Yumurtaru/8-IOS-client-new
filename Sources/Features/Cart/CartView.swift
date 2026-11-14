@@ -532,7 +532,8 @@ struct CartView: View {
         quickBusy = p.id
         Task { @MainActor in
             let needs = await QuickAdd.needsCard(p)
-            if needs == false, let d = await QuickAdd.detail(p.id), d.shopId == cart.shopId {
+            if needs == false, let d = await QuickAdd.detail(p.id), d.shopId == cart.shopId,
+               !QuickAdd.isWeighed(detail: d) {
                 let ok = Cart.shared.add(product: d, modifierIds: [], options: [],
                                          shopId: d.shopId ?? 0, shopName: d.shopName, qty: 1)
                 if ok { Haptics.success() } else { Haptics.warning(); v2Sheet = .product(p.id) }

@@ -216,8 +216,9 @@ struct CoverVideoView<Poster: View>: View {
             return
         }
         guard policy.canPlay else { return }
+        // Голосовой поиск переключает категорию на .record - возвращаем при каждом запуске.
+        try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         if player == nil {
-            try? AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default, options: [.mixWithOthers])
             let item = AVPlayerItem(url: url)
             let q = AVQueuePlayer()
             q.isMuted = true
@@ -238,6 +239,7 @@ struct CoverVideoView<Poster: View>: View {
             // Ошибка или таймаут: остановить и отпустить, чтобы невидимое видео не качало трафик.
             if !Task.isCancelled && !ready {
                 q.pause()
+                looper?.disableLooping()
                 q.removeAllItems()
                 looper = nil
             }
