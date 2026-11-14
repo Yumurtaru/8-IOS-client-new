@@ -39,7 +39,7 @@ enum QuickAdd {
 
     private static func isWeighed(_ p: Product) -> Bool {
         if (p.qtyFractional ?? 0) == 1 { return true }
-        let presets = (p.qtyPresets ?? "").split(separator: ",")
+        let presets = (p.qtyPresets ?? "").split(whereSeparator: { $0 == "," || $0 == ";" })
             .compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.filter { $0 > 0 }
         // Как Android (QuickAdd.kt): дробное количество или 2+ пресета. Единица («л», «г») не признак:
         // напиток «0,5 л» продаётся штучно. Сервер шлёт qty_fractional/qty_presets в строке меню.

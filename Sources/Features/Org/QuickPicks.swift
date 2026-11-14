@@ -152,8 +152,9 @@ final class CoverVideoPolicy {
     private let monitor = NWPathMonitor()
     private init() {
         monitor.pathUpdateHandler = { [weak self] path in
-            let constrained = path.isConstrained
-            DispatchQueue.main.async {
+            // Как Android: «Экономия данных» или лимитная (мобильная/хотспот) сеть - видео не качаем.
+            let constrained = path.isConstrained || path.isExpensive
+            Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.dataSaver = constrained
                 if !self.known {
@@ -184,6 +185,7 @@ struct CoverVideoView<Poster: View>: View {
     @State private var looper: AVPlayerLooper?
     @State private var ready = false
     @State private var watch: Task<Void, Never>?
+    @State private var visible = false
 
     init(url: URL, @ViewBuilder poster: () -> Poster) {
         self.url = url
@@ -197,14 +199,17 @@ struct CoverVideoView<Poster: View>: View {
             }
             if !ready { poster }
         }
-        .onAppear { start() }
+        .accessibilityHidden(true)   // декоративная обложка: VoiceOver её не читает
+        .onAppear { visible = true; start() }
         .onDisappear {
+            visible = false
             watch?.cancel()
             player?.pause()
         }
     }
 
     private func start() {
+        guard visible else { return }   // ждал первого пути сети, а экран уже закрыли
         let policy = CoverVideoPolicy.shared
         if !policy.known {
             policy.onKnown.append { start() }

@@ -198,12 +198,12 @@ struct OrderSubstitutionsSection: View {
                     ForEach(list) { s in card(s, now: ctx.date) }
                     // «Разницу вернёт продавец» живёт в общем блоке: после ответа заказ
                     // перечитывается, карточка замены пропадает, а надпись остаётся.
-                    ForEach(refunds.keys.sorted(), id: \.self) { id in
-                        if let refund = refunds[id], refund > 0 {
-                            Text("Разницу \(Money.format(refund)) вернёт продавец")
-                                .font(YMFont.callout).foregroundStyle(YMColor.statusDone)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                    // Одна надпись с суммой по всем заменам (как на Android).
+                    let refundTotal = refunds.values.reduce(Decimal(0), +)
+                    if refundTotal > 0 {
+                        Text("Разницу \(Money.format(refundTotal)) вернёт продавец")
+                            .font(YMFont.callout).foregroundStyle(YMColor.statusDone)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     if let e = errorText {
                         Text(e).font(YMFont.callout).foregroundStyle(YMColor.statusCancel)

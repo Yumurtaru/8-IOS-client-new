@@ -304,7 +304,11 @@ final class API {
         }
 
         let status = fromCache ? 200 : ((resp as? HTTPURLResponse)?.statusCode ?? 0)
-        if status == 401 {
+        // Ручки входа: 401 = «неверный логин/пароль/код», а не истёкшая сессия. Ни продления токена,
+        // ни выхода, ни «Войдите, чтобы продолжить» - идём дальше и показываем текст сервера (как Android).
+        let path401 = req.url?.path ?? ""
+        let isAuthEntry = ["/auth/login", "/auth/register/confirm", "/auth/passkey/login/verify"].contains { path401.hasSuffix($0) }
+        if status == 401, !isAuthEntry {
             // Тихое продление access-токена (security-аудит): refresh → один повтор запроса.
             // Позволяет серверу сократить JWT_EXPIRES до часов без массовых разлогинов.
             if !isRetryAfterRefresh, !(req.url?.path.hasSuffix("/auth/refresh") ?? false) {
