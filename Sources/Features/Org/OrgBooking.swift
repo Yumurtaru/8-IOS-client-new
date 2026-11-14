@@ -388,7 +388,7 @@ struct OrgBookingSection: View {
             switch s {
             case .confirm(let slot): confirmSheet(slot: slot)
             case .success(let oid):
-                SuccessBookingSheet(orderId: oid, info: lastBooking) {
+                SuccessBookingSheet(orderId: oid, info: lastBooking, kind: BookingKind(selected)) {
                     sheet = nil; actionMessage = nil; lastBooking = nil
                 }
             }
@@ -563,6 +563,7 @@ struct OrgBookingSection: View {
             timeLabel: Self.slotRangeLabel(slot, slotMinutes: selected?.slotMinutes ?? 0, hours: hours, chainMinutes: chain),
             serviceName: selected?.name ?? "",
             composition: Self.bookingComposition(selected, guests: guests, hours: hours, minutes: chain),
+            kind: BookingKind(selected),
             price: price, travel: travel, fee: fee, total: total,
             atClient: atClient,
             address: $visitAddress,
@@ -1367,6 +1368,8 @@ private struct ConfirmBookingSheet: View {
     let serviceName: String
     /// «3 чел. · 2 ч». nil — выбирать было нечего (обычная услуга).
     var composition: String?
+    /// Запись к мастеру, бронь места или обычная запись — от этого тексты листа.
+    var kind: BookingKind = .general
     let price: Decimal
     /// Выезд мастера. Только для услуги с location_type == "at_client".
     let travel: Decimal
@@ -1396,7 +1399,7 @@ private struct ConfirmBookingSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text("Подтверждение записи")
+                Text(kind.confirmTitle)
                     .ymFont(20, weight: .heavy)
                     .foregroundStyle(YMColor.text)
                 if !serviceName.isEmpty {
@@ -1448,7 +1451,7 @@ private struct ConfirmBookingSheet: View {
                 }
 
                 Button(action: onConfirm) {
-                    Text(confirming ? "Записываем…" : (locked ? "Повторить запись" : "Подтвердить запись"))
+                    Text(confirming ? kind.confirmingButton : (locked ? kind.retryButton : kind.confirmButton))
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(YMPrimaryButtonStyle())
@@ -1549,14 +1552,15 @@ private struct ConfirmBookingSheet: View {
         .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
-    // MARK: Комментарий мастеру (А63)
+    // MARK: Комментарий к записи (А63)
+    // Адресат зависит от услуги: у брони приставки или зала мастера нет.
 
     private var commentBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Комментарий мастеру")
+            Text(kind.commentTitle)
                 .ymFont(13, weight: .heavy)
                 .foregroundStyle(YMColor.text)
-            TextField("Пожелания, важные детали", text: $comment, axis: .vertical)
+            TextField(kind.commentHint, text: $comment, axis: .vertical)
                 .lineLimit(1...4)
                 .ymFont(14.5)
                 .foregroundStyle(YMColor.text)
@@ -1565,7 +1569,7 @@ private struct ConfirmBookingSheet: View {
                 .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
                 .disabled(!editable)
                 .ymMaxLength($comment, 300)
-            Text("Необязательно · до 300 знаков")
+            Text(verbatim: "Необязательно · \(kind.commentReader) · до 300 знаков")
                 .ymFont(11.5)
                 .foregroundStyle(YMColor.muted)
         }
@@ -1606,6 +1610,8 @@ private struct SuccessBookingSheet: View {
     let orderId: Int
     /// Данные с сервера — печатаем как есть, ничего не пересчитываем.
     var info: AppointmentResult?
+    /// Бронь или запись — «Бронь оформлена!» / «Вы записаны!».
+    var kind: BookingKind = .general
     var onClose: () -> Void = {}
 
     private var summary: String? {
@@ -1648,13 +1654,13 @@ private struct SuccessBookingSheet: View {
                 .ymIcon(56)
                 .foregroundStyle(YMColor.statusDone)
                 .padding(.bottom, 6)
-            Text("Вы записаны!")
+            Text(kind.successTitle)
                 .ymFont(20, weight: .heavy)
                 .foregroundStyle(YMColor.text)
             // П-28.11: есть номер записи за день — показываем его (по нему
             // запись находят в заведении); нет — прежний номер заказа.
             if let n = info?.dailyNumber, n > 0 {
-                Text("Номер записи №\(n)")
+                Text(verbatim: "\(kind.numberLabel) №\(n)")
                     .ymFont(15)
                     .foregroundStyle(YMColor.muted)
                     .padding(.top, 4)
@@ -1680,6 +1686,49 @@ private struct SuccessBookingSheet: View {
         .frame(maxWidth: .infinity)
         .presentationDetents([.height(280)])
     }
+}
+
+// MARK: - Тип записи
+
+/// Как называть запись и кому адресован комментарий. Решаем по данным услуги с сервера,
+/// а не по названию («PlayStation», «Бильярд»): так верно для любой организации.
+/// Порядок важен: назначенный мастер главнее мест — групповое занятие с тренером
+/// остаётся «записью» с комментарием мастеру. Паритет с Android (`BookingKind`).
+enum BookingKind: Equatable {
+    /// Назначен мастер (салон, сервис, занятие с тренером).
+    case master
+    /// Бронь места или оборудования без мастера: игровой зал, приставка, бильярд, кинозал.
+    case resource
+    /// Услуга без назначенного исполнителя — комментарий читает администратор.
+    case general
+
+    init(_ s: ServiceItem?) {
+        guard let s = s else { self = .general; return }
+        if s.mastersLabel != nil || (s.masterId ?? 0) > 0 {
+            self = .master
+        } else if s.needsGuests || s.needsHours {
+            self = .resource
+        } else {
+            self = .general
+        }
+    }
+
+    var confirmTitle: String { self == .resource ? "Подтверждение брони" : "Подтверждение записи" }
+    var commentTitle: String {
+        switch self {
+        case .master: return "Комментарий мастеру"
+        case .resource: return "Комментарий к брони"
+        case .general: return "Комментарий к записи"
+        }
+    }
+    var commentHint: String { self == .resource ? "Повод, пожелания, что подготовить" : "Пожелания, важные детали" }
+    /// Кто прочитает комментарий — говорим прямо, чтобы человек знал, кому пишет.
+    var commentReader: String { self == .master ? "увидит мастер" : "увидит администратор" }
+    var confirmButton: String { self == .resource ? "Подтвердить бронь" : "Подтвердить запись" }
+    var confirmingButton: String { self == .resource ? "Бронируем…" : "Записываем…" }
+    var retryButton: String { self == .resource ? "Повторить бронь" : "Повторить запись" }
+    var successTitle: String { self == .resource ? "Бронь оформлена!" : "Вы записаны!" }
+    var numberLabel: String { self == .resource ? "Номер брони" : "Номер записи" }
 }
 
 // MARK: - Хелпер даты

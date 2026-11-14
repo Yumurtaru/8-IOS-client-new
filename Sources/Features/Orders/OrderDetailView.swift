@@ -612,7 +612,8 @@ struct OrderDetailView: View {
 
     private func clientNoteCard(_ note: String) -> some View {
         VStack(alignment: .leading, spacing: YMSpace.xs) {
-            Text("Комментарий мастеру").font(YMFont.headline).foregroundStyle(YMColor.text)
+            // Нейтрально: у брони приставки или зала мастера нет.
+            Text("Ваш комментарий").font(YMFont.headline).foregroundStyle(YMColor.text)
             Text(note).font(YMFont.body).foregroundStyle(YMColor.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
