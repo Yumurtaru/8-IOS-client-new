@@ -193,7 +193,8 @@ struct OrderSubstitutionsSection: View {
         let refunds = self.refunds
         if !list.isEmpty || errorText != nil || !refunds.isEmpty {
             // Таймер тикает раз в секунду только пока есть что подтверждать.
-            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+            // Остался только «Разницу вернёт продавец» - ежесекундный тик не нужен.
+            TimelineView(.periodic(from: .now, by: list.isEmpty ? 3600 : 1)) { ctx in
                 VStack(spacing: YMSpace.md) {
                     ForEach(list) { s in card(s, now: ctx.date) }
                     // «Разницу вернёт продавец» живёт в общем блоке: после ответа заказ

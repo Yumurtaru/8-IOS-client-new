@@ -300,8 +300,9 @@ final class ParcelFormModel: ObservableObject {
         ]
         // Город не выбран — сервер возьмёт город аккаунта.
         if cityId > 0 { b["city_id"] = cityId }
-        if let f = pair(fromLat, fromLng) { b["pickup_lat"] = f.0; b["pickup_lng"] = f.1 }
-        if let t = pair(toLat, toLng) { b["drop_lat"] = t.0; b["drop_lng"] = t.1 }
+        // Свои имена: `t` выше - функция обрезки, `f` ниже - цена; тень имён здесь не нужна.
+        if let pf = pair(fromLat, fromLng) { b["pickup_lat"] = pf.0; b["pickup_lng"] = pf.1 }
+        if let pt = pair(toLat, toLng) { b["drop_lat"] = pt.0; b["drop_lng"] = pt.1 }
         let f = t(fee).replacingOccurrences(of: ",", with: ".").replacingOccurrences(of: " ", with: "")
         if !f.isEmpty { b["fee"] = f }
         // Размер «документы / в руках / на сиденье» — у легковой; у кузова S…XXL его задаёт кузов.

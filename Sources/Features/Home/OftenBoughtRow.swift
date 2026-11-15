@@ -80,7 +80,11 @@ struct OftenBoughtRow: View {
         guard let d: ProductDetail = try? await API.shared.get("api/v1/products/\(item.id)", fresh: true),
               (d.modifierGroups ?? []).isEmpty,
               d.stopped != true, d.outOfStock != true, d.categoryOff != true,
-              let shopId = d.shopId, shopId > 0 else {
+              // Весовой товар и набор - выбор в карточке (как QuickAdd и Android).
+              !QuickAdd.isWeighed(detail: d), (d.comboItems ?? []).isEmpty,
+              let shopId = d.shopId, shopId > 0,
+              // Корзина другого заведения: Cart.add молча очистил бы её - карточка спросит.
+              Cart.shared.isEmpty || Cart.shared.shopId == nil || Cart.shared.shopId == shopId else {
             onOpen(item.id)   // добавки/стоп-лист/нет сети - решает карточка товара
             return
         }
