@@ -339,7 +339,7 @@ private final class ChatThreadViewModel: ObservableObject {
         guard !trimmed.isEmpty else { return true }
         sending = true; defer { sending = false }
         do {
-            try await API.shared.postVoid("api/v1/orders/\(orderId)/chat", body: ["message": trimmed])
+            try await API.shared.postVoid("api/v1/orders/\(orderId)/chat", body: ["message": trimmed], retryKey: true)
         } catch {
             sendError = (error as? LocalizedError)?.errorDescription ?? "Сообщение не отправлено"
             return false

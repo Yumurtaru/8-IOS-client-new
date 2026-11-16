@@ -443,6 +443,7 @@ struct GroupCartView: View {
             if let i = merged.firstIndex(where: { $0.key == it.key }) {
                 merged[i].qty = ((merged[i].qty + q) * 1000).rounded() / 1000
                 if frac { merged[i].qtyFractional = true }
+                if merged[i].qtyStep == nil, let st = it.qtyStep, st > 0 { merged[i].qtyStep = st }
                 continue
             }
             // CartLine.unitPrice на iOS — цена единицы ВМЕСТЕ с добавками (Cart.swift: price + modPrice),
@@ -458,7 +459,8 @@ struct GroupCartView: View {
             let mods = (it.modifiers ?? []).compactMap { $0.name }.joined(separator: ", ")
             merged.append(CartLine(key: it.key, productId: pid, name: it.name ?? "", unitPrice: unit, qty: q,
                                    modifierIds: it.modifierIds, modsLabel: mods, photo: nil,
-                                   qtyFractional: frac ? true : nil))
+                                   qtyFractional: frac ? true : nil,
+                                   qtyStep: (it.qtyStep ?? 0) > 0 ? it.qtyStep : nil))
         }
         guard !merged.isEmpty else { return }
         let prev = CartBackup(lines: cart.lines, shopId: cart.shopId, shopName: cart.shopName, shopSlug: cart.shopSlug)

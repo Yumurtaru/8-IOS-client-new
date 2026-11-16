@@ -485,6 +485,8 @@ struct ProductDetail: Codable, Identifiable {
     /// П-72 п.5: «92 % рекомендуют» (nil - не показывать).
     @LenientInt var likesPercent: Int?
     @LenientInt var likesCount: Int?
+    /// П-81: IANA-пояс города заведения ("Asia/Vladivostok"); нет поля или неизвестный — Москва (ShopTime.zone).
+    var timezone: String?
 }
 struct ModifierGroup: Codable, Identifiable {
     let id: Int; let name: String?; let type: String?; @LenientBool var isRequired: Bool?
@@ -608,6 +610,8 @@ struct OrderItem: Codable, Identifiable {
     @LenientDouble var returnableQty: Double?
     /// К-56 К3: комментарий клиента к блюду (≤ 200). nil — старый сервер / не задан.
     @LenientText var comment: String?
+    /// П-81 №3: шаг количества (0.5, 0.25; 0 — не задан). nil — старый сервер.
+    @LenientDouble var qtyStep: Double?
     /// П-72 п.4: выбор клиента для позиции (similar | call | remove) и замена магазина.
     @LenientText var substitution: String?
     @LenientObject var substitute: OrderSubstitute?
@@ -618,7 +622,7 @@ struct OrderItem: Codable, Identifiable {
         case lineId = "id"
         case productId, name, qty, qtyOrdered, price, unit
         case returnQty, returnPendingQty, returnableQty
-        case comment, substitution, substitute
+        case comment, substitution, substitute, qtyStep
     }
 
     var id: Int { lineId ?? ((productId ?? 0) &* 100000 &+ Int((qty ?? 0).rounded())) }
@@ -1518,6 +1522,8 @@ struct ReorderItem: Decodable {
     let unit: String?
     @LenientBool var qtyFractional: Bool?
     let qtyPresets: String?
+    /// П-81 №3: шаг количества (0 — не задан); старый сервер — nil.
+    @LenientDouble var qtyStep: Double?
 }
 struct PromoCheckBody: Encodable {
     let code: String; let subtotal: Decimal; let shopId: Int?

@@ -20,17 +20,51 @@ final class LodgingTripsVM: ObservableObject {
     /// обновление жестом стирало уже показанный список.
     @Published var loadError: String?
 
+    /// А1434: постраничная подгрузка. Есть ли ещё страница — по meta.has_more (нет meta — нет «ещё»).
+    @Published var hasMore = false
+    @Published var loadingMore = false
+    @Published var moreFailed = false
+    private var page = 1
+    /// Счётчик обновлений: поздний ответ догрузки после обновления списка отбрасывается.
+    private var epoch = 0
+    private let perPage = 50
+
     func load() async {
         loading = true
+        epoch += 1
+        loadingMore = false
         // Отмена обновления жестом раньше опустошала список поездок (try? → []).
         do {
-            trips = try await API.shared.lodgingTrips()
+            let p = try await API.shared.lodgingTripsPage(page: 1, perPage: perPage)
+            trips = p.items
+            page = 1
+            hasMore = p.hasMore && !p.items.isEmpty
+            moreFailed = false
             loadError = nil
         } catch is CancellationError {
         } catch {
             loadError = (error as? LocalizedError)?.errorDescription ?? "Не удалось загрузить поездки"
         }
         loading = false
+    }
+
+    /// Следующая страница; сбой не стирает уже показанное, а даёт повторить.
+    func loadMore() async {
+        guard hasMore, !loadingMore, !loading else { return }
+        loadingMore = true; moreFailed = false
+        let my = epoch
+        let next = page + 1
+        do {
+            let p = try await API.shared.lodgingTripsPage(page: next, perPage: perPage)
+            guard my == epoch else { return }
+            let known = Set(trips.map(\.identifier))
+            trips += p.items.filter { !known.contains($0.identifier) }
+            page = next
+            hasMore = p.hasMore && !p.items.isEmpty
+        } catch {
+            if my == epoch, !(error is CancellationError) { moreFailed = true }
+        }
+        if my == epoch { loadingMore = false }
     }
 
     func cancel(_ trip: LodgingTrip) async {
@@ -96,6 +130,16 @@ struct LodgingTripsView: View {
                         },
                         onCancel: { if !vm.cancelling { toCancel = t } }
                     )
+                }
+
+                if vm.hasMore {
+                    Button(vm.moreFailed ? "Не удалось загрузить. Повторить" : "Показать ещё") {
+                        Task { await vm.loadMore() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(vm.loadingMore)
+                    .frame(maxWidth: .infinity)
+                    .onAppear { if !vm.moreFailed { Task { await vm.loadMore() } } }
                 }
 
                 if !session.isLoggedIn {

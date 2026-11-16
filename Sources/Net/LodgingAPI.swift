@@ -67,6 +67,11 @@ extension API {
         try await list("api/v1/lodging/bookings")
     }
 
+    /// А1434: страница броней гостя (`meta.has_more`). Без meta (старый сервер) — hasMore = false.
+    func lodgingTripsPage(page: Int, perPage: Int = 50) async throws -> Page<LodgingTrip> {
+        try await self.page("api/v1/lodging/bookings", query: ["page": String(page), "per_page": String(perPage)])
+    }
+
     func lodgingCancel(bookingId: Int) async throws -> LodgingCancelResp {
         try await post("api/v1/lodging/bookings/\(bookingId)/cancel")
     }

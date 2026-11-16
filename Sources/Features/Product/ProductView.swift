@@ -1432,8 +1432,13 @@ struct ProductView: View {
 
     /// Список дней: если у слотов есть даты — берём их; иначе ближайшие 7 дней.
     private var dayList: [DayItem] {
-        let cal = Calendar.current
+        // П-81: дни записи — по поясу заведения (timezone карточки); нет — как раньше (пояс телефона).
+        var cal = Calendar.current
         let df = DateFormatter(); df.locale = Locale(identifier: "ru_RU"); df.dateFormat = "EEEEEE"
+        if let tzId = vm.detail?.timezone, !tzId.isEmpty {
+            let tz = ShopTime.zone(tzId)
+            cal.timeZone = tz; df.timeZone = tz
+        }
         let today = Date()
         return (0..<7).map { off in
             let date = cal.date(byAdding: .day, value: off, to: today) ?? today

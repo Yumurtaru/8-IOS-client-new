@@ -321,6 +321,12 @@ final class OrderDetailViewModel: ObservableObject {
         // Конвертация ReorderItem → CartLine (single-store: одна корзина = один магазин).
         // Ключ строки — с индексом и модификаторами: две строки одного товара
         // (разные добавки) раньше получали один ключ, и +/− меняли только первую.
+        // П-81 №3: qty_step сервер отдаёт в позициях заказа (orders/{id}), а /reorder его может не прислать —
+        // берём шаг из уже загруженного заказа по товару (как Android).
+        var stepByProduct: [Int: Double] = [:]
+        for oi in order?.items ?? [] {
+            if let p = oi.productId, let st = oi.qtyStep, st > 0 { stepByProduct[p] = st }
+        }
         let lines: [CartLine] = items.enumerated().compactMap { idx, it in
             guard let pid = it.productId else { return nil }
             let mods = it.modifierIds ?? []
@@ -335,6 +341,7 @@ final class OrderDetailViewModel: ObservableObject {
             line.unit = it.unit
             line.qtyFractional = it.qtyFractional
             line.qtyPresets = it.qtyPresets
+            if let st = it.qtyStep, st > 0 { line.qtyStep = st } else if let st = stepByProduct[pid] { line.qtyStep = st }
             return line
         }
         guard !lines.isEmpty else {
