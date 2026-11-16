@@ -39,6 +39,8 @@ final class ProductViewModel: ObservableObject {
     /// раньше всегда падала. Если адреса в профиле нет, остаётся nil и сервер
     /// вернёт понятное сообщение «укажите улицу и дом».
     @Published var visitAddress: VisitAddress?
+    /// Номер последнего запроса окон: поздний ответ за прежний день не перетирает выбранный.
+    private var slotsSeq = 0
 
     let mode: Mode
     let productId: Int?
@@ -90,6 +92,20 @@ final class ProductViewModel: ObservableObject {
             if s.isAtClient { visitAddress = await defaultVisitAddress() }
         }
         loading = false
+    }
+
+    /// Окна на выбранный день. Без даты сервер отдаёт только «сегодня» — раньше при выборе другого дня
+    /// показывались сегодняшние окна, и запись уходила не на тот день (Android шлёт date). nil — сегодня.
+    func loadSlots(date: String?) async {
+        guard let s = service else { return }
+        slotsSeq &+= 1
+        let my = slotsSeq
+        slots = []   // окна прежнего дня не показываем, пока грузятся новые
+        var path = "api/v1/services/\(s.id)/slots"
+        if let d = date { path += "?date=\(d)" }
+        let list: [Slot] = (try? await API.shared.list(path)) ?? []
+        guard my == slotsSeq else { return }
+        slots = list
     }
 
     /// Адрес по умолчанию из профиля -> форма адреса визита.
@@ -916,8 +932,10 @@ struct ProductView: View {
         let active = selectedDay == index
         return Button {
             Haptics.selection()
+            let changed = selectedDay != index
             selectedDay = index
             selectedSlot = nil
+            if changed { let d = dayParam(index); Task { await vm.loadSlots(date: d) } }
         } label: {
             VStack(spacing: 3) {
                 Text(day.dow)
@@ -1446,6 +1464,18 @@ struct ProductView: View {
             let num = String(cal.component(.day, from: date))
             return DayItem(dow: dow, num: num, date: date)
         }
+    }
+
+    /// Дата дня для запроса окон «ГГГГ-ММ-ДД» (в том же поясе, что и список дней); сегодня — nil (сервер берёт
+    /// «сегодня» по часам города заведения, как при первой загрузке).
+    private func dayParam(_ index: Int) -> String? {
+        let days = dayList
+        guard index > 0, days.indices.contains(index) else { return nil }
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.dateFormat = "yyyy-MM-dd"
+        if let tzId = vm.detail?.timezone, !tzId.isEmpty { df.timeZone = ShopTime.zone(tzId) }
+        return df.string(from: days[index].date)
     }
 
     /// Слоты выбранного дня. Slot.timeStart может нести дату/время; при отсутствии

@@ -108,7 +108,8 @@ final class AppUpdateStore: ObservableObject {
 
     /// Открыть страницу приложения в App Store.
     static func openStore(_ url: String) {
-        guard let u = URL(string: url) else { return }
+        // Только http/https: ссылку отдаёт сервер, чужую схему не открываем.
+        guard let u = URL(string: url), let sc = u.scheme?.lowercased(), sc == "https" || sc == "http" else { return }
         UIApplication.shared.open(u)
     }
 }

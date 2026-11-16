@@ -250,7 +250,7 @@ struct PlusView: View {
                 let r: PayOnlineResp = try await API.shared.post("api/v1/plus/subscribe")
                 payAgainAllowed = false
                 setPending(r.paymentId)
-                if let link = r.confirmationUrl, let url = URL(string: link) {
+                if let link = r.confirmationUrl, let url = URL(string: link), url.scheme?.lowercased() == "https" || url.scheme?.lowercased() == "http" {
                     Haptics.light()
                     openURL(url)
                 } else {
