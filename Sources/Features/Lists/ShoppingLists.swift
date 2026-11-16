@@ -83,18 +83,36 @@ enum ListsLogic {
         return ShoppingListCreateBody(shopId: shopId, name: name, items: items)
     }
 
-    /// Позиции списка → строки корзины (цену пересчитает сервер при оформлении).
+    /// Цена позиции на экране: с добавками (unitPrice), иначе price.
+    static func displayPrice(_ i: ShoppingListItem) -> Decimal { i.unitPrice ?? i.price ?? 0 }
+
+    /// Подпись добавок под названием (нет — nil).
+    static func modsLabelOf(_ i: ShoppingListItem) -> String? {
+        let t = (i.modifiersLabel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
+    }
+
+    /// Позиции списка → строки корзины (как «Повторить»): цена — unitPrice (нет — price), подпись — modifiersLabel,
+    /// id добавок — ТОЛЬКО из modifiers, если он прислан; иначе (старый сервер) — modifierIds.
+    /// Ключ — «товар-добавки» (как у обычной строки корзины), чтобы повторное добавление суммировалось.
     static func cartLines(_ items: [ShoppingListItem]) -> [CartLine] {
         var out: [CartLine] = []
         for l in items {
             guard let pid = l.productId, pid > 0 else { continue }
-            let mods = l.modifierIds ?? []
+            let mods: [Int]
+            var label = modsLabelOf(l) ?? ""
+            if let sent = l.modifiers {
+                mods = sent.compactMap { $0.id }.filter { $0 > 0 }
+                if label.isEmpty { label = sent.compactMap { $0.name }.joined(separator: ", ") }
+            } else {
+                mods = l.modifierIds ?? []
+            }
             let key = "\(pid)-" + mods.sorted().map(String.init).joined(separator: ",")
             var line = CartLine(key: key, productId: pid,
                                 name: (l.name ?? "").isEmpty ? "Товар" : (l.name ?? "Товар"),
-                                unitPrice: l.price ?? 0,
+                                unitPrice: displayPrice(l),
                                 qty: (l.qty ?? 0) > 0 ? (l.qty ?? 1) : 1,
-                                modifierIds: mods, modsLabel: "", photo: l.photo)
+                                modifierIds: mods, modsLabel: label, photo: l.photo)
             line.unit = l.unit
             line.qtyFractional = l.qtyFractional
             if let st = l.qtyStep, st > 0 { line.qtyStep = st }
@@ -716,10 +734,13 @@ struct ShoppingListView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text((it.name ?? "").isEmpty ? "Товар" : (it.name ?? "Товар"))
                     .ymText(YMText.cardTitle).foregroundStyle(YMUi.text).lineLimit(2)
+                if let lbl = ListsLogic.modsLabelOf(it) {
+                    Text(lbl).ymText(YMText.caption).foregroundStyle(YMUi.textSecondary).lineLimit(2)
+                }
                 if it.available == false {
                     Text("Нет в наличии").ymText(YMText.caption).foregroundStyle(YMColor.statusCancel)
                 } else {
-                    Text(Money.format(it.price ?? 0)).ymText(YMText.cardPrice).foregroundStyle(YMUi.text)
+                    Text(Money.format(ListsLogic.displayPrice(it))).ymText(YMText.cardPrice).foregroundStyle(YMUi.text)
                 }
                 HStack(spacing: 10) {
                     stepButton("minus", label: "Меньше") { vm.push(ListsLogic.changeQty(vm.items, key: key, dir: -1)) }

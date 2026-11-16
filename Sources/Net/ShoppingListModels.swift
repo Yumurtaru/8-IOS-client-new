@@ -40,7 +40,15 @@ struct ShoppingListSummary: Decodable, Identifiable, Hashable {
     let updatedAt: String?
 }
 
+/// Добавка позиции (items[].modifiers, с 16.11): только заказываемые сейчас; price — "0.00".
+struct ShoppingListModifier: Codable, Hashable {
+    @LenientInt var id: Int?
+    let name: String?
+    @LenientDecimal var price: Decimal?
+}
+
 /// Позиция списка. price — "0.00" (сейчас), qty — "0.000".
+/// unitPrice / modifiers / modifiersLabel — с 16.11; старый сервер их не шлёт (nil).
 struct ShoppingListItem: Codable, Hashable {
     @LenientInt var productId: Int?
     let name: String?
@@ -52,6 +60,9 @@ struct ShoppingListItem: Codable, Hashable {
     let unit: String?
     @LenientBool var qtyFractional: Bool?
     @LenientDouble var qtyStep: Double?
+    @LenientDecimal var unitPrice: Decimal?
+    @LossyList var modifiers: [ShoppingListModifier]?
+    let modifiersLabel: String?
 }
 
 /// Карточка списка: ответ GET /{id}, POST, PUT, from-order.
