@@ -36,9 +36,10 @@ struct ProductVideo: Decodable {
     @LenientInt var durationSec: Int?
 }
 
-/// GET api/v1/shops/{id}/delivery-zones. Имя зоны сервер клиенту не отдаёт.
+/// GET api/v1/shops/{id}/delivery-zones. name (П-83.15) — название зоны; нет — подпись «Зона N».
 struct DeliveryZoneGeo: Decodable {
     @LenientInt var id: Int?
+    let name: String?
     @LenientDecimal var deliveryPrice: Decimal?
     @LenientDecimal var minOrder: Decimal?
     @LenientDecimal var freeFrom: Decimal?
@@ -104,6 +105,8 @@ struct PlaceZoneShape {
     let stroke: UIColor
     let opacity: Double
     let label: String
+    /// Название зоны от сервера (П-83.15); пусто — подпись «Зона N».
+    var name: String = ""
 }
 
 enum PlaceGeo {
@@ -158,7 +161,8 @@ enum PlaceGeo {
             return PlaceZoneShape(rings: rings,
                                   fill: color(z.fillColor, fallback: 0x3B82F6),
                                   stroke: color(z.strokeColor, fallback: 0x1D4ED8),
-                                  opacity: min(max(op, 0.1), 0.6), label: label(z))
+                                  opacity: min(max(op, 0.1), 0.6), label: label(z),
+                                  name: (z.name ?? "").trimmingCharacters(in: .whitespaces))
         }
     }
 
@@ -267,8 +271,14 @@ struct PlaceFlow: Layout {
 // MARK: - Блок на экране заведения
 
 private enum PlaceSheet: Identifiable {
-    case zones, reserve
-    var id: Int { self == .zones ? 1 : 2 }
+    case zones, reserve, mine
+    var id: Int {
+        switch self {
+        case .zones: return 1
+        case .reserve: return 2
+        case .mine: return 3
+        }
+    }
 }
 
 /// «Зона доставки» и «Забронировать столик». Свой единственный .sheet(item:) — с листами OrgView не конфликтует.
@@ -312,7 +322,12 @@ struct OrgPlaceBlock: View {
             case .zones:
                 PlaceZonesSheet(zones: zones, pin: pin, onClose: { sheet = nil })
             case .reserve:
-                ReserveTableView(slug: slug, timezone: detail?.timezone, onClose: { sheet = nil })
+                ReserveTableView(slug: slug, timezone: detail?.timezone, onClose: { sheet = nil },
+                                 onOpenMine: { sheet = .mine })
+            case .mine:
+                // П-83.15: «Мои брони» поверх заведения; свой NavigationView, чтобы открыть заведение из брони.
+                NavigationView { MyReservationsView(onClose: { sheet = nil }) }
+                    .navigationViewStyle(.stack)
             }
         }
     }
@@ -367,6 +382,7 @@ private struct PlaceZonesSheet: View {
 
     private func zoneText(_ i: Int, _ z: PlaceZoneShape) -> String {
         let t = z.label.isEmpty ? "условия уточняйте у заведения" : z.label
+        if !z.name.isEmpty { return z.name + ": " + t }
         return zones.count > 1 ? "Зона \(i + 1): " + t : t.prefix(1).uppercased() + t.dropFirst()
     }
 }
@@ -382,6 +398,8 @@ private struct ReserveTableView: View {
     let slug: String
     let timezone: String?
     let onClose: () -> Void
+    /// После успешной брони: «Мои брони» (только вошедшему).
+    var onOpenMine: () -> Void = {}
 
     @State private var days: [PlaceDay] = []
     @State private var date = ""
@@ -529,8 +547,15 @@ private struct ReserveTableView: View {
                     .buttonStyle(YMPrimaryButtonStyle())
             }
         }
-        Button { onClose() } label: { Text("Готово") }
-            .buttonStyle(YMPrimaryButtonStyle())
+        if Session.shared.isLoggedIn {
+            Button { onOpenMine() } label: { Text("Мои брони") }
+                .buttonStyle(YMPrimaryButtonStyle())
+            Button { onClose() } label: { Text("Готово") }
+                .buttonStyle(YMSecondaryButtonStyle())
+        } else {
+            Button { onClose() } label: { Text("Готово") }
+                .buttonStyle(YMPrimaryButtonStyle())
+        }
     }
 
     private func summary(_ ok: ReservationResp) -> String {
@@ -636,11 +661,18 @@ private struct ReserveTableView: View {
             comment: comment.trimmingCharacters(in: .whitespaces).isEmpty ? nil : comment.trimmingCharacters(in: .whitespaces),
             tableId: table)
         do {
-            let r: ReservationResp = try await API.shared.post("api/public/reservations", body: req)
+            // П-83.15: Idempotency-Key — ключ привязан к пути и телу запроса: повтор после обрыва уходит
+            // тем же ключом, изменили дату/время/гостей/стол — тело другое, ключ новый.
+            let r: ReservationResp = try await API.shared.post("api/public/reservations", body: req, retryKey: true)
             Haptics.success()
             done = r
         } catch {
-            self.error = error.userMessage ?? "Не удалось забронировать"
+            if (error as? APIError)?.idempotencyCode == "idempotency_key_reused" {
+                API.shared.forgetRetryKey("api/public/reservations", body: req)
+                self.error = "Данные изменились после прерванной отправки — нажмите ещё раз"
+            } else {
+                self.error = error.userMessage ?? "Не удалось забронировать"
+            }
             reload += 1   // занято / время ушло — обновим доступность
         }
     }

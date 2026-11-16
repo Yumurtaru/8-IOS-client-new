@@ -9,7 +9,7 @@ import Foundation
 enum RealtimeFrame: Equatable {
     case connected(pingSec: Int)
     case disconnect(code: Int, terminal: Bool)
-    case pub(channel: String, orderId: Int)
+    case pub(channel: String, orderId: Int, chat: Bool)
     case other
 }
 
@@ -40,7 +40,8 @@ enum RealtimeLogic {
                 out.append(.disconnect(code: code, terminal: isTerminal(code)))
             } else if let ch = o["channel"] as? String, let pub = o["pub"] as? [String: Any] {
                 let body = pub["data"] as? [String: Any]
-                out.append(.pub(channel: ch, orderId: num(body?["order_id"])))
+                // chat — событие chat_message: в чат пришло сообщение (текста нет, чат надо перечитать).
+                out.append(.pub(channel: ch, orderId: num(body?["order_id"]), chat: (body?["type"] as? String) == "chat_message"))
             } else {
                 out.append(.other)
             }
@@ -76,7 +77,8 @@ enum OrderRealtime {
     /// Работает, пока задача не отменена (уход с экрана / в фон). onLive(true) — соединение
     /// установлено (опрос можно делать реже); onEvent — событие по заказу либо связь
     /// восстановилась после обрыва. Колбэки вызываются на главном потоке.
-    static func watch(orderId: Int, onLive: @escaping @MainActor (Bool) -> Void, onEvent: @escaping @MainActor () -> Void) async {
+    static func watch(orderId: Int, onLive: @escaping @MainActor (Bool) -> Void, onEvent: @escaping @MainActor () -> Void,
+                      onChat: (@MainActor () -> Void)? = nil) async {
         guard orderId > 0 else { return }
         var attempt = 0
         var everLive = false
@@ -91,7 +93,7 @@ enum OrderRealtime {
                 attempt += 1
                 if await pause(RealtimeLogic.backoff(attempt, jitter: 0.7 + Double.random(in: 0...0.6))) { return }
             case .ok(let url, let token):
-                let r = await runSocket(url: url, token: token, orderId: orderId, resync: everLive, onLive: onLive, onEvent: onEvent)
+                let r = await runSocket(url: url, token: token, orderId: orderId, resync: everLive, onLive: onLive, onEvent: onEvent, onChat: onChat)
                 await MainActor.run { onLive(false) }
                 if r != .neverLive { everLive = true }
                 if Task.isCancelled { return }
@@ -131,7 +133,8 @@ enum OrderRealtime {
 
     private static func runSocket(url: URL, token: String, orderId: Int, resync: Bool,
                                   onLive: @escaping @MainActor (Bool) -> Void,
-                                  onEvent: @escaping @MainActor () -> Void) async -> Outcome {
+                                  onEvent: @escaping @MainActor () -> Void,
+                                  onChat: (@MainActor () -> Void)?) async -> Outcome {
         let ws = URLSession.shared.webSocketTask(with: url)
         ws.resume()
         let helloData = try? JSONSerialization.data(withJSONObject: ["token": token, "name": "ios"])
@@ -174,8 +177,12 @@ enum OrderRealtime {
                         case .disconnect(_, let terminal):
                             ws.cancel(with: .normalClosure, reason: nil)
                             return terminal ? .terminal : (live ? .wasLive : .neverLive)
-                        case .pub(_, let oid):
-                            if oid == orderId { await MainActor.run { onEvent() } }
+                        case .pub(_, let oid, let isChat):
+                            // chat_message: чату — перечитать ленту; экрану заказа (onChat не задан) — ничего лишнего.
+                            if oid == orderId {
+                                if isChat { if let onChat { await MainActor.run { onChat() } } }
+                                else { await MainActor.run { onEvent() } }
+                            }
                         case .other:
                             break
                         }

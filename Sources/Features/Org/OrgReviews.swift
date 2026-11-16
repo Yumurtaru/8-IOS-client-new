@@ -25,6 +25,8 @@ struct OrgReviewsSection: View {
     let reviewsCount: Int?
     /// «Повторить» после сбоя загрузки. nil — кнопки нет (как раньше).
     var onRetry: (() -> Void)? = nil
+    /// П-83 п.12: ИИ-сводка отзывов; nil — карточки нет.
+    var summary: ReviewsSummary? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -60,6 +62,24 @@ struct OrgReviewsSection: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            if let s = summary, let t = s.text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(t)
+                        .ymFont(15)
+                        .foregroundStyle(YMColor.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let n = s.basedOn, n > 0 {
+                        Text("Сводка составлена ИИ по \(n) отзывам")
+                            .font(YMFont.caption)
+                            .foregroundStyle(YMColor.muted)
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(YMColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(YMColor.hairline, lineWidth: 1))
+            }
 
             // Краткое превью: первые 2 отзыва (или состояние загрузки/пусто).
             Group {

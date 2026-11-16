@@ -501,6 +501,8 @@ struct OrderDetailView: View {
                     timelineCard(o)
                     // А63: комментарий клиента к записи на услугу.
                     if let note = clientNote(o) { clientNoteCard(note) }
+                    // П-83 пп. 7, 9: «Оставить у двери», получатель, фото доставки.
+                    OrderDoorInfoCard(order: o)
                     if canPay(o) { payCard(o) }          // онлайн-оплата (неоплаченный online-заказ)
                     // П-72 п.4: «Нет в наличии… Замена…» — принять / отказаться.
                     OrderSubstitutionsSection(order: o, orderId: id, onChanged: { await vm.reload() })
@@ -1268,6 +1270,8 @@ struct OrderDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(vm.reorderInFlight)
+                // Списки покупок: у выполненного заказа — «Сохранить как список» рядом с «Повторить».
+                if (o.status ?? "").lowercased() == "done" { SaveOrderAsListButton(orderId: id) }
             }
 
             if lodgingCancelHint(o) {

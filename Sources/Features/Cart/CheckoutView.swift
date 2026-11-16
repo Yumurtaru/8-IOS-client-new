@@ -89,13 +89,18 @@ private struct OrderBody: Codable {
     var substitutionDefault: String? = nil
     /// П-83: чаевые курьеру строкой с двумя знаками («150.00»); nil — без чаевых (поля нет).
     var tip: String? = nil
+    /// П-83 пп. 7, 9: «оставить у двери» (только true) и получатель (имя ≤100, телефон +7XXXXXXXXXX). nil — поля нет.
+    var leaveAtDoor: Bool? = nil
+    var recipientName: String? = nil
+    var recipientPhone: String? = nil
     enum CodingKeys: String, CodingKey {
         case shopId = "shop_id", items, deliveryType = "delivery_type", paymentType = "payment_type",
              address, comment, deliveryPrice = "delivery_price", lat, lng,
              spendPointsAll = "spend_points_all", idempotencyKey = "idempotency_key",
              tableNumber = "table_number", promoCode = "promo_code", preorderAt = "preorder_at",
              changeFrom = "change_from", expectedSubtotal = "expected_subtotal",
-             substitutionDefault = "substitution_default", tip
+             substitutionDefault = "substitution_default", tip,
+             leaveAtDoor = "leave_at_door", recipientName = "recipient_name", recipientPhone = "recipient_phone"
     }
 }
 /// Ответ POST api/v1/promo/check.
@@ -281,6 +286,10 @@ struct CheckoutView: View {
     @State private var itemSubst: [String: String] = [:]
     @State private var tipChoice = "0"
     @State private var tipCustom = ""
+    // П-83 пп. 7, 9: «оставить у двери» и получатель (только доставка).
+    @State private var leaveAtDoor = false
+    @State private var recipientName = ""
+    @State private var recipientPhone = ""
     /// Поле ввода в фокусе (клавиатура открыта): тогда нижняя панель сжимается
     /// до «Готово», чтобы не закрывать поле над клавиатурой.
     private enum Field: Hashable { case table, promo, comment, change }
@@ -343,6 +352,7 @@ struct CheckoutView: View {
     private var tipParsed: Decimal? { TipLogic.amount(choice: tipChoice, custom: tipCustom) }
     private var tipInvalid: Bool { tipShown && tipParsed == nil }
     private var tipAmount: Decimal { tipShown ? (tipParsed ?? 0) : 0 }
+    private var recipientInvalid: Bool { tipShown && !DoorLogic.phoneValid(recipientPhone) }
     private var grandTotal: Decimal {
         max(0, subtotal + effectiveDelivery + serviceFee + tipAmount - promoDiscount - codeOff - pointsSpent)
     }
@@ -547,7 +557,7 @@ struct CheckoutView: View {
     private var ctaEnabled: Bool {
         // Заведение закрыто — заказ уходит предзаказом (preorder_at); без
         // выбранного времени сервер откажет, поэтому кнопка ждёт выбора.
-        !placing && !tipInvalid && !cart.isEmpty && !shopPaused && !outOfZone && !noAddress && !belowMin && !quoteMissing
+        !placing && !tipInvalid && !recipientInvalid && !cart.isEmpty && !shopPaused && !outOfZone && !noAddress && !belowMin && !quoteMissing
             && (!needTime || preorderValid)
             && (cart.shopSlug == nil || shop != nil) && !promoPending
             && !fulfillmentNone && !paymentNone && !tableMissing
@@ -826,6 +836,8 @@ struct CheckoutView: View {
                     if fulfillment == .delivery {
                         SectionKicker("Чаевые курьеру").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.sm)
                         TipPickerBlock(choice: $tipChoice, custom: $tipCustom, invalid: tipInvalid)
+                        DoorRecipientBlock(leave: $leaveAtDoor, name: $recipientName, phone: $recipientPhone, phoneInvalid: recipientInvalid)
+                            .padding(.top, YMSpace.sm)
                     }
                 }
 
@@ -1537,6 +1549,7 @@ struct CheckoutView: View {
                     SubstitutionPickerBlock()
                     if fulfillment == .delivery {
                         TipPickerBlock(choice: $tipChoice, custom: $tipCustom, invalid: tipInvalid)
+                        DoorRecipientBlock(leave: $leaveAtDoor, name: $recipientName, phone: $recipientPhone, phoneInvalid: recipientInvalid)
                     }
                 }
 
@@ -1814,7 +1827,10 @@ struct CheckoutView: View {
             changeFrom: payment == .cash && !changeDigits.isEmpty ? changeDigits : nil,
             expectedSubtotal: expectedSubtotalWire,
             substitutionDefault: shop?.mode != "service" ? SubstitutionPickerBlock.current : nil,
-            tip: tipShown ? TipLogic.wire(tipAmount) : nil
+            tip: tipShown ? TipLogic.wire(tipAmount) : nil,
+            leaveAtDoor: (tipShown && leaveAtDoor) ? true : nil,
+            recipientName: tipShown ? DoorLogic.nameWire(recipientName) : nil,
+            recipientPhone: tipShown ? DoorLogic.phoneWire(recipientPhone) : nil
         )
         // П-72 п.3: повтор неотвеченного оформления общего заказа уйдёт на тот же адрес.
         if let gc = groupCode { GroupCheckoutMemo.set(gc, for: body.idempotencyKey) }
@@ -1832,6 +1848,7 @@ struct CheckoutView: View {
         if let c = appliedCode { summary.append("Промокод: " + c) }
         if spendPoints { summary.append("Часть оплатить баллами") }
         if tipShown, tipAmount > 0 { summary.append("Чаевые курьеру: " + Money.format(tipAmount)) }
+        if tipShown { summary.append(contentsOf: DoorLogic.summary(leave: leaveAtDoor, name: recipientName, phone: recipientPhone)) }
         if !trimmed.isEmpty { summary.append("Комментарий: " + trimmed) }
         cart.beginOrder(PendingOrder(
             body: data, key: body.idempotencyKey, lines: cart.lines, shopName: cart.shopName,

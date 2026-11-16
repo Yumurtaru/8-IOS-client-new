@@ -642,7 +642,8 @@ struct OrgView: View {
                 avgRating: rating,
                 reviewsCount: vm.detail?.reviewsCount ?? vm.seed?.reviewsCount,
                 // Отзывы не загрузились — повтор прямо здесь.
-                onRetry: { Task { await vm.loadReviews() } }
+                onRetry: { Task { await vm.loadReviews() } },
+                summary: vm.detail?.reviewsSummary
             )
             .padding(.top, 20)
 
@@ -763,6 +764,10 @@ struct OrgView: View {
     private var menuSection: some View {
         ScrollViewReader { subProxy in
         VStack(alignment: .leading, spacing: 0) {
+            // «Купить снова» по этому заведению — над меню (гостю и без данных — ничего).
+            if let sid = vm.detail?.id {
+                BuyAgainShelf(shopId: sid, canQuickAdd: isOpen && !isPaused && !Cart.shared.checkLocked()) { openProduct($0) }
+            }
             // Быстрые подборки (этап 12): только признаки, реально есть в меню.
             QuickPicksRow(products: vm.products, active: $activePick) { p in
                 ProductTile(

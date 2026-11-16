@@ -318,18 +318,60 @@ private final class ChatThreadViewModel: ObservableObject {
         return true
     }
 
+    private var pollTick = 0
+
     func startPolling() {
         pollTimer?.invalidate()
+        startRealtime()
         pollTimer = Timer.scheduledTimer(withTimeInterval: 6, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 // На медленной сети запрос (с повторами) длится дольше 6 с: раньше
                 // каждый тик ставил ещё один, и они копились десятками.
                 guard let self, !self.fetching else { return }
+                // Живое соединение: новые сообщения приходят событием, опрос — запасной, раз в 30 с.
+                self.pollTick += 1
+                if self.rtLive && self.pollTick % 5 != 0 { return }
                 await self.fetchNew()
             }
         }
     }
-    func stopPolling() { pollTimer?.invalidate(); pollTimer = nil }
+    func stopPolling() { pollTimer?.invalidate(); pollTimer = nil; stopRealtime() }
+
+    // MARK: Мгновенные сообщения (Net/OrderRealtime.swift, событие chat_message в канале заказа)
+    private var rtTask: Task<Void, Never>?
+    private var rtLive = false
+    private var rtEventTask: Task<Void, Never>?
+
+    private func startRealtime() {
+        guard rtTask == nil else { return }
+        let oid = orderId
+        rtTask = Task { [weak self] in
+            await OrderRealtime.watch(orderId: oid, onLive: { live in
+                self?.rtLive = live
+            }, onEvent: {
+                self?.rtReload()
+            }, onChat: {
+                self?.rtReload()
+            })
+            if !Task.isCancelled { self?.rtTask = nil; self?.rtLive = false }
+        }
+    }
+
+    /// Событие (или восстановление связи): перечитать ленту; несколько подряд — одно перечитывание.
+    private func rtReload() {
+        rtEventTask?.cancel()
+        rtEventTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if Task.isCancelled { return }
+            await self?.fetchNew()
+        }
+    }
+
+    private func stopRealtime() {
+        rtTask?.cancel(); rtTask = nil
+        rtEventTask?.cancel(); rtEventTask = nil
+        rtLive = false
+    }
 
     /// true — отправлено. Раньше ошибка (сеть, лимит, 404) глушилась try?,
     /// а текст уже был стёрт из поля — сообщение пропадало без следа.

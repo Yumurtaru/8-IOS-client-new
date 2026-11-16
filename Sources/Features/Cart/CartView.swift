@@ -239,6 +239,12 @@ struct CartView: View {
                     totalsCard
                         .padding(.top, YMSpace.lg)
 
+                    // Списки покупок: текущая корзина → «Мои списки покупок».
+                    if cart.pendingOrder == nil {
+                        SaveCartAsListButton()
+                            .padding(.top, YMSpace.md)
+                    }
+
                     Color.clear.frame(height: YMSpace.lg)
                 }
                 .ymReadableWidth()
@@ -502,6 +508,7 @@ struct CartView: View {
                     }
 
                     CartV2Totals(count: cart.count, total: cart.total, fee: serviceFee)
+                    if cart.pendingOrder == nil { SaveCartAsListButton() }
                     Color.clear.frame(height: YMSpace.lg)
                 }
                 .ymReadableWidth()

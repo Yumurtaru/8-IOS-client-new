@@ -73,19 +73,45 @@ private struct SearchSmartResult: Decodable {
 private struct SearchSuggestReply: Decodable {
     let suggestions: [String]
     let popular: [String]
+    /// П-83: куда ведёт подсказка (ключ — текст в нижнем регистре). Пусто — старый сервер: тап кладёт текст в поиск.
+    let targets: [String: SuggestTarget]
     enum CodingKeys: String, CodingKey { case suggestions, popular }
     private struct Item: Decodable {
         let text: String?
-        enum CodingKeys: String, CodingKey { case text }
+        let type: String?
+        let id: Int?
+        let slug: String?
+        enum CodingKeys: String, CodingKey { case text, type, id, slug }
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
             text = ((try? c.decodeIfPresent(String.self, forKey: .text)) ?? nil)
+            type = ((try? c.decodeIfPresent(String.self, forKey: .type)) ?? nil)
+            id = (try? c.decode(LenientInt.self, forKey: .id))?.wrappedValue
+            slug = ((try? c.decodeIfPresent(String.self, forKey: .slug)) ?? nil)
+        }
+        var target: SuggestTarget? {
+            switch (type ?? "").trimmingCharacters(in: .whitespaces).lowercased() {
+            case "product":
+                if let i = id, i > 0 { return .product(i) }
+                return nil
+            case "organization":
+                let s = (slug ?? "").trimmingCharacters(in: .whitespaces)
+                return s.isEmpty ? nil : .org(s)
+            default: return nil
+            }
         }
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let items = ((try? c.decodeIfPresent([Item].self, forKey: .suggestions)) ?? nil) ?? []
         suggestions = SearchSuggestReply.clean(items.compactMap { $0.text }, limit: 8)
+        var tg: [String: SuggestTarget] = [:]
+        for it in items {
+            let key = (it.text ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+            if key.isEmpty { continue }
+            if tg[key] == nil, let t = it.target { tg[key] = t }
+        }
+        targets = tg
         let pop = ((try? c.decodeIfPresent([String].self, forKey: .popular)) ?? nil) ?? []
         popular = SearchSuggestReply.clean(pop, limit: 8)
     }
@@ -151,8 +177,15 @@ private struct SearchFacetPrice: Codable, Hashable {
 /// соответствовать реальной глубине стека: после «назад» в нём остаётся запись,
 /// и следующая перерисовка открывает прошлый экран заново. Пока ВСЕ экраны
 /// приложения не переведены на один общий маршрут, один флаг честнее path.
+/// Куда ведёт подсказка поиска типа product / organization (П-83: id и slug в suggestions[]).
+private enum SuggestTarget: Hashable {
+    case product(Int)
+    case org(String)
+}
+
 private enum DiscoverRoute: Hashable {
     case shop(Shop)
+    case orgSlug(String)
     case product(Int)
     case listing(orgType: String, title: String, categoryId: Int?)
 }
@@ -185,6 +218,7 @@ private struct SearchSection: View {
     @State private var recent: [RecentProduct] = []
     /// Подсказки сервера (/search/suggest) к набранному тексту и «Популярное» города.
     @State private var serverSuggest: [String] = []
+    @State private var serverTargets: [String: SuggestTarget] = [:]
     @State private var serverPopular: [String] = []
     @State private var suggestTask: Task<Void, Never>?
 
@@ -282,6 +316,7 @@ private struct SearchSection: View {
             )) {
                 switch route {
                 case .shop(let s):     OrgView(shop: s)
+                case .orgSlug(let slug): OrgView(shopSlug: slug)
                 case .product(let id): ProductView(id: id)
                 default:               EmptyView()
                 }
@@ -409,7 +444,16 @@ private struct SearchSection: View {
             sectionKicker("Подсказки")
             ForEach(suggestions, id: \.self) { s in
                 Button {
-                    q = s; focused = false; recordHistory()
+                    // П-83: подсказка товара/заведения открывает карточку; без id/slug — текст в поиск, как раньше.
+                    if let t = serverTargets[s.trimmingCharacters(in: .whitespaces).lowercased()] {
+                        focused = false; recordHistory()
+                        switch t {
+                        case .product(let pid): go(.product(pid))
+                        case .org(let slug):    go(.orgSlug(slug))
+                        }
+                    } else {
+                        q = s; focused = false; recordHistory()
+                    }
                 } label: {
                     HStack(spacing: YMSpace.md) {
                         Image(systemName: "magnifyingglass")
@@ -712,7 +756,7 @@ private struct SearchSection: View {
         searchTask?.cancel()
         suggestTask?.cancel()
         let query = trimmed
-        guard query.count >= 2 else { searchedKey = ""; serverSuggest = []; clearResults(); return }
+        guard query.count >= 2 else { searchedKey = ""; serverSuggest = []; serverTargets = [:]; clearResults(); return }
         searchedKey = query
         suggestTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000)
@@ -761,6 +805,7 @@ private struct SearchSection: View {
         guard let r: SearchSuggestReply = try? await API.shared.get("api/v1/search/suggest", query: params) else { return }
         if Task.isCancelled || query != trimmed { return }
         serverSuggest = r.suggestions
+        serverTargets = r.targets
     }
 
     /// «Популярное» при пустом поле: q не передаём — сервер отдаёт только списки запросов.

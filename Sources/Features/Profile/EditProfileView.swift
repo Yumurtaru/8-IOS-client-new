@@ -28,6 +28,38 @@ private struct EditProfileBody: Encodable {
 /// password — А114: ТЕКУЩИЙ пароль верхнего уровня, только при неживой почте
 /// (email_problem): код на неё не дойдёт, и смену почты сервер подтверждает
 /// паролем и кодом на НОВЫЙ адрес. nil — в JSON не попадает.
+/// П-83 п.13: день рождения уходит отдельным PUT {birthday: "YYYY-MM-DD"}.
+private struct BirthdayBody: Encodable { let birthday: String }
+
+/// Чистая логика даты рождения (строки "YYYY-MM-DD").
+enum BirthdayLogic {
+    private static let fmt: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.timeZone = TimeZone.current
+        f.dateFormat = "yyyy-MM-dd"
+        return f
+    }()
+    static func string(_ d: Date) -> String { fmt.string(from: d) }
+    static func date(_ s: String?) -> Date? {
+        guard let t = s?.trimmingCharacters(in: .whitespaces), t.count >= 10 else { return nil }
+        return fmt.date(from: String(t.prefix(10)))
+    }
+    /// Самая ранняя допустимая дата: сегодня минус 120 лет.
+    static var minDate: Date { Calendar.current.date(byAdding: .year, value: -120, to: Date()) ?? Date.distantPast }
+    /// Поле только для чтения: дата смены в будущем.
+    static func locked(_ changeableAt: String?) -> Bool {
+        guard let d = date(changeableAt) else { return false }
+        return string(d) > string(Date())
+    }
+    /// "2000-05-17" -> "17.05.2000".
+    static func display(_ s: String?) -> String {
+        guard let d = date(s) else { return "" }
+        let p = string(d).split(separator: "-")
+        return p.count == 3 ? "\(p[2]).\(p[1]).\(p[0])" : ""
+    }
+}
+
 private struct ChangeRequestBody: Encodable {
     let changes: [String: String]
     let method: String
@@ -67,6 +99,12 @@ struct EditProfileView: View {
     @State private var origName = ""
     @State private var origEmail = ""
     @State private var origPhone = ""
+    // П-83 п.13: день рождения. birthday — выбранная дата (nil — не задана).
+    @State private var birthday: Date?
+    @State private var origBirthday: String = ""
+    @State private var birthdayChangeableAt: String?
+    @State private var showBirthdayPicker = false
+    @State private var birthdayDraft = Date()
     // Поток подтверждения.
     @State private var showCodeSheet = false
     @State private var showSupportSheet = false
@@ -167,6 +205,8 @@ struct EditProfileView: View {
                             .font(YMFont.caption).foregroundStyle(YMColor.statusCancel)
                             .padding(.top, -8).padding(.leading, 4)
                     }
+
+                    birthdayBlock
 
                     passwordField
 
@@ -292,6 +332,66 @@ struct EditProfileView: View {
         }
     }
 
+    // ── День рождения (П-83 п.13) ──
+    private var birthdayLocked: Bool { BirthdayLogic.locked(birthdayChangeableAt) }
+    private var birthdayString: String { birthday.map { BirthdayLogic.string($0) } ?? "" }
+    private var birthdayChanged: Bool { !birthdayLocked && !birthdayString.isEmpty && birthdayString != origBirthday }
+
+    private var birthdayBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("День рождения")
+                .ymFont(13, weight: .heavy).foregroundStyle(YMColor.muted)
+            Button {
+                birthdayDraft = birthday ?? (Calendar.current.date(byAdding: .year, value: -25, to: Date()) ?? Date())
+                showBirthdayPicker = true
+            } label: {
+                let shown = BirthdayLogic.display(birthdayString)
+                Text(shown.isEmpty ? "Выберите дату" : shown)
+                    .ymFont(15)
+                    .foregroundStyle(birthdayLocked || shown.isEmpty ? YMColor.muted : YMColor.text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14).padding(.vertical, 14)
+                    .background(YMColor.surface2, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(birthdayLocked)
+            if birthdayLocked {
+                Text("Изменить можно с \(BirthdayLogic.display(birthdayChangeableAt))")
+                    .font(YMFont.caption).foregroundStyle(YMColor.muted)
+            } else {
+                Text("Заведения дарят подарки в день рождения — укажите дату заранее, минимум за 30 дней")
+                    .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .sheet(isPresented: $showBirthdayPicker) { birthdaySheet }
+    }
+
+    private var birthdaySheet: some View {
+        NavigationView {
+            VStack {
+                DatePicker("", selection: $birthdayDraft,
+                           in: BirthdayLogic.minDate...Date(), displayedComponents: .date)
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    .environment(\.locale, Locale(identifier: "ru_RU"))
+                Spacer()
+            }
+            .padding(YMSpace.xl)
+            .background(YMColor.bg.ignoresSafeArea())
+            .navigationTitle("День рождения")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Отмена") { showBirthdayPicker = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Готово") { birthday = birthdayDraft; showBirthdayPicker = false }
+                }
+            }
+        }
+    }
+
     // ── Новый пароль (опционально) ──
     private var passwordField: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -379,6 +479,9 @@ struct EditProfileView: View {
             await MainActor.run {
                 name = p.name ?? ""; email = p.email ?? ""; phone = p.phone ?? ""
                 origName = name; origEmail = email; origPhone = phone
+                origBirthday = BirthdayLogic.date(p.birthday).map { BirthdayLogic.string($0) } ?? ""
+                birthday = BirthdayLogic.date(p.birthday)
+                birthdayChangeableAt = p.birthdayChangeableAt
                 emailVerified = p.emailVerified
                 emailProblem = p.emailProblem
                 loading = false
@@ -415,8 +518,39 @@ struct EditProfileView: View {
         guard canSave else { return }
         saveError = nil
         let m = buildChanges()
-        if m.isEmpty { saveError = "Нет изменений"; return }
+        if m.isEmpty && !birthdayChanged { saveError = "Нет изменений"; return }
         let sensitive = m["email"] != nil || m["phone"] != nil || m["password"] != nil
+        if birthdayChanged {
+            // День рождения уходит отдельным запросом; ошибку сервера («раз в год» и т. п.) показываем как есть.
+            saving = true
+            let bd = birthdayString
+            Task {
+                do {
+                    try await API.shared.putVoid("api/v1/profile", body: BirthdayBody(birthday: bd))
+                } catch {
+                    await MainActor.run {
+                        Haptics.error()
+                        saveError = (error as? APIError)?.errorDescription ?? "Не удалось сохранить дату рождения"
+                        saving = false
+                    }
+                    return
+                }
+                let fresh: Profile? = try? await API.shared.get("api/v1/profile", fresh: true)
+                await MainActor.run {
+                    origBirthday = bd
+                    if let fresh { birthdayChangeableAt = fresh.birthdayChangeableAt }
+                    saving = false
+                    if m.isEmpty { Haptics.success(); dismiss() }
+                    else { saveRest(m, sensitive: sensitive) }
+                }
+            }
+            return
+        }
+        saveRest(m, sensitive: sensitive)
+    }
+
+    /// Остальные поля профиля: чувствительные — через код на почту, имя — сразу.
+    private func saveRest(_ m: [String: String], sensitive: Bool) {
         if sensitive {
             pendingChanges = m
             requestConfirm("email")         // → код на почту

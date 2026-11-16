@@ -495,6 +495,9 @@ struct HomeView: View {
                 .padding(.top, 16)
             }
 
+            // «Купить снова» — товары, которые клиент уже заказывал (гостю и без данных — полки нет).
+            BuyAgainShelf { go(.product($0)) }
+
             // «Вы заказывали» — заведения, где клиент уже заказывал (у гостя пусто — блока нет).
             let again = vm.orderedAgain.filter { !($0.slug ?? "").isEmpty }.prefix(10)
             if !again.isEmpty {

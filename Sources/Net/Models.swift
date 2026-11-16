@@ -333,6 +333,8 @@ struct ShopDetail: Codable, Identifiable {
     /// Какие способы оплаты заведение принимает (cash / card_courier / sbp / online_card).
     /// Без них экран рисовал все варианты, а сервер отказывал уже на последнем шаге.
     let paymentMethods: [String]?
+    /// П-83 п.12: ИИ-сводка отзывов; nil — карточки нет (и у старого сервера).
+    var reviewsSummary: ReviewsSummary? = nil
     /// График по дням (0 = Вс … 6 = Сб) — для предзаказа у закрытого заведения.
     let statusSchedule: [ScheduleDay]?
     /// П-27.1 (А68): настраивало ли заведение способы оплаты / получения.
@@ -504,6 +506,15 @@ struct Profile: Codable { @LenientInt var id: Int?; let name: String?; let phone
     @LenientBool var emailVerified: Bool?
     /// А114: письма на почту не доходят — null | "typo" | "undeliverable". Старый сервер — nil.
     var emailProblem: String? = nil
+    /// П-83 п.13: день рождения "YYYY-MM-DD" и дата, с которой его можно сменить. Старый сервер — nil.
+    var birthday: String? = nil
+    var birthdayChangeableAt: String? = nil
+}
+/// П-83 п.12: ИИ-сводка отзывов заведения (GET shops/{slug} -> reviews_summary; null — карточки нет).
+struct ReviewsSummary: Codable {
+    var text: String? = nil
+    @LenientInt var basedOn: Int?
+    var updatedAt: String? = nil
 }
 struct Address: Codable, Identifiable {
     let id: Int; let label: String?; let city: String?; let street: String?; let house: String?
@@ -709,6 +720,11 @@ struct OrderDetail: Codable, Identifiable {
     @LenientText var substitutionDeadlineAt: String?
     @LenientInt var substitutionTimeoutMin: Int?
     @LenientList var substitutions: [OrderSubstitute]?
+    /// П-83 пп. 7, 9: «оставить у двери», получатель и фото доставки (всё необязательное).
+    @LenientBool var leaveAtDoor: Bool?
+    let recipientName: String?
+    let recipientPhone: String?
+    let deliveryPhotoUrl: String?
 }
 /// `stay` карточки заказа: {date_from, date_to, nights, adults, children, unit,
 /// check_in_from, check_out_until, status}. status — статус самой брони:

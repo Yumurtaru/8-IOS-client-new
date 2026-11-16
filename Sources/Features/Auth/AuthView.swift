@@ -129,6 +129,11 @@ struct AuthView: View {
     @State private var emailError: String?
     @State private var emailFix: String?
 
+    /// Вход через соцсети: кнопки приходят с сервера (пусто/ошибка — кнопок нет).
+    @State private var providers: [SocialProvider] = []
+    @State private var socialBusy = false
+    @State private var social = SocialLoginSession()
+
     @FocusState private var focused: Field?
     private enum Field { case login, password, name, code }
 
@@ -256,6 +261,8 @@ struct AuthView: View {
                         .accessibilityLabel("Войти с ключом доступа")
                         .accessibilityHint("Вход по Face ID или Touch ID без пароля")
                         .padding(.top, YMSpace.sm)
+
+                        socialButtons
                     }
 
                     footerLinks.padding(.top, YMSpace.md)
@@ -269,6 +276,94 @@ struct AuthView: View {
             .scrollDismissesKeyboard(.interactively)
         }
         .animation(YMMotion.adaptive(YMMotion.spring, reduceMotion: reduceMotion), value: step)
+        .task { await loadProviders() }
+        .onDisappear { social.cancel() }
+    }
+
+    // MARK: Вход через соцсети
+
+    @ViewBuilder
+    private var socialButtons: some View {
+        if !providers.isEmpty {
+            VStack(spacing: YMSpace.sm) {
+                Text("Или войти через")
+                    .font(YMFont.caption)
+                    .foregroundStyle(YMColor.muted)
+                    .frame(maxWidth: .infinity)
+                ForEach(providers, id: \.stableId) { p in
+                    Button {
+                        Haptics.light()
+                        loginBySocial(p)
+                    } label: {
+                        Text(socialBusy ? "Подождите…" : "Войти через \(p.name ?? "")")
+                            .font(YMFont.subhead)
+                            .foregroundStyle(YMColor.text)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 48)
+                            .background(YMColor.surface, in: RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: YMRadius.control, style: .continuous)
+                                    .strokeBorder(YMColor.hairline, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(busy || socialBusy)
+                    .opacity(pdChecked ? 1 : 0.55)
+                    .accessibilityLabel("Войти через \(p.name ?? "")")
+                }
+            }
+            .padding(.top, YMSpace.md)
+        }
+    }
+
+    private func loadProviders() async {
+        do {
+            let cfg: SocialConfig = try await API.shared.get("api/v1/auth/social/config")
+            providers = (cfg.providers ?? []).filter { $0.isUsable }
+        } catch {
+            providers = []
+        }
+    }
+
+    /// Браузер → билет → POST auth/social/ticket → тот же finish(), что у пароля.
+    private func loginBySocial(_ p: SocialProvider) {
+        guard !busy, !socialBusy, !social.active else { return }
+        // 152-ФЗ: вход через соцсеть может создать аккаунт — нужна та же галочка согласия, что при регистрации.
+        guard PdConsent.allowed(pdChecked) else { pdError = true; Haptics.error(); return }
+        socialBusy = true; error = nil
+        Task { @MainActor in
+            defer { socialBusy = false }
+            switch await social.start(p) {
+            case .cancelled:
+                break
+            case .denied:
+                error = SocialPkce.textDenied; Haptics.error()
+            case .failed:
+                error = SocialPkce.textFailed; Haptics.error()
+            case .ticket(let ticket, let verifier):
+                busy = true
+                do {
+                    var json: [String: Any] = ["ticket": ticket, "verifier": verifier]
+                    json.merge(PdConsent.fields(PdConsent.now())) { _, new in new }
+                    let t: AuthTokens = try await API.shared.postJSON("api/v1/auth/social/ticket", json: json)
+                    finish(t, social: true)
+                } catch {
+                    busy = false
+                    if error is CancellationError { return }
+                    if let api = error as? APIError {
+                        switch api {
+                        case .unauthorized, .guestNeedsLogin:
+                            self.error = SocialPkce.textTicket; Haptics.error(); return
+                        case .rejected(let status, _, _) where status == 401:
+                            self.error = SocialPkce.textTicket; Haptics.error(); return
+                        default:
+                            break
+                        }
+                    }
+                    fail(error, fallback: SocialPkce.textTicket)
+                }
+            }
+        }
     }
 
     // MARK: Шапка «← Назад»
@@ -569,7 +664,7 @@ struct AuthView: View {
 
     /// Сохранение токенов + колбэк.
     @MainActor
-    private func finish(_ tokens: AuthTokens) {
+    private func finish(_ tokens: AuthTokens, social: Bool = false) {
         busy = false
         guard let token = tokens.token, !token.isEmpty else {
             error = "Не получили токен"

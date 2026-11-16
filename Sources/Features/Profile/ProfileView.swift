@@ -328,11 +328,15 @@ struct ProfileView: View {
         case .jobs:         JobsView()
         case .applications: ApplicationsView()
         case .returns:      ReturnsView()
+        case .shoppingLists: ShoppingListsView(onOpen: { path.append(ProfileRoute.shoppingList($0)) },
+                                               onLogin: { path.append(ProfileRoute.auth) })
+        case .shoppingList(let id): ShoppingListView(id: id, onDeleted: { if !path.isEmpty { path.removeLast() } })
         case .auth:         AuthView()
         // А97: «Стать курьером»; 422 errors.phone — «Редактировать профиль» поверх.
         case .courier:      CourierSignupView(openEditProfile: { path.append(ProfileRoute.editProfile) })
         // А102: переписка с поддержкой (push type=support + ticket_id, строка ленты).
         case .supportTicket(let id): SupportTicketView(id: id)
+        case .myReservations: MyReservationsView()
         }
     }
 
@@ -512,6 +516,10 @@ struct ProfileView: View {
                 }
                 divider
                 menuRow(icon: "calendar", label: "Мои записи", detail: bookingsCount > 0 ? "\(bookingsCount)" : nil) { openBookings() }
+                divider
+                menuRow(icon: "fork.knife", label: "Мои брони столиков") { path.append(ProfileRoute.myReservations) }
+                divider
+                menuRow(icon: "list.bullet.rectangle", label: "Мои списки покупок") { path.append(ProfileRoute.shoppingLists) }
                 divider
                 // «Избранное» переехало сюда из нижней вкладки: её место занял
                 // раздел объявлений.
@@ -927,6 +935,9 @@ private enum ProfileRoute: Hashable {
     case plus, loyalty, wallet, myAds, favorites, bonuses, referral, gift, jobs, applications, returns, auth
     case courier
     case supportTicket(Int)
+    case shoppingLists
+    case shoppingList(Int)
+    case myReservations   // П-83.15: «Мои брони столиков»
 }
 
 /// Опция темы ↔ значение @AppStorage(AppStorageKey.theme) ("system"|"light"|"dark").
