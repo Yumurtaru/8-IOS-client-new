@@ -437,8 +437,12 @@ struct GroupCartView: View {
         for it in g.memberList.flatMap({ $0.itemList }) {
             let q = it.qtyDouble
             guard let pid = it.productId, q > 0 else { continue }
+            // П-80 п.3: дробный товар — флаг сервера; старый сервер без поля — по дробному количеству
+            // (как Android). Иначе «+»/«−» в корзине шагали по 1 кг вместо шага товара.
+            let frac = it.qtyFractional == true || q.rounded() != q
             if let i = merged.firstIndex(where: { $0.key == it.key }) {
                 merged[i].qty = ((merged[i].qty + q) * 1000).rounded() / 1000
+                if frac { merged[i].qtyFractional = true }
                 continue
             }
             // CartLine.unitPrice на iOS — цена единицы ВМЕСТЕ с добавками (Cart.swift: price + modPrice),
@@ -453,7 +457,8 @@ struct GroupCartView: View {
             }
             let mods = (it.modifiers ?? []).compactMap { $0.name }.joined(separator: ", ")
             merged.append(CartLine(key: it.key, productId: pid, name: it.name ?? "", unitPrice: unit, qty: q,
-                                   modifierIds: it.modifierIds, modsLabel: mods, photo: nil))
+                                   modifierIds: it.modifierIds, modsLabel: mods, photo: nil,
+                                   qtyFractional: frac ? true : nil))
         }
         guard !merged.isEmpty else { return }
         let prev = CartBackup(lines: cart.lines, shopId: cart.shopId, shopName: cart.shopName, shopSlug: cart.shopSlug)

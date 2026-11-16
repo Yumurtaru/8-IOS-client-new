@@ -26,7 +26,9 @@ struct AppVersionInfo: Equatable {
         i.minBuild = max(0, JSONLenient.int(d["min_build"]) ?? 0)
         i.message = String(JSONLenient.str(d["message"]).trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
         // Только http(s): другую схему открыть нечем — тогда окна нет вовсе.
-        i.storeURL = JSONLenient.url(d["store_url"])
+        // А1433: ссылка App Store — только https.
+        let url = JSONLenient.url(d["store_url"])
+        i.storeURL = url.lowercased().hasPrefix("https://") ? url : ""
         return i
     }
 

@@ -266,6 +266,9 @@ struct CheckoutView: View {
     @State private var codeFree = false
     @State private var codeMsg: String?
     @State private var checkingCode = false
+    /// Сумма товаров, от которой посчитана скидка кода. Сервер считает скидку в заказе от
+    /// СВОЕЙ суммы (promo.subtotal); пришла другая — перепроверяем код (паритет с Android).
+    @State private var codeBase: Decimal?
     /// «Сдача с» (только для наличных) — уходит в заказ как change_from.
     @State private var changeFrom = ""
     /// К-56 К3: комментарии к блюдам по ключу строки корзины.
@@ -335,15 +338,19 @@ struct CheckoutView: View {
     private func applyCode(_ raw: String, silent: Bool = false) async {
         let code = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !code.isEmpty, let sid = cart.shopId else { return }
-        await MainActor.run { checkingCode = true; if !silent { codeMsg = nil } }
+        let asked = await MainActor.run { () -> Decimal in
+            checkingCode = true; if !silent { codeMsg = nil }
+            return subtotal
+        }
         do {
             let r: PromoCheckResult = try await API.shared.post(
-                "api/v1/promo/check", body: PromoCheckBody(code: code, subtotal: subtotal, shopId: sid))
+                "api/v1/promo/check", body: PromoCheckBody(code: code, subtotal: asked, shopId: sid))
             await MainActor.run {
                 checkingCode = false
                 // Тихая перепроверка, а код за это время убрали («Убрать») или
                 // сменили — ответ по старому коду не должен вернуть его в заказ.
                 if silent && appliedCode != code { return }
+                codeBase = asked
                 let d = r.discount ?? 0
                 // Код-условие акции (promotion: true, скидка 0): код оставляем —
                 // он уходит в предпросмотр и в заказ, скидку считает движок акций.
@@ -370,7 +377,12 @@ struct CheckoutView: View {
                 // снимаем: раньше скидка пропадала из-за обрыва связи. Сервер всё
                 // равно проверит код при оформлении.
                 if silent, error is CancellationError { return }
-                if silent, (error as? APIError)?.isRetryable == true {
+                // 429 и 401 о самом коде ничего не говорят — тоже не снимаем (как Android).
+                let api = error as? APIError
+                var authLost = false
+                if case .unauthorized? = api { authLost = true }
+                if case .guestNeedsLogin? = api { authLost = true }
+                if silent, api?.isRetryable == true || api?.rejectStatus == 429 || authLost {
                     // Скидка осталась прежней, но не подтверждена — честно говорим об этом.
                     codeMsg = "Промокод проверим при оформлении"
                     return
@@ -526,7 +538,7 @@ struct CheckoutView: View {
             && (!needTime || preorderValid)
             && (cart.shopSlug == nil || shop != nil) && !promoPending
             && !fulfillmentNone && !paymentNone && !tableMissing
-            && !pricesChecking
+            && !pricesChecking && !checkingCode
     }
 
     /// Почему «Оформить заказ» сейчас серая — коротко, прямо у кнопки. Причины
@@ -646,6 +658,14 @@ struct CheckoutView: View {
             if let c = appliedCode { Task { await applyCode(c, silent: true) } }
         }
         .onChange(of: spendPoints) { _ in refreshPromo() }
+        // Сумма товаров по серверу (предпросмотр, сверка цен) сменилась — скидка кода и
+        // минимум заказа по коду считаются от неё: перепроверяем, иначе итог расходился
+        // с заказом, а 409 promo_min_order приходил только на последнем шаге.
+        .onChange(of: serverGoods) { _ in
+            if let c = appliedCode, let base = codeBase, base != subtotal {
+                Task { await applyCode(c, silent: true) }
+            }
+        }
         // AT-2: состав корзины сменился (без учёта цен) — пометка прошлой сверки к нему не относится.
         .onChange(of: cart.lines.map { "\($0.key)x\($0.qty)" }.joined(separator: ";")) { comp in
             if let done = pricesCheckedFor, done != comp { priceNote = nil; pricesCheckedFor = nil }
@@ -2048,6 +2068,9 @@ extension CheckoutView {
         quote = nil; quotedGoods = nil; quoteError = nil
         promo = nil; spendPoints = false; errorText = nil
         tableNumber = ""
+        // Комментарий («подъезд 3», «без лука») и комментарии к блюдам относились к
+        // прежнему заведению — в заказ нового не переносим (паритет с Android).
+        comment = ""; dishComments = [:]
         guard let slug = cart.shopSlug, session.isLoggedIn else { return }
         // Промокод прежнего заведения мог не действовать в новом — перепроверяем
         // тихо по новому shopId (не подошёл — applyCode сам его уберёт).

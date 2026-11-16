@@ -48,6 +48,8 @@ struct GroupCartItem: Decodable, Identifiable {
     let modifiers: [GroupCartModifier]?
     @LenientDecimal var lineTotal: Decimal?
     @LenientBool var available: Bool?
+    /// П-80 п.3 (аддитивно): дробный товар (кг, л) — 0/1, терпимо к Bool/строке; нет ключа — nil.
+    @LenientBool var qtyFractional: Bool?
 
     var modifierIds: [Int] { (modifiers ?? []).compactMap { $0.id } }
     /// Стабильный ключ строки: товар + набор добавок (как ключ строки корзины).

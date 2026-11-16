@@ -74,6 +74,11 @@ struct CartView: View {
         .task(id: cart.shopSlug) { await loadFeeShop() }
         // AT-3: неотвеченное оформление старше суток — снимаем при открытии корзины.
         .onAppear { cart.expireStalePending() }
+        // Корзина перешла к другому заведению (или опустела после заказа): комментарий прежнего
+        // («подъезд 3») к новому не относится — черновик привязан к заведению (паритет с Android).
+        .onChange(of: cart.shopId) { sid in
+            if CheckoutDraft.shopId != sid { comment = "" }
+        }
     }
 
     // MARK: - Общий заказ (П-72 п.3)
