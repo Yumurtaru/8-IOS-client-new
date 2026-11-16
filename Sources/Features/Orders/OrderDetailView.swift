@@ -22,6 +22,9 @@ extension Notification.Name {
     /// Пришёл/нажат push о заказе (object — id заказа, Int). Открытые деталь
     /// заказа и чат по нему перечитываются сразу, а не ждут опроса (до 24 с).
     static let ymOrderPushed = Notification.Name("ym.orderPushed")
+    /// «Повторить» для заказа, чья деталь уже открыта сверху (object — id, Int): экран
+    /// сам забирает просьбу, иначе она терялась (take(_:) звали только после загрузки).
+    static let ymOrderRepeatAsked = Notification.Name("ym.orderRepeatAsked")
 }
 
 // MARK: - CourierPoint (аннотация карты)
@@ -106,9 +109,13 @@ final class OrderDetailViewModel: ObservableObject {
 
     /// Перезагрузка после действия (отмена меняет статус → перерисовать таймлайн/кнопки).
     func reload() async {
-        if let o: OrderDetail = try? await API.shared.get("api/v1/orders/\(id)") { order = o }
+        // Поколение: поздний ответ опроса, начатого ДО действия (отмена и т. п.),
+        // не должен затирать свежий заказ старым статусом.
+        orderGen &+= 1
+        if let o: OrderDetail = try? await API.shared.get("api/v1/orders/\(id)") { order = o; orderGen &+= 1 }
         if let t: TrackData   = try? await API.shared.get("api/v1/orders/\(id)/track") { track = t }
     }
+    private var orderGen = 0
 
     // MARK: Действия
 
@@ -213,9 +220,12 @@ final class OrderDetailViewModel: ObservableObject {
                 // изменить состав, и на открытом экране это должно появиться
                 // само, а не после выхода и повторного входа.
                 self.pollTick &+= 1
-                if self.pollTick % 3 == 0,
-                   let o: OrderDetail = try? await API.shared.get("api/v1/orders/\(self.id)") {
-                    self.order = o
+                if self.pollTick % 3 == 0 {
+                    let gen = self.orderGen
+                    if let o: OrderDetail = try? await API.shared.get("api/v1/orders/\(self.id)"),
+                       gen == self.orderGen {
+                        self.order = o
+                    }
                 }
                 // Заказ завершён или отменён — опрос больше не нужен (раньше шёл,
                 // пока открыт экран). Проверку оплаты это не трогает.
@@ -495,6 +505,10 @@ struct OrderDetailView: View {
         .onReceive(NotificationCenter.default.publisher(for: .ymOrderPushed)) { n in
             guard (n.object as? Int) == id, visible, vm.order != nil else { return }
             Task { await vm.reload(); if visible { vm.startTrackingIfActive() } }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .ymOrderRepeatAsked)) { n in
+            guard (n.object as? Int) == id, visible, vm.order != nil, OrderRepeatIntent.take(id) else { return }
+            Task { await vm.repeatOrder(cart: cart) }
         }
         .onChange(of: courierCoord?.latitude) { _ in recenter() }
         // Диалог подтверждения отмены заказа.

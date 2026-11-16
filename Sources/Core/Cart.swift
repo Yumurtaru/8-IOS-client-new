@@ -116,7 +116,7 @@ func snapCartQty(_ line: CartLine, _ q: Double) -> Double {
     if !line.isFractional { return max(1, q.rounded()) }
     let ps = line.presets
     if ps.count >= 2 { return max(ps.first ?? 0.001, r3(q)) }        // размеры суммируются → свободно
-    if ps.count == 1 { let s = ps[0]; return max(s, (q / s).rounded() * s) }
+    if ps.count == 1 { let s = ps[0]; return max(s, r3((q / s).rounded() * s)) }   // r3: без хвоста 0,30000000000000004 в qty заказа
     // Дробный товар с шагом продавца — по сетке шага, как карточка товара и сервер.
     if let s = line.qtyStep, s > 0 { return max(s, r3((q / s).rounded() * s)) }
     return max(0.001, r3(q))

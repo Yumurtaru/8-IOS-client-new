@@ -45,7 +45,11 @@ enum OrderRepeatIntent {
     static func open(_ id: Int, repeatOrder: Bool) {
         let nav = NavCoordinator.shared
         let logged = Session.shared.isLoggedIn
-        if repeatOrder && logged { pending = (id, Date()) }
+        if repeatOrder && logged {
+            pending = (id, Date())
+            // Деталь этого заказа уже открыта — новый экран не создастся, заберёт сама.
+            DispatchQueue.main.async { NotificationCenter.default.post(name: .ymOrderRepeatAsked, object: id) }
+        }
         nav.revealForPush(closeAll: true) {
             if logged { nav.pendingOrderDetail = id } else { DeepLinkRouter.shared.requestedTab = 3 }
         }

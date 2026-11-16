@@ -76,7 +76,7 @@ struct LenientDecimal: Codable, Hashable {
     init(from decoder: Decoder) throws {
         let c = try decoder.singleValueContainer()
         if c.decodeNil() { wrappedValue = nil }
-        else if let s = try? c.decode(String.self), let d = Decimal(string: s) { wrappedValue = d } // без потери точности
+        else if let s = try? c.decode(String.self), let d = Decimal(string: s), !d.isNaN { wrappedValue = d } // без потери точности; "NaN" не пропускаем (сумма NaN ломает расчёты)
         else if let i = try? c.decode(Int.self) { wrappedValue = Decimal(i) }
         // Запасной путь — сумма JSON-числом с дробью (по справке так приходят total и
         // др.). Decimal(Double) даёт хвост: 150.65 → 150.6499999…; через кратчайшую

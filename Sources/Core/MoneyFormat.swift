@@ -15,7 +15,7 @@ enum Money {
         switch raw {
         case let d as Decimal: return d
         case let i as Int:     return Decimal(i)
-        case let d as Double:  return Decimal(string: String(format: "%.2f", d)) ?? 0
+        case let d as Double:  return d.isFinite ? (Decimal(string: String(format: "%.2f", d)) ?? 0) : 0   // NaN/∞ — не сумма
         case let s as String:
             var cleaned = s
                 .replacingOccurrences(of: "\u{00A0}", with: "") // NBSP
@@ -28,7 +28,9 @@ enum Money {
             if parts.count > 2 {
                 cleaned = parts.dropLast().joined() + "." + parts.last!
             }
-            return Decimal(string: cleaned) ?? 0
+            // Decimal(string: "NaN") даёт нечисло: расчёты и показ ломались — считаем нулём.
+            guard let r = Decimal(string: cleaned), !r.isNaN else { return 0 }
+            return r
         default:
             return 0
         }

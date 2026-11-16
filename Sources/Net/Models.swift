@@ -512,6 +512,12 @@ struct Address: Codable, Identifiable {
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: ", ")
     }
     var isDefaultBool: Bool { (isDefault ?? 0) > 0 }
+    /// Настоящие координаты: точка 0,0 (старый адрес с сайта или "0.000000" строкой,
+    /// которую терпимый разбор делает нулём) — не координата, зона по ней не считается.
+    var hasGeo: Bool {
+        guard let la = lat, let lo = lng else { return false }
+        return !(la == 0 && lo == 0)
+    }
 }
 
 struct Order: Codable, Identifiable {

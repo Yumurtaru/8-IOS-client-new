@@ -451,7 +451,7 @@ struct CheckoutView: View {
         guard fulfillment == .delivery else { return false }
         if selectedAddress == nil { return true }
         if shopNoZones { return false }
-        return selectedAddress?.lat == nil || selectedAddress?.lng == nil
+        return selectedAddress?.hasGeo != true
     }
     // Минимальная сумма не набрана.
     private var belowMin: Bool {
@@ -1625,7 +1625,7 @@ struct CheckoutView: View {
         // показал бы доставку нулевой, а сервер добавил бы к заказу единый
         // тариф — человек заплатил бы больше, чем видел.
         let noZones = await MainActor.run { shopNoZones }
-        guard (a.lat != nil && a.lng != nil) || noZones else {
+        guard a.hasGeo || noZones else {
             await MainActor.run { quote = nil; quoteError = nil }
             return
         }
