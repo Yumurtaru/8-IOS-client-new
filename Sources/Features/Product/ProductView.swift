@@ -33,6 +33,8 @@ final class ProductViewModel: ObservableObject {
     /// Похожие товары: GET api/v1/products/{id}/recommended -> [Product].
     /// Пусто/ошибка — секция просто не рисуется, карточку не ломает.
     @Published var recommended: [Product] = []
+    /// Видео товара: GET api/v1/products/{id}/videos. Пусто/ошибка — блока нет.
+    @Published var videos: [ProductVideo] = []
     /// Адрес визита для выездной услуги (location_type = at_client).
     /// Берём адрес по умолчанию из профиля: сервер отклоняет запись без адреса
     /// (422), а формы ввода на карточке услуги нет — запись с этого экрана
@@ -84,6 +86,7 @@ final class ProductViewModel: ObservableObject {
             }
             // Похожие товары грузим отдельно: ошибка/пусто не мешает карточке товара.
             await loadRecommended()
+            if let v: [ProductVideo] = try? await API.shared.list("api/v1/products/\(id)/videos") { videos = v }
         case .service:
             guard let s = service else { error = "Нет данных услуги"; loading = false; return }
             // Слоты записи. Отсутствие слотов — не ошибка (услуга без онлайн-записи).
@@ -645,6 +648,11 @@ struct ProductView: View {
                     checkRow(opt, groupOptions: g.options ?? [], maxQty: g.maxQty)
                 }
             }
+        }
+
+        // Видео товара — блока нет, если видео нет.
+        if !vm.videos.isEmpty {
+            ProductVideosBlock(videos: vm.videos)
         }
 
         // Похожие товары — секции нет, если список пуст.

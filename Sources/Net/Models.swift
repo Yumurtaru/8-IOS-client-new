@@ -1415,6 +1415,18 @@ struct ReturnDetail: Decodable {
     @LenientInt var orderNumber: Int?
     let type: String?
     let items: [ReturnDetailLine]?
+    /// Полная карточка заявки: причина, ответ магазина, способ возврата, история статусов.
+    let reasonCode: String?
+    let reasonText: String?
+    let moderatorNote: String?
+    let refundMethod: String?
+    let log: [ReturnLogLine]?
+}
+/// GET api/v1/orders/{id}/payment-status → data.
+struct PaymentStatusData: Decodable { let paymentStatus: String? }
+struct ReturnLogLine: Decodable {
+    let status: String?
+    let createdAt: String?
 }
 struct ReturnDetailLine: Decodable {
     let name: String?

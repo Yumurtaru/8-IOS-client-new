@@ -205,12 +205,15 @@ final class OrderDetailViewModel: ObservableObject {
     /// Живой опрос трекинга (8с) — только пока заказ активен (в пути / готовится).
     func startTrackingIfActive() {
         guard OrderFlow.isActive(order?.status ?? track?.status) else { return }
+        startRealtime()
         pollTimer?.invalidate()
         pollTick = 0
         pollTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
                 guard !self.pollBusy else { return }
+                // Живое соединение работает — опрос лишь страховка: каждый четвёртый тик (~32 с).
+                if self.rtLive && (self.pollTick &+ 1) % 4 != 0 { self.pollTick &+= 1; return }
                 self.pollBusy = true
                 defer { self.pollBusy = false }
                 if let t: TrackData = try? await API.shared.get("api/v1/orders/\(self.id)/track") {
@@ -231,17 +234,53 @@ final class OrderDetailViewModel: ObservableObject {
                 // пока открыт экран). Проверку оплаты это не трогает.
                 if let st = self.order?.status ?? self.track?.status, !OrderFlow.isActive(st) {
                     self.pollTimer?.invalidate(); self.pollTimer = nil
+                    self.stopRealtime()
                 }
             }
         }
     }
 
+    // MARK: Мгновенные обновления (Net/OrderRealtime.swift)
+    private var rtTask: Task<Void, Never>?
+    private var rtLive = false
+    private var rtEventTask: Task<Void, Never>?
+
+    /// Подключение к живым обновлениям заказа; повторный вызов при живой задаче ничего не делает.
+    private func startRealtime() {
+        guard rtTask == nil else { return }
+        let oid = id
+        rtTask = Task { [weak self] in
+            await OrderRealtime.watch(orderId: oid, onLive: { live in
+                self?.rtLive = live
+            }, onEvent: {
+                guard let self else { return }
+                // Несколько событий подряд — одно перечитывание.
+                self.rtEventTask?.cancel()
+                self.rtEventTask = Task { [weak self] in
+                    try? await Task.sleep(nanoseconds: 300_000_000)
+                    if Task.isCancelled { return }
+                    await self?.reload()
+                }
+            })
+            // watch закончился сам (выход из аккаунта и т.п.): освобождаем место — следующий
+            // startRealtime снова подключится (иначе guard rtTask == nil держал бы его выключенным).
+            if !Task.isCancelled { self?.rtTask = nil; self?.rtLive = false }
+        }
+    }
+
+    private func stopRealtime() {
+        rtTask?.cancel(); rtTask = nil
+        rtEventTask?.cancel(); rtEventTask = nil
+        rtLive = false
+    }
+
     /// Пауза опроса в фоне: только таймер, проверка оплаты идёт дальше.
     /// Возобновляет startTrackingIfActive при возврате в приложение.
-    func pauseTracking() { pollTimer?.invalidate(); pollTimer = nil }
+    func pauseTracking() { pollTimer?.invalidate(); pollTimer = nil; stopRealtime() }
 
     func stopTracking() {
         pollTimer?.invalidate(); pollTimer = nil
+        stopRealtime()
         // Проверка оплаты после ухода с экрана не нужна: раньше она ещё до 30 с
         // дёргала сервер, а два наложившихся цикла снимали блокировку «Оплатить»
         // раньше времени.
@@ -276,9 +315,16 @@ final class OrderDetailViewModel: ObservableObject {
         for attempt in 0..<10 {
             if attempt > 0 { try? await Task.sleep(nanoseconds: 3_000_000_000) }
             if Task.isCancelled { return }
-            if let o: OrderDetail = try? await API.shared.get("api/v1/orders/\(id)") {
-                order = o
-                if (o.paymentStatus ?? "").lowercased() == "paid" { return }
+            // Лёгкая ручка payment-status: сервер сам перепроверяет оплату у ЮKassa.
+            // Заказ целиком перечитываем на первом проходе, при смене статуса оплаты
+            // и если ручка не ответила (старый сервер, сеть).
+            let live: PaymentStatusData? = try? await API.shared.get("api/v1/orders/\(id)/payment-status", fresh: true)
+            let liveStatus = live?.paymentStatus?.lowercased()
+            if attempt == 0 || liveStatus == nil || liveStatus != (order?.paymentStatus ?? "").lowercased() {
+                if let o: OrderDetail = try? await API.shared.get("api/v1/orders/\(id)") {
+                    order = o
+                    if (o.paymentStatus ?? "").lowercased() == "paid" { return }
+                }
             }
         }
     }

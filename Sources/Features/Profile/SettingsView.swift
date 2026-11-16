@@ -43,6 +43,7 @@ struct SettingsView: View {
                 notificationsSection
                 paySection
                 PasskeysSection()
+                NotifyTelegramSection()
                 citySection
                 aboutSection
             }
@@ -172,6 +173,9 @@ struct SettingsView: View {
             rowDivider
             linkRow(icon: "doc.text", label: "Условия использования",
                     url: "https://yumurta.ru/terms")
+            rowDivider
+            linkRow(icon: "sparkles", label: "Правила рекомендаций",
+                    url: "https://yumurta.ru/recommendations-rules")
             rowDivider
             HStack {
                 Image(systemName: "info.circle")

@@ -325,6 +325,46 @@ private struct ReturnCard: View {
             Text(item.type == "partial" ? "Состав заявки не указан" : "Возврат всего заказа")
                 .font(YMFont.caption).foregroundStyle(YMColor.muted)
         }
+        if let d = detail { extraBlock(d) }
+    }
+
+    /// Раскрытая карточка: причина, способ возврата, ответ магазина, история статусов.
+    @ViewBuilder private func extraBlock(_ d: ReturnDetail) -> some View {
+        let reason = returnReasons.first(where: { $0.code == d.reasonCode })?.label
+        let text = (d.reasonText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let note = (d.moderatorNote ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let reply = (note.isEmpty || note.hasPrefix("ЮKassa")) ? nil : note
+        let method: String? = d.refundMethod == "bonus" ? "Бонусами на счёт"
+            : (d.refundMethod == "manual" ? "Выплата магазином" : nil)
+        let log = (d.log ?? []).filter { !($0.status ?? "").isEmpty }
+        VStack(alignment: .leading, spacing: 4) {
+            if reason != nil || !text.isEmpty {
+                Text("Причина").font(YMFont.caption).foregroundStyle(YMColor.muted)
+                if let reason { Text(reason).font(YMFont.callout).foregroundStyle(YMColor.text) }
+                if !text.isEmpty { Text(text).font(YMFont.callout).foregroundStyle(YMColor.text) }
+            }
+            if let t = d.type {
+                Text(t == "partial" ? "Тип: частичный возврат" : "Тип: возврат всего заказа")
+                    .font(YMFont.caption).foregroundStyle(YMColor.muted)
+            }
+            if let method {
+                Text("Способ возврата: \(method)").font(YMFont.caption).foregroundStyle(YMColor.muted)
+            }
+            if let reply {
+                Text("Ответ магазина").font(YMFont.caption).foregroundStyle(YMColor.muted)
+                Text(reply).font(YMFont.callout).foregroundStyle(YMColor.text)
+            }
+            if !log.isEmpty {
+                Text("История").font(YMFont.caption).foregroundStyle(YMColor.muted)
+                ForEach(Array(log.enumerated()), id: \.offset) { _, l in
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(ReturnStatus.label(l.status)).font(YMFont.callout).foregroundStyle(YMColor.text)
+                        Spacer(minLength: 8)
+                        Text(DateFmt.short(l.createdAt)).font(YMFont.caption).foregroundStyle(YMColor.muted)
+                    }
+                }
+            }
+        }
     }
 
     private func loadDetail() async {

@@ -67,6 +67,41 @@ private struct SearchSmartResult: Decodable {
     }
 }
 
+/// Ответ /search/suggest: data.suggestions = [{type: product|organization, text}],
+/// data.popular = [строки] (частые запросы города, могут отсутствовать/быть пустыми).
+/// Разбор терпимый: любая битая часть — просто пусто, поиск от этого не страдает.
+private struct SearchSuggestReply: Decodable {
+    let suggestions: [String]
+    let popular: [String]
+    enum CodingKeys: String, CodingKey { case suggestions, popular }
+    private struct Item: Decodable {
+        let text: String?
+        enum CodingKeys: String, CodingKey { case text }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            text = ((try? c.decodeIfPresent(String.self, forKey: .text)) ?? nil)
+        }
+    }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let items = ((try? c.decodeIfPresent([Item].self, forKey: .suggestions)) ?? nil) ?? []
+        suggestions = SearchSuggestReply.clean(items.compactMap { $0.text }, limit: 8)
+        let pop = ((try? c.decodeIfPresent([String].self, forKey: .popular)) ?? nil) ?? []
+        popular = SearchSuggestReply.clean(pop, limit: 8)
+    }
+    /// Без пустых и повторов (регистр не учитывается), не больше limit.
+    static func clean(_ raw: [String], limit: Int) -> [String] {
+        var seen = Set<String>(); var out: [String] = []
+        for s in raw {
+            let t = s.trimmingCharacters(in: .whitespaces)
+            if t.isEmpty { continue }
+            if seen.insert(t.lowercased()).inserted { out.append(t) }
+            if out.count >= limit { break }
+        }
+        return out
+    }
+}
+
 /// data.facets: {"categories":[{"id":3,"name":"Пицца","count":12}],
 /// "price":{"min":"490.00","max":"950.00"}}; price = null при пустой выдаче.
 private struct SearchFacets: Decodable {
@@ -148,6 +183,10 @@ private struct SearchSection: View {
     // «недавно смотрели» шли на главном потоке впустую — результат отбрасывался.
     @State private var history: [String] = []
     @State private var recent: [RecentProduct] = []
+    /// Подсказки сервера (/search/suggest) к набранному тексту и «Популярное» города.
+    @State private var serverSuggest: [String] = []
+    @State private var serverPopular: [String] = []
+    @State private var suggestTask: Task<Void, Never>?
 
     // Локальные избранные (оптимистично; toggle синхронизируется с сервером).
     @State private var favShops: Set<Int> = []
@@ -194,13 +233,14 @@ private struct SearchSection: View {
     private var suggestions: [String] {
         guard trimmed.count >= 1 else { return [] }
         let ql = trimmed.lowercased()
-        var pool = history
+        var pool = serverSuggest
+        pool.append(contentsOf: history)
         pool.append(contentsOf: recent.map { $0.name })
         var seen = Set<String>(); var out: [String] = []
-        for s in pool where s.lowercased().contains(ql) {
+        for s in pool where serverSuggest.contains(s) || s.lowercased().contains(ql) {
             let key = s.lowercased()
             if seen.insert(key).inserted { out.append(s) }
-            if out.count >= 6 { break }
+            if out.count >= 8 { break }
         }
         return out
     }
@@ -249,6 +289,8 @@ private struct SearchSection: View {
         }
         // По входу/выходу: сердечки прежнего аккаунта не должны оставаться.
         .task(id: session.isLoggedIn) { await loadFavIds() }
+        // «Популярное» города — запросы с сервера; нет данных/связи — блока нет.
+        .task(id: session.cityId) { await loadPopular() }
         // Экран поиска живёт всю сессию: историю и «недавно смотрели» читаем
         // при каждом появлении, иначе они не обновлялись (и после смены
         // аккаунта показывали чужие).
@@ -422,6 +464,12 @@ private struct SearchSection: View {
                         .padding(.trailing, YMSpace.xl)
                 }
                 FlowChips(items: history) { term in q = term; recordHistory() }
+                    .padding(.horizontal, YMSpace.xl)
+                    .padding(.bottom, YMSpace.md)
+            }
+            if !serverPopular.isEmpty {
+                sectionKicker("Популярное")
+                FlowChips(items: serverPopular, icon: "magnifyingglass") { term in q = term; recordHistory() }
                     .padding(.horizontal, YMSpace.xl)
                     .padding(.bottom, YMSpace.md)
             }
@@ -662,9 +710,15 @@ private struct SearchSection: View {
 
     private func scheduleSearch() {
         searchTask?.cancel()
+        suggestTask?.cancel()
         let query = trimmed
-        guard query.count >= 2 else { searchedKey = ""; clearResults(); return }
+        guard query.count >= 2 else { searchedKey = ""; serverSuggest = []; clearResults(); return }
         searchedKey = query
+        suggestTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            if Task.isCancelled { return }
+            await loadSuggest(query)
+        }
         searchTask = Task {
             try? await Task.sleep(nanoseconds: 300_000_000)
             if Task.isCancelled { return }
@@ -698,6 +752,24 @@ private struct SearchSection: View {
             shops = []; products = []; searchFailed = true
         }
         loading = false
+    }
+
+    /// Подсказки к набранному тексту. Ошибка/нет связи — подсказок сервера просто нет.
+    private func loadSuggest(_ query: String) async {
+        var params: [String: String] = ["q": query]
+        if let cid = session.cityId { params["city_id"] = String(cid) }
+        guard let r: SearchSuggestReply = try? await API.shared.get("api/v1/search/suggest", query: params) else { return }
+        if Task.isCancelled || query != trimmed { return }
+        serverSuggest = r.suggestions
+    }
+
+    /// «Популярное» при пустом поле: q не передаём — сервер отдаёт только списки запросов.
+    private func loadPopular() async {
+        var params: [String: String] = [:]
+        if let cid = session.cityId { params["city_id"] = String(cid) }
+        guard let r: SearchSuggestReply = try? await API.shared.get("api/v1/search/suggest", query: params) else { return }
+        if Task.isCancelled { return }
+        serverPopular = r.popular
     }
 
     private func recordHistory() {
@@ -741,6 +813,7 @@ private struct SearchSection: View {
 /// Пилюли-чипы истории (перенос строк).
 private struct FlowChips: View {
     let items: [String]
+    var icon: String = "clock.arrow.circlepath"
     var onTap: (String) -> Void
     var body: some View {
         // ScrollView горизонтально — простой и предсказуемый layout под Dynamic Type.
@@ -749,7 +822,7 @@ private struct FlowChips: View {
                 ForEach(items, id: \.self) { term in
                     Button { onTap(term) } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "clock.arrow.circlepath").font(.system(size: 11))
+                            Image(systemName: icon).font(.system(size: 11))
                             Text(term).font(.custom(YMFont.golosName(.semibold), fixedSize: 13)).lineLimit(1)
                         }
                         .foregroundStyle(YMColor.text)

@@ -13,6 +13,8 @@ final class HomeViewModel: ObservableObject {
     @Published var orderedAgain: [OrderedAgainShop] = [] // «Вы заказывали» (ordered_again)
     @Published var oftenBought: [CatalogItem] = []        // «Вы часто берёте» (often_bought, П-72 п.6)
     @Published var shops: [Shop] = []               // список организаций
+    /// «Повторить заказ»: последний завершённый заказ (не запись, не бронь); гостю — nil.
+    @Published var lastOrder: Order?
     @Published var kind: OrgKind = .all
     @Published var loading = true
     @Published var error: String?
@@ -65,8 +67,9 @@ final class HomeViewModel: ObservableObject {
         // и скелетон Главной висел сумму их времён.
         async let rec: Void = loadRecommendations(session: session)
         async let sec: Void = loadSections(session: session, myGen: myGen)
+        async let last: Void = loadLastOrder(session: session)
         await loadShops(session: session, myGen: myGen)
-        _ = await (rec, sec)
+        _ = await (rec, sec, last)
         if myGen == gen { loading = false }
         // Флаг нужен только на момент подстановки; не даём ему залипнуть.
         autoPickedCityId = nil
@@ -90,13 +93,35 @@ final class HomeViewModel: ObservableObject {
         oftenBought = resp?.oftenBought ?? []
     }
 
+    /// Последний завершённый заказ для карточки «Повторить заказ»: один запрос
+    /// первой страницы списка, только вошедшему. Сбой — прежнее значение не трогаем.
+    private func loadLastOrder(session: Session) async {
+        guard session.isLoggedIn else { lastOrder = nil; return }
+        let t = session.token
+        guard let page: Page<Order> = try? await API.shared.page("api/v1/orders") else { return }
+        guard session.token == t else { return }
+        lastOrder = Self.pickLastDone(page.items)
+    }
+
+    /// Статус «done», не запись на услугу, не бронь жилья, есть заведение и номер;
+    /// список сервер отдаёт от новых к старым.
+    static func pickLastDone(_ list: [Order]) -> Order? {
+        list.first { o in
+            o.id > 0 && OrderFlow.isDone(o.status) && o.isAppointment != true
+                && (o.shopType ?? "").lowercased() != "lodging"
+                && !(o.shopName ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        }
+    }
+
     /// Сменился аккаунт (вход/выход): личную подборку перечитываем, прежнюю
     /// убираем сразу — она собрана по заказам другого человека.
     func reloadRecommendations(session: Session) async {
         recommendations = []
         orderedAgain = []
         oftenBought = []
+        lastOrder = nil
         await loadRecommendations(session: session)
+        await loadLastOrder(session: session)
     }
 
     /// Смена типа-чипа: перегружаем только зависящие от типа секции/список.
@@ -460,6 +485,16 @@ struct HomeView: View {
 
     private var content: some View {
         VStack(spacing: 0) {
+            // «Повторить заказ из …» — последний завершённый заказ (гостю и без заказов — нет карточки).
+            if let lo = vm.lastOrder {
+                RepeatOrderCard(shopName: lo.shopName ?? "") {
+                    // Экран заказа сам выполняет повтор (GET reorder, вопрос при корзине другого заведения).
+                    OrderRepeatIntent.open(lo.id, repeatOrder: true)
+                }
+                .padding(.horizontal, YMSpace.xl)
+                .padding(.top, 16)
+            }
+
             // «Вы заказывали» — заведения, где клиент уже заказывал (у гостя пусто — блока нет).
             let again = vm.orderedAgain.filter { !($0.slug ?? "").isEmpty }.prefix(10)
             if !again.isEmpty {
@@ -955,6 +990,37 @@ private struct CityPickerSheet: View {
             loadFailed = true
         }
         loading = false
+    }
+}
+
+// MARK: - Карточка «Повторить заказ»
+
+/// «Повторить заказ из <заведение>»: тап открывает заказ и кладёт его состав в корзину.
+private struct RepeatOrderCard: View {
+    let shopName: String
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: { Haptics.light(); onTap() }) {
+            HStack(spacing: YMSpace.md) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Повторить заказ")
+                        .font(YMFont.headline).foregroundStyle(YMColor.text)
+                    Text("из \(shopName)")
+                        .font(YMFont.subhead).foregroundStyle(YMColor.muted).lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Text("Повторить")
+                    .font(YMFont.subhead).foregroundStyle(YMColor.onAccent)
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .background(YMColor.accent, in: Capsule())
+            }
+            .padding(YMSpace.lg)
+            .ymCard(radius: YMRadius.card)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Повторить заказ из \(shopName)")
+        .accessibilityAddTraits(.isButton)
     }
 }
 

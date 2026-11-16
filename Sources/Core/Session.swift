@@ -16,6 +16,10 @@ final class Session: ObservableObject {
             guard cityId != oldValue else { return }
             OfflineCache.shared.clearAll()   // кэш витрины прежнего города не показываем
             Task { await Push.shared.registerIfPossible() }
+            // Вошедшему — ещё и в профиль (POST profile/city). Молча: ошибка не мешает, локальный выбор остаётся.
+            if let id = cityId, id > 0, token != nil {
+                Task { try? await API.shared.postVoid("api/v1/profile/city", body: ["city_id": id]) }
+            }
         }
     }
     @Published var cityName: String? { didSet { UserDefaults.standard.set(cityName, forKey: "cityName") } }

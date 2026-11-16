@@ -33,7 +33,9 @@ private struct OrderItemBody: Codable {
     /// К-56 К3: комментарий к блюду (≤ 200). nil — в JSON не попадает; у старых
     /// сохранённых тел (PendingOrder) поля нет — читается как nil.
     var comment: String? = nil
-    enum CodingKeys: String, CodingKey { case productId = "product_id", qty, modifiers, comment }
+    /// П-83: правило замены по позиции (similar | call | remove); nil — поля нет, действует substitution_default.
+    var substitution: String? = nil
+    enum CodingKeys: String, CodingKey { case productId = "product_id", qty, modifiers, comment, substitution }
 }
 /// Адрес доставки — ОБЪЕКТОМ, 1:1 с AddressReq Android-клиента.
 ///
@@ -85,13 +87,15 @@ private struct OrderBody: Codable {
     var expectedSubtotal: String? = nil
     /// П-72 п.4: «Если товара нет» — "similar" | "call" | "remove". nil — не шлём.
     var substitutionDefault: String? = nil
+    /// П-83: чаевые курьеру строкой с двумя знаками («150.00»); nil — без чаевых (поля нет).
+    var tip: String? = nil
     enum CodingKeys: String, CodingKey {
         case shopId = "shop_id", items, deliveryType = "delivery_type", paymentType = "payment_type",
              address, comment, deliveryPrice = "delivery_price", lat, lng,
              spendPointsAll = "spend_points_all", idempotencyKey = "idempotency_key",
              tableNumber = "table_number", promoCode = "promo_code", preorderAt = "preorder_at",
              changeFrom = "change_from", expectedSubtotal = "expected_subtotal",
-             substitutionDefault = "substitution_default"
+             substitutionDefault = "substitution_default", tip
     }
 }
 /// Ответ POST api/v1/promo/check.
@@ -273,6 +277,10 @@ struct CheckoutView: View {
     @State private var changeFrom = ""
     /// К-56 К3: комментарии к блюдам по ключу строки корзины.
     @State private var dishComments: [String: String] = [:]
+    /// П-83: правило замены по позициям (ключ строки корзины -> similar|call|remove) и чаевые курьеру.
+    @State private var itemSubst: [String: String] = [:]
+    @State private var tipChoice = "0"
+    @State private var tipCustom = ""
     /// Поле ввода в фокусе (клавиатура открыта): тогда нижняя панель сжимается
     /// до «Готово», чтобы не закрывать поле над клавиатурой.
     private enum Field: Hashable { case table, promo, comment, change }
@@ -330,8 +338,13 @@ struct CheckoutView: View {
     private var pointsMax: Decimal { Money.parse(promo?.pointsSpendMax ?? 0) }
     /// Скидка промокода (не больше суммы товаров — как на сервере).
     private var codeOff: Decimal { appliedCode == nil ? 0 : min(codeDiscount, subtotal) }
+    /// П-83: чаевые курьеру — только доставка в товарном заведении.
+    private var tipShown: Bool { fulfillment == .delivery && shop?.mode != "service" }
+    private var tipParsed: Decimal? { TipLogic.amount(choice: tipChoice, custom: tipCustom) }
+    private var tipInvalid: Bool { tipShown && tipParsed == nil }
+    private var tipAmount: Decimal { tipShown ? (tipParsed ?? 0) : 0 }
     private var grandTotal: Decimal {
-        max(0, subtotal + effectiveDelivery + serviceFee - promoDiscount - codeOff - pointsSpent)
+        max(0, subtotal + effectiveDelivery + serviceFee + tipAmount - promoDiscount - codeOff - pointsSpent)
     }
 
     /// Проверить/применить промокод. silent — перепроверка после изменения корзины.
@@ -534,7 +547,7 @@ struct CheckoutView: View {
     private var ctaEnabled: Bool {
         // Заведение закрыто — заказ уходит предзаказом (preorder_at); без
         // выбранного времени сервер откажет, поэтому кнопка ждёт выбора.
-        !placing && !cart.isEmpty && !shopPaused && !outOfZone && !noAddress && !belowMin && !quoteMissing
+        !placing && !tipInvalid && !cart.isEmpty && !shopPaused && !outOfZone && !noAddress && !belowMin && !quoteMissing
             && (!needTime || preorderValid)
             && (cart.shopSlug == nil || shop != nil) && !promoPending
             && !fulfillmentNone && !paymentNone && !tableMissing
@@ -792,6 +805,12 @@ struct CheckoutView: View {
                                 get: { dishComments[line.key] ?? "" },
                                 set: { dishComments[line.key] = $0 }
                             ))
+                            if shop?.mode != "service" {
+                                ItemSubstitutionMenu(value: Binding(
+                                    get: { itemSubst[line.key] },
+                                    set: { itemSubst[line.key] = $0 }
+                                ))
+                            }
                         }
                     }
                     // O1: подсказки опта — только по свежему пересчёту ровно этого состава.
@@ -804,6 +823,10 @@ struct CheckoutView: View {
                 if shop?.mode != "service" {
                     SectionKicker("Если товара нет").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.sm)
                     SubstitutionPickerBlock()
+                    if fulfillment == .delivery {
+                        SectionKicker("Чаевые курьеру").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.sm)
+                        TipPickerBlock(choice: $tipChoice, custom: $tipCustom, invalid: tipInvalid)
+                    }
                 }
 
                 SectionKicker("Оплата").padding(.top, YMSpace.lg).padding(.bottom, YMSpace.sm)
@@ -1170,6 +1193,9 @@ struct CheckoutView: View {
             if serviceFee > 0 {
                 totalRow("Сервисный сбор", Money.format(serviceFee))
             }
+            if tipAmount > 0 {
+                totalRow("Чаевые курьеру", Money.format(tipAmount))
+            }
             if promoDiscount - (promo?.loyaltyDiscountValue ?? 0) > 0 {
                 totalRow("Скидка по акции", "−" + Money.format(promoDiscount - (promo?.loyaltyDiscountValue ?? 0)), accent: true)
             }
@@ -1394,6 +1420,7 @@ struct CheckoutView: View {
         var r: [CheckoutV2Row] = [CheckoutV2Row(label: "Товары (\(cart.count))", value: Money.format(subtotal))]
         if fulfillment == .delivery { r.append(CheckoutV2Row(label: "Доставка", value: deliveryLabel)) }
         if serviceFee > 0 { r.append(CheckoutV2Row(label: "Сервисный сбор", value: Money.format(serviceFee))) }
+        if tipAmount > 0 { r.append(CheckoutV2Row(label: "Чаевые курьеру", value: Money.format(tipAmount))) }
         let promoOnly = promoDiscount - (promo?.loyaltyDiscountValue ?? 0)
         if promoOnly > 0 {
             r.append(CheckoutV2Row(label: "Скидка по акции", value: "−" + Money.format(promoOnly), accent: true))
@@ -1492,6 +1519,12 @@ struct CheckoutView: View {
                                 get: { dishComments[line.key] ?? "" },
                                 set: { dishComments[line.key] = $0 }
                             ))
+                            if shop?.mode != "service" {
+                                ItemSubstitutionMenu(value: Binding(
+                                    get: { itemSubst[line.key] },
+                                    set: { itemSubst[line.key] = $0 }
+                                ))
+                            }
                         }
                     }
                     if !promoPending, promoFor == cartSig, let hs = promo?.wholesaleHints, !hs.isEmpty {
@@ -1502,6 +1535,9 @@ struct CheckoutView: View {
                 // П-72 п.4: что делать, если товара не окажется (услуги — без замен).
                 if shop?.mode != "service" {
                     SubstitutionPickerBlock()
+                    if fulfillment == .delivery {
+                        TipPickerBlock(choice: $tipChoice, custom: $tipCustom, invalid: tipInvalid)
+                    }
                 }
 
                 CheckoutV2Card {
@@ -1751,7 +1787,8 @@ struct CheckoutView: View {
         let items = cart.lines.map {
             OrderItemBody(productId: $0.productId, qty: $0.qty,
                           modifiers: $0.modifierIds.isEmpty ? nil : $0.modifierIds,
-                          comment: dishCommentWire($0.key))
+                          comment: dishCommentWire($0.key),
+                          substitution: shop?.mode != "service" ? ItemSubstitution.wire(itemSubst[$0.key]) : nil)
         }
         let dp = fulfillment == .delivery ? NSDecimalNumber(decimal: deliveryCost).doubleValue : nil
         let trimmed = comment.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1776,7 +1813,8 @@ struct CheckoutView: View {
             // Только для наличных и только непустое — как сайт (change_from || null).
             changeFrom: payment == .cash && !changeDigits.isEmpty ? changeDigits : nil,
             expectedSubtotal: expectedSubtotalWire,
-            substitutionDefault: shop?.mode != "service" ? SubstitutionPickerBlock.current : nil
+            substitutionDefault: shop?.mode != "service" ? SubstitutionPickerBlock.current : nil,
+            tip: tipShown ? TipLogic.wire(tipAmount) : nil
         )
         // П-72 п.3: повтор неотвеченного оформления общего заказа уйдёт на тот же адрес.
         if let gc = groupCode { GroupCheckoutMemo.set(gc, for: body.idempotencyKey) }
@@ -1793,6 +1831,7 @@ struct CheckoutView: View {
             + (payment == .cash && !changeDigits.isEmpty ? ", сдача с \(changeDigits) ₽" : ""))
         if let c = appliedCode { summary.append("Промокод: " + c) }
         if spendPoints { summary.append("Часть оплатить баллами") }
+        if tipShown, tipAmount > 0 { summary.append("Чаевые курьеру: " + Money.format(tipAmount)) }
         if !trimmed.isEmpty { summary.append("Комментарий: " + trimmed) }
         cart.beginOrder(PendingOrder(
             body: data, key: body.idempotencyKey, lines: cart.lines, shopName: cart.shopName,
@@ -2070,7 +2109,7 @@ extension CheckoutView {
         tableNumber = ""
         // Комментарий («подъезд 3», «без лука») и комментарии к блюдам относились к
         // прежнему заведению — в заказ нового не переносим (паритет с Android).
-        comment = ""; dishComments = [:]
+        comment = ""; dishComments = [:]; itemSubst = [:]
         guard let slug = cart.shopSlug, session.isLoggedIn else { return }
         // Промокод прежнего заведения мог не действовать в новом — перепроверяем
         // тихо по новому shopId (не подошёл — applyCode сам его уберёт).
