@@ -272,7 +272,9 @@ private struct TelegramCard: View {
                 if NotifyTelegramLogic.isOpenable(r.url),
                    let u = URL(string: (r.url ?? "").trimmingCharacters(in: .whitespaces)) {
                     waiting = true
-                    UIApplication.shared.open(u)
+                    // Внутри Task (async-контекст) Xcode 26 выбирает async-перегрузку open(_:) и требует await —
+                    // сборка Codemagic падала. Вариант с completionHandler синхронный и работает с iOS 10.
+                    UIApplication.shared.open(u, options: [:], completionHandler: nil)
                 } else {
                     error = "Не удалось получить ссылку на бота"
                 }
