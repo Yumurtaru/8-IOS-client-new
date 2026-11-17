@@ -156,7 +156,8 @@ enum AssistantAPI {
                                message: (200..<300).contains(status) && msg == nil
                                    ? "Не удалось обработать ответ"
                                    : AssistantText.askError(code, msg),
-                               chatId: AssistantText.chatIdFrom502(code, env?.error?.details?["chat_id"]))
+                               // convertFromSnakeCase переименовывает и ключи details: chat_id может прийти как chatId.
+                               chatId: AssistantText.chatIdFrom502(code, env?.error?.details?["chat_id"] ?? env?.error?.details?["chatId"]))
     }
 
     static func rate(chatId: String, messageId: Int, rating: Int) async throws -> AssistantRateResp {

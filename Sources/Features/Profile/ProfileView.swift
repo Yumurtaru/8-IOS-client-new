@@ -337,6 +337,10 @@ struct ProfileView: View {
         // А102: переписка с поддержкой (push type=support + ticket_id, строка ленты).
         case .supportTicket(let id): SupportTicketView(id: id)
         case .myReservations: MyReservationsView()
+        // П-84: «Покупки» и карточка покупки.
+        case .purchases:    PurchasesView(onOpen: { path.append(ProfileRoute.purchase($0)) },
+                                          onLogin: { path.append(ProfileRoute.auth) })
+        case .purchase(let id): PurchaseDetailView(id: id)
         }
     }
 
@@ -516,6 +520,8 @@ struct ProfileView: View {
                 }
                 divider
                 menuRow(icon: "calendar", label: "Мои записи", detail: bookingsCount > 0 ? "\(bookingsCount)" : nil) { openBookings() }
+                divider
+                menuRow(icon: "cart", label: "Покупки") { path.append(ProfileRoute.purchases) }
                 divider
                 menuRow(icon: "fork.knife", label: "Мои брони столиков") { path.append(ProfileRoute.myReservations) }
                 divider
@@ -897,6 +903,8 @@ struct ProfileView: View {
                 path.append(ProfileRoute.courier)
             }
         // А102: ответ поддержки — переписка этого обращения. Уже открыта — только перечитываем.
+        // П-84: push store_purchase — карточка покупки.
+        case .purchase(let id): path.append(ProfileRoute.purchase(id))
         case .ticket(let id):
             if SupportTicketLive.openId == id {
                 NotificationCenter.default.post(name: .ymSupportPushed, object: id)
@@ -913,7 +921,7 @@ struct ProfileView: View {
 /// Старше 15 с — не исполняется: иначе застрявшая просьба сработала бы
 /// позже, когда человек сам откроет профиль.
 enum ProfilePushIntent {
-    enum Screen { case wallet, support, bonuses, notifications, parcel(Int), parcelNew, courier, ticket(Int) }
+    enum Screen { case wallet, support, bonuses, notifications, parcel(Int), parcelNew, courier, ticket(Int), purchase(Int) }
     static let note = Notification.Name("ym.profilePushIntent")
     private static var pending: (screen: Screen, at: Date)?
 
@@ -938,6 +946,8 @@ private enum ProfileRoute: Hashable {
     case shoppingLists
     case shoppingList(Int)
     case myReservations   // П-83.15: «Мои брони столиков»
+    case purchases        // П-84: «Покупки»
+    case purchase(Int)    // П-84: карточка покупки
 }
 
 /// Опция темы ↔ значение @AppStorage(AppStorageKey.theme) ("system"|"light"|"dark").

@@ -299,6 +299,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
                 }
             }
         }
+        // П-84: квитанция о покупке на кассе (store_purchase, order_id) — «Профиль → Покупки → карточка».
+        // Гостю карточки нет: открываем приложение (чужой push отсеян выше isForeign).
+        if type == "store_purchase", let id = orderId, id > 0, Session.shared.isLoggedIn {
+            return {
+                nav.revealForPush(closeAll: true) {
+                    DeepLinkRouter.shared.requestedTab = 0
+                    nav.profileOpen = true
+                    ProfilePushIntent.open(.purchase(id))
+                }
+            }
+        }
         if type == "order_chat", let id = orderId, id > 0 {
             // Открытые корзина/«Жильё» не дали бы показать чат — сначала закрываем.
             return { nav.revealForPush(closeAll: false) { nav.openChat(orderId: id) } }

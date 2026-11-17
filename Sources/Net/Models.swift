@@ -113,7 +113,10 @@ struct APIErr: Decodable {
             self.suggestion = nil
         } else if let c = try? decoder.container(keyedBy: CodingKeys.self) {
             self.message = try? c.decode(String.self, forKey: .message)
-            self.details = try? c.decode([String: String].self, forKey: .details)
+            // П-84: details с числами и флагами (mine: true, purchase_id: 5, retry_after: 600) раньше
+            // отбрасывались целиком; теперь скаляры приводятся к строкам, прочее пропускается.
+            self.details = (try? c.decode([String: String].self, forKey: .details))
+                ?? (try? c.decode([String: APIDetailScalar].self, forKey: .details)).map { d in d.compactMapValues { $0.text } }
             self.code = try? c.decode(String.self, forKey: .code)
             self.need = try? c.decode(String.self, forKey: .need)
             self.suggestion = try? c.decode(String.self, forKey: .suggestion)
@@ -126,6 +129,19 @@ struct APIErr: Decodable {
         }
     }
     private enum CodingKeys: String, CodingKey { case message, details, code, need, suggestion }
+}
+
+/// Значение details ошибки: строка, число или флаг -> строка; массив/объект/null -> nil (пропускается).
+struct APIDetailScalar: Decodable {
+    let text: String?
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let s = try? c.decode(String.self) { text = s }
+        else if let b = try? c.decode(Bool.self) { text = b ? "true" : "false" }
+        else if let i = try? c.decode(Int.self) { text = String(i) }
+        else if let d = try? c.decode(Double.self) { text = d.isFinite ? String(d) : nil }
+        else { text = nil }
+    }
 }
 
 /// Журнал ошибок разбора ответа: Console.app / Xcode, категория «decode».
@@ -509,6 +525,9 @@ struct Profile: Codable { @LenientInt var id: Int?; let name: String?; let phone
     /// П-83 п.13: день рождения "YYYY-MM-DD" и дата, с которой его можно сменить. Старый сервер — nil.
     var birthday: String? = nil
     var birthdayChangeableAt: String? = nil
+    /// П-84: «Электронные чеки вместо бумажных» и подтверждённая почта для них. Старый сервер — nil.
+    @LenientBool var eReceipts: Bool?
+    var eReceiptContact: String? = nil
 }
 /// П-83 п.12: ИИ-сводка отзывов заведения (GET shops/{slug} -> reviews_summary; null — карточки нет).
 struct ReviewsSummary: Codable {
@@ -554,6 +573,8 @@ struct Order: Codable, Identifiable {
     /// Предзаказ «ко времени»: "YYYY-MM-DD HH:MM:SS" по Москве или null (П-24 №7).
     /// Список отдаёт поле, если сервер его шлёт; нет — nil, карточка как раньше.
     let preorderAt: String?
+    /// П-84: канал заказа "store" (касса) | "online"; старый сервер — nil.
+    var channel: String? = nil
 }
 
 /// Запись клиента на услугу — GET api/v1/appointments (экран «Мои записи»).

@@ -42,6 +42,7 @@ struct SettingsView: View {
                 appearanceSection
                 notificationsSection
                 paySection
+                EReceiptsSection()
                 PasskeysSection()
                 NotifyTelegramSection()
                 citySection

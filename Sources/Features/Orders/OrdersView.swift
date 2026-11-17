@@ -602,6 +602,13 @@ private struct OrderCard: View {
                             .font(YMFont.headline).foregroundStyle(YMColor.text).lineLimit(1)
                         Text(number)
                             .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                        // П-84: кассовый заказ — мелкая метка «В магазине».
+                        if order.channel == "store" {
+                            Text("В магазине")
+                                .font(YMFont.caption).foregroundStyle(YMColor.muted)
+                                .padding(.horizontal, 8).padding(.vertical, 2)
+                                .background(YMUi.segmentBg, in: Capsule())
+                        }
                     }
                     Spacer(minLength: 8)
                     Text(money).font(.custom(YMFont.golosName(.heavy), fixedSize: 16)).foregroundStyle(YMColor.text)

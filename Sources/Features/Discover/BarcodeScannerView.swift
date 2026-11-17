@@ -18,12 +18,15 @@ enum BarcodeScanner {
 /// Экран сканера: камера + подсказка + «Закрыть». Найденный код возвращается через onCode, экран закрывается.
 struct BarcodeScannerScreen: View {
     let onCode: (String) -> Void
+    /// П-84: «Добавить чек» сканирует QR (.qr); по умолчанию — штрихкоды товара, как раньше.
+    var symbologies: [VNBarcodeSymbology]? = nil
+    var hint: String = "Наведите камеру на штрихкод товара"
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         ZStack(alignment: .bottom) {
             if #available(iOS 16.0, *) {
-                BarcodeScannerRepresentable(onCode: { code in
+                BarcodeScannerRepresentable(symbologies: symbologies, onCode: { code in
                     onCode(code)
                     dismiss()
                 })
@@ -32,7 +35,7 @@ struct BarcodeScannerScreen: View {
                 Color.black.ignoresSafeArea()
             }
             VStack(spacing: 12) {
-                Text("Наведите камеру на штрихкод товара")
+                Text(hint)
                     .font(YMFont.callout)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
@@ -53,12 +56,13 @@ struct BarcodeScannerScreen: View {
 
 @available(iOS 16.0, *)
 private struct BarcodeScannerRepresentable: UIViewControllerRepresentable {
+    let symbologies: [VNBarcodeSymbology]?
     let onCode: (String) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(onCode: onCode) }
 
     func makeUIViewController(context: Context) -> DataScannerViewController {
-        let symbologies: [VNBarcodeSymbology] = [.ean13, .ean8, .upce, .code128, .code39, .itf14]
+        let symbologies: [VNBarcodeSymbology] = self.symbologies ?? [.ean13, .ean8, .upce, .code128, .code39, .itf14]
         let scanner = DataScannerViewController(
             recognizedDataTypes: [.barcode(symbologies: symbologies)],
             qualityLevel: .balanced,
