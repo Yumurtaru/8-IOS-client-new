@@ -300,8 +300,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
         }
         // П-84: квитанция о покупке на кассе (store_purchase, order_id) — «Профиль → Покупки → карточка».
-        // Гостю карточки нет: открываем приложение (чужой push отсеян выше isForeign).
-        if type == "store_purchase", let id = orderId, id > 0, Session.shared.isLoggedIn {
+        // Гость: профиль предложит вход и после него откроет карточку (pendingPush); чужой push отсеян выше isForeign.
+        if type == "store_purchase", let id = orderId, id > 0 {
             return {
                 nav.revealForPush(closeAll: true) {
                     DeepLinkRouter.shared.requestedTab = 0

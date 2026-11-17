@@ -869,7 +869,7 @@ struct ProfileView: View {
             // А102: гостю — после входа (onChange(of: isLoggedIn)). Только переписка и посылка:
             // остальные разделы гостю, как раньше, не открываем.
             switch screen {
-            case .ticket, .parcel: pendingPush = screen
+            case .ticket, .parcel, .purchase: pendingPush = screen
             // А104: лента после push о выигрыше в розыгрыше (гостем .notifications приходит только от него).
             case .notifications: pendingPush = screen
             default: break
@@ -904,7 +904,9 @@ struct ProfileView: View {
             }
         // А102: ответ поддержки — переписка этого обращения. Уже открыта — только перечитываем.
         // П-84: push store_purchase — карточка покупки.
-        case .purchase(let id): path.append(ProfileRoute.purchase(id))
+        // Эта же карточка уже открыта — второй экземпляр не кладём (PurchaseLive).
+        case .purchase(let id):
+            if PurchaseLive.openId != id { path.append(ProfileRoute.purchase(id)) }
         case .ticket(let id):
             if SupportTicketLive.openId == id {
                 NotificationCenter.default.post(name: .ymSupportPushed, object: id)
@@ -920,6 +922,11 @@ struct ProfileView: View {
 /// из профиля), забирает ProfileView: при появлении и по уведомлению note.
 /// Старше 15 с — не исполняется: иначе застрявшая просьба сработала бы
 /// позже, когда человек сам откроет профиль.
+/// Какая карточка покупки сейчас на экране (push по ней не кладёт второй экран).
+enum PurchaseLive {
+    static var openId: Int?
+}
+
 enum ProfilePushIntent {
     enum Screen { case wallet, support, bonuses, notifications, parcel(Int), parcelNew, courier, ticket(Int), purchase(Int) }
     static let note = Notification.Name("ym.profilePushIntent")

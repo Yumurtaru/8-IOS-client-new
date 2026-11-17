@@ -50,8 +50,13 @@ struct PurchaseDetailView: View {
         .background(YMUi.screenBg.ignoresSafeArea())
         .navigationTitle("Покупка")
         .navigationBarTitleDisplayMode(.inline)
-        .task { await load() }
+        .task {
+            if let f = PurchaseFlash.take() { toast = f }
+            await load()
+        }
         .refreshable { await load() }
+        .onAppear { PurchaseLive.openId = id }
+        .onDisappear { if PurchaseLive.openId == id { PurchaseLive.openId = nil } }
     }
 
     // MARK: Блоки
@@ -167,10 +172,11 @@ struct PurchaseDetailView: View {
     // MARK: Кассовый чек
 
     @ViewBuilder private func receiptCard(_ p: Purchase) -> some View {
-        if let f = p.fiscal {
+        // Есть реквизиты или QR чека — блок чека (как на Android: fiscal != null || receipt_qr != null).
+        if p.fiscal != nil || !(p.receiptQr ?? "").isEmpty {
             card {
                 Text("Кассовый чек").ymText(YMText.sectionTitle).foregroundStyle(YMUi.text)
-                fiscalLines(f)
+                if let f = p.fiscal { fiscalLines(f) }
                 receiptQrBlock(p.receiptQr)
                 receiptButtons(p)
             }

@@ -64,6 +64,7 @@ struct PurchasesView: View {
         .task(id: channel) { await load() }
         // Другой сегмент — прежний список не показываем (поздний ответ отбросит счётчик поколения).
         .onChange(of: channel) { _ in
+            gen += 1   // ответы «Показать ещё» прежнего сегмента отбрасываются сразу, до старта новой загрузки
             rows = nil; error = nil; hasMore = false; nextPage = 2; moreFailed = false; moreBusy = false
         }
         .onChange(of: session.isLoggedIn) { logged in
@@ -255,7 +256,10 @@ struct PurchasesView: View {
             Haptics.success()
             notice = PurchaseNotice(text: text, isError: false, openId: nil)
             await reloadAfterClaim()
-            if id > 0 { onOpen(id) }
+            if id > 0 {
+                PurchaseFlash.text = text   // подсказка «Чек добавлен» — на карточке (как на Android)
+                onOpen(id)
+            }
         } catch {
             Haptics.warning()
             notice = failureNotice(error)
@@ -282,7 +286,7 @@ struct PurchasesView: View {
             }
             if api.rejectStatus == 429 {
                 let hint = PurchasesLogic.retryText(retryRaw)
-                if !hint.isEmpty { text += " " + hint }
+                if !hint.isEmpty, !text.contains("мин") { text += " " + hint }
             }
         }
         return PurchaseNotice(text: text, isError: true, openId: openId)

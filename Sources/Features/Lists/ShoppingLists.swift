@@ -567,9 +567,12 @@ final class ShoppingListViewModel: ObservableObject {
         gen += 1
         let my = gen
         saveTask?.cancel()
-        saveTask = Task { [weak self] in
+        // Сильная ссылка на vm (не weak): ушли с экрана в паузу 450 мс — vm уничтожился бы и правка потерялась.
+        // Задача короткая, цикл разрывается сам по её завершении.
+        saveTask = Task {
             try? await Task.sleep(nanoseconds: 450_000_000)
-            guard !Task.isCancelled, let vm = self else { return }
+            guard !Task.isCancelled else { return }
+            let vm = self
             do {
                 let body = ShoppingListUpdateBody(name: nil, items: ListsLogic.requestItems(next))
                 let r: ShoppingListCard = try await API.shared.put("api/v1/shopping-lists/\(vm.id)", body: body)

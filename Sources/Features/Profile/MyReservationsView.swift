@@ -286,6 +286,8 @@ struct MyReservationsView: View {
             Haptics.success()
         } catch {
             toast = error.userMessage ?? "Не удалось отменить бронь"
+            // 409: бронь уже нельзя отменить (заведение подтвердило/посадило гостей) — список устарел, перечитываем.
+            if (error as? APIError)?.rejectStatus == 409 { Task { await load() } }
         }
     }
 }

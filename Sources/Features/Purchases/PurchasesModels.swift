@@ -153,6 +153,16 @@ enum PurchaseChannel: String, CaseIterable, Hashable {
 
 // MARK: - Чистая логика
 
+/// Разовая подсказка для карточки покупки («Чек добавлен»): карточка забирает её один раз.
+enum PurchaseFlash {
+    static var text: String?
+    static func take() -> String? {
+        let t = text
+        text = nil
+        return t
+    }
+}
+
 enum PurchasesLogic {
     /// Слияние страниц: новые в конец, дубли по id отбрасываются, порядок сервера сохраняется.
     static func merge(_ current: [Purchase], _ incoming: [Purchase]) -> [Purchase] {
@@ -168,10 +178,11 @@ enum PurchasesLogic {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty || s.count > 500 { return false }
         var found = Set<String>()
-        for part in s.split(separator: "&") {
+        for part in s.split(separator: "&", omittingEmptySubsequences: false) {
             let kv = part.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
-            guard kv.count == 2, !kv[1].isEmpty else { continue }
-            found.insert(String(kv[0]))
+            // Часть без «ключ=» — не QR чека (как на Android); ключи без учёта регистра.
+            guard kv.count == 2, !kv[0].isEmpty else { return false }
+            if !kv[1].isEmpty { found.insert(String(kv[0]).lowercased()) }
         }
         return ["t", "s", "fn", "i", "fp", "n"].allSatisfy { found.contains($0) }
     }
