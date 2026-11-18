@@ -52,8 +52,35 @@ final class Push {
     /// ответит 404 — это ничего не ломает.
     func unregisterSilently() {
         lastRegisteredKey = nil
-        guard let token = fcmToken, !token.isEmpty,
-              let url = URL(string: API.base + "/api/v1/push/unregister"),
+        guard let token = fcmToken, !token.isEmpty else { return }
+        send(unregister: token)
+    }
+
+    // ── Отложенная отвязка после явного выхода ────────────────────────────────
+    // Выход без сети (или приложение уснуло до ответа): токен оставался за прежним
+    // аккаунтом, и его уведомления система показывала на экране блокировки (фильтр
+    // isForeign работает только на переднем плане). Запоминаем токен и досылаем
+    // отвязку при каждом возврате в приложение, пока сервер не ответит 2xx.
+    // Только пока никто не вошёл; вход сбрасывает отложенную отвязку.
+    private static let pendingUnbindKey = "push_unbind_pending"
+
+    func markPendingUnbind() {
+        guard let t = fcmToken, !t.isEmpty else { return }
+        UserDefaults.standard.set(t, forKey: Self.pendingUnbindKey)
+    }
+
+    func clearPendingUnbind() {
+        UserDefaults.standard.removeObject(forKey: Self.pendingUnbindKey)
+    }
+
+    func retryPendingUnbind() {
+        guard TokenStore.access == nil,
+              let t = UserDefaults.standard.string(forKey: Self.pendingUnbindKey), !t.isEmpty else { return }
+        send(unregister: t)
+    }
+
+    private func send(unregister token: String) {
+        guard let url = URL(string: API.base + "/api/v1/push/unregister"),
               let body = try? JSONSerialization.data(withJSONObject: ["token": token]) else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
@@ -62,7 +89,15 @@ final class Push {
         req.timeoutInterval = 15
         // Отдельная сессия без cookie: заголовка входа и чужих cookie здесь быть не должно.
         let s = URLSession(configuration: .ephemeral)
-        s.dataTask(with: req) { _, _, _ in }.resume()
+        let key = Self.pendingUnbindKey
+        s.dataTask(with: req) { _, resp, _ in
+            // Сервер принял (2xx; старый сервер — 404, ручки нет: тоже больше не повторяем) — отвязка выполнена.
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if (200..<300).contains(code) || code == 404,
+               UserDefaults.standard.string(forKey: key) == token {
+                UserDefaults.standard.removeObject(forKey: key)
+            }
+        }.resume()
         s.finishTasksAndInvalidate()
     }
 }

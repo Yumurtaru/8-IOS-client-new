@@ -31,7 +31,10 @@ struct CartLine: Codable, Identifiable {
     var id: String { key }
 
     var presets: [Double] {
-        (qtyPresets ?? "").split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }.filter { $0 > 0 }.sorted()
+        // isFinite / < 1e6: Double("inf") / "1e999" давали бесконечное количество → вылет в Int(qty)
+        // при каждом запуске (корзина на диске). Сервер такие размеры больше не сохраняет (П-81 №2).
+        (qtyPresets ?? "").split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+            .filter { $0 > 0 && $0.isFinite && $0 < 1_000_000 }.sorted()
     }
     var isFractional: Bool {
         // Как на сервере (snapOrderQty): только флаг товара/категории или ≥2 размера.
@@ -40,7 +43,10 @@ struct CartLine: Codable, Identifiable {
     }
     var step: Double {
         // Тот же порядок, что у карточки товара (ProductView.stepValue).
-        if let p = presets.first { return p }
+        // Штучный товар с одним дробным размером («0.5» при qty_fractional = 0): шаг 0,5 после
+        // округления до целого не менял количество — «−» не работал и строку нельзя было убрать.
+        // Такой товар шагает по 1, как карточка; целый размер («2») — как раньше.
+        if let p = presets.first, isFractional || p.rounded() == p { return p }
         guard isFractional else { return 1.0 }
         if let s = qtyStep, s > 0 { return s }
         return 0.1
@@ -156,7 +162,12 @@ final class Cart: ObservableObject {
     @Published private(set) var shopName: String?
     @Published private(set) var shopSlug: String?
 
-    var count: Int { lines.reduce(0) { $0 + ($1.qty < 1 ? 1 : Int($1.qty.rounded())) } }
+    var count: Int { lines.reduce(0) { $0 + Cart.badgeUnits($1.qty) } }
+    /// Сколько единиц строка даёт в значке корзины. Не число / бесконечность — 1 (раньше Int(inf) ронял приложение).
+    private static func badgeUnits(_ q: Double) -> Int {
+        guard q.isFinite, q >= 1 else { return 1 }
+        return Int(min(q, 1_000_000).rounded())
+    }
     /// Итог корзины. Округляем КАЖДУЮ строку до копеек и складываем
     /// округлённые — ровно так считает сервер (round(unit*qty, 2) по строке).
     /// Раньше складывались неокруглённые: на дробных количествах кнопка

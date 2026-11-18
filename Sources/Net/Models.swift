@@ -350,7 +350,8 @@ struct ShopDetail: Codable, Identifiable {
     /// Без них экран рисовал все варианты, а сервер отказывал уже на последнем шаге.
     let paymentMethods: [String]?
     /// П-83 п.12: ИИ-сводка отзывов; nil — карточки нет (и у старого сервера).
-    var reviewsSummary: ReviewsSummary? = nil
+    /// Терпимо: не тот тип (PHP `[]` вместо объекта) даёт nil, а не ошибку всей карточки заведения.
+    @LenientObject var reviewsSummary: ReviewsSummary? = nil
     /// График по дням (0 = Вс … 6 = Сб) — для предзаказа у закрытого заведения.
     let statusSchedule: [ScheduleDay]?
     /// П-27.1 (А68): настраивало ли заведение способы оплаты / получения.
@@ -743,9 +744,10 @@ struct OrderDetail: Codable, Identifiable {
     @LenientList var substitutions: [OrderSubstitute]?
     /// П-83 пп. 7, 9: «оставить у двери», получатель и фото доставки (всё необязательное).
     @LenientBool var leaveAtDoor: Bool?
-    let recipientName: String?
-    let recipientPhone: String?
-    let deliveryPhotoUrl: String?
+    // Терпимо (как соседние поля): не тот тип не роняет разбор всей карточки заказа.
+    @LenientText var recipientName: String?
+    @LenientText var recipientPhone: String?
+    @LenientText var deliveryPhotoUrl: String?
 }
 /// `stay` карточки заказа: {date_from, date_to, nights, adults, children, unit,
 /// check_in_from, check_out_until, status}. status — статус самой брони:
@@ -1453,15 +1455,16 @@ struct ReturnDetail: Decodable {
     let type: String?
     let items: [ReturnDetailLine]?
     /// Полная карточка заявки: причина, ответ магазина, способ возврата, история статусов.
-    let reasonCode: String?
-    let reasonText: String?
-    let moderatorNote: String?
-    let refundMethod: String?
-    let log: [ReturnLogLine]?
+    // Терпимо: не тот тип не роняет разбор всей заявки (старые поля выше открываются как раньше).
+    @LenientText var reasonCode: String?
+    @LenientText var reasonText: String?
+    @LenientText var moderatorNote: String?
+    @LenientText var refundMethod: String?
+    @LenientList var log: [ReturnLogLine]?
 }
 /// GET api/v1/orders/{id}/payment-status → data.
 struct PaymentStatusData: Decodable { let paymentStatus: String? }
-struct ReturnLogLine: Decodable {
+struct ReturnLogLine: Codable {
     let status: String?
     let createdAt: String?
 }

@@ -27,7 +27,7 @@ final class LodgingTripsVM: ObservableObject {
     private var page = 1
     /// Счётчик обновлений: поздний ответ догрузки после обновления списка отбрасывается.
     private var epoch = 0
-    private let perPage = 50
+    private let perPage = 100   // максимум сервера — как до постраничной загрузки (без параметров отдавал до 100)
 
     func load() async {
         loading = true

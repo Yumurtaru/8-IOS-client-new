@@ -562,6 +562,14 @@ struct CheckoutView: View {
             && (cart.shopSlug == nil || shop != nil) && !promoPending
             && !fulfillmentNone && !paymentNone && !tableMissing
             && !pricesChecking && !checkingCode
+            // Прошлая отправка ещё в пути (экран закрыли во время отправки и открыли заново):
+            // ждём её ответа, иначе правки на новом экране молча терялись.
+            && !inFlightElsewhere
+    }
+
+    private var inFlightElsewhere: Bool {
+        guard let po = cart.pendingOrder else { return false }
+        return !po.unknown
     }
 
     /// Почему «Оформить заказ» сейчас серая — коротко, прямо у кнопки. Причины

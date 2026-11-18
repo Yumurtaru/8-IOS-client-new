@@ -717,6 +717,10 @@ struct ProfileView: View {
                 Task { try? await Task.sleep(nanoseconds: 3_000_000_000); once.fire() }
             }
             session.signOut(clearLocalData: true)
+            // Push-токен — отдельной отвязкой без входа, с досылкой при возврате, пока сервер не ответит
+            // (выход без сети оставлял уведомления прежнего аккаунта на экране блокировки).
+            Push.shared.markPendingUnbind()
+            Push.shared.unregisterSilently()
             // Явный выход уже очистил корзину: что гость наберёт дальше, при
             // следующем входе (любым аккаунтом) не стираем (см. AuthLastUser).
             AuthLastUser.forget()

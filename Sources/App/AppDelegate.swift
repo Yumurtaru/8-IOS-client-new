@@ -31,7 +31,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // которые могут не сработать под fullScreenCover). iOS покажет окно один раз.
         requestPushAuth()
         // Холодный старт по тапу на уведомление: разбираем payload и маршрутизируем.
-        if let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
+        // Запуск в фоне фоновым push (content-available) — тапа не было: экран не открываем
+        // (иначе человек, открыв приложение с иконки, попадал не туда).
+        // Настоящий тап по уведомлению придёт и в didReceive.
+        if application.applicationState != .background,
+           let remote = launchOptions?[.remoteNotification] as? [AnyHashable: Any] {
             handleNotification(remote)
         }
         return true

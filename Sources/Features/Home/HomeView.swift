@@ -67,12 +67,13 @@ final class HomeViewModel: ObservableObject {
         // и скелетон Главной висел сумму их времён.
         async let rec: Void = loadRecommendations(session: session)
         async let sec: Void = loadSections(session: session, myGen: myGen)
-        async let last: Void = loadLastOrder(session: session)
         await loadShops(session: session, myGen: myGen)
-        _ = await (rec, sec, last)
+        _ = await (rec, sec)
         if myGen == gen { loading = false }
         // Флаг нужен только на момент подстановки; не даём ему залипнуть.
         autoPickedCityId = nil
+        // «Повторить заказ» — после снятия скелетона: Главная не ждёт список заказов (как до 16.11).
+        await loadLastOrder(session: session)
     }
 
     /// «Рекомендуем вам» — персональные товары: GET api/v1/recommendations?city_id=

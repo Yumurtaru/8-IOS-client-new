@@ -115,6 +115,9 @@ enum ListsLogic {
                                 modifierIds: mods, modsLabel: label, photo: l.photo)
             line.unit = l.unit
             line.qtyFractional = l.qtyFractional
+            // Дробное количество без флага (0,5 кг) — строка дробная, как в общем заказе (GroupCartView):
+            // иначе корзина показывала «1» при сумме за 0,5, а «+» прыгал на 2.
+            if line.qtyFractional != true, let q = l.qty, q.isFinite, q.rounded() != q { line.qtyFractional = true }
             if let st = l.qtyStep, st > 0 { line.qtyStep = st }
             out.append(line)
         }

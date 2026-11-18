@@ -212,8 +212,9 @@ final class OrderDetailViewModel: ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 guard !self.pollBusy else { return }
-                // Живое соединение работает — опрос лишь страховка: каждый четвёртый тик (~32 с).
-                if self.rtLive && (self.pollTick &+ 1) % 4 != 0 { self.pollTick &+= 1; return }
+                // Опрос — как до живых обновлений (каждые 8 с): положение курьера по WebSocket
+                // не приходит, точка и время прибытия двигаются только опросом. Живые события —
+                // надстройка сверху (мгновенно), опрос они не прореживают.
                 self.pollBusy = true
                 defer { self.pollBusy = false }
                 if let t: TrackData = try? await API.shared.get("api/v1/orders/\(self.id)/track") {

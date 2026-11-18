@@ -34,6 +34,10 @@ final class Session: ObservableObject {
         // П-28.6: истекла именно сессия вошедшего (не гость) — после выхода
         // гасим push-токен этого телефона на сервере (без ожидания ответа).
         API.shared.onUnauthorized = { [weak self] in
+            // 401 на запрос гостя (токена в памяти нет — например, запуск в фоне до первой
+            // разблокировки, Keychain ещё закрыт): выходить не из чего. Раньше signOut стирал
+            // Keychain и запрещал restoreIfLocked — сохранённый вход терялся.
+            guard self?.token != nil else { return }
             let wasLoggedIn = self?.token != nil
             self?.signOut()
             if wasLoggedIn { Push.shared.unregisterSilently() }
@@ -45,7 +49,11 @@ final class Session: ObservableObject {
         for name in [UIApplication.protectedDataDidBecomeAvailableNotification,
                      UIApplication.didBecomeActiveNotification] {
             unlockObservers.append(NotificationCenter.default.addObserver(
-                forName: name, object: nil, queue: .main) { [weak self] _ in self?.restoreIfLocked() })
+                forName: name, object: nil, queue: .main) { [weak self] _ in
+                    self?.restoreIfLocked()
+                    // Отвязка push после явного выхода без сети — досылаем (только пока никто не вошёл).
+                    Push.shared.retryPendingUnbind()
+                })
         }
     }
     private var unlockObservers: [NSObjectProtocol] = []
@@ -66,6 +74,8 @@ final class Session: ObservableObject {
     /// refresh — токен продления (30 дней): API тихо обновляет access при 401 (security-аудит).
     func signIn(_ token: String, refresh: String? = nil) {
         signedOutExplicitly = false
+        // Вошли — отложенная отвязка push прежнего выхода больше не нужна (иначе отвязала бы нового человека).
+        Push.shared.clearPendingUnbind()
         self.token = token
         TokenStore.access = token
         if let r = refresh, !r.isEmpty { TokenStore.refresh = r }
@@ -101,6 +111,9 @@ final class Session: ObservableObject {
             // Spotlight: заказы, заведения и товары прежнего человека не должны остаться в поиске iPhone.
             SpotlightIndex.clearAll()
             ReviewPrompt.clearAccountData()
+            // Виджеты и Live Activity заказа прежнего аккаунта: раньше чистились только
+            // вкладкой «Заказы» (создаётся лениво) — без её открытия оставались на экране блокировки.
+            Task { @MainActor in OrderWidgetBridge.clear() }
         }
         if wasLoggedIn && clearLocalData {
             Task { @MainActor in

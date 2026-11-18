@@ -465,9 +465,11 @@ final class API {
             guard let (data, resp) = try? await self.session.data(for: req) else { return .unavailable }
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             if code >= 500 || code == 0 || code == 429 { return .unavailable }
-            guard code == 200,
-                  let env = try? self.decoder.decode(APIEnvelope<RefreshResp>.self, from: data),
-                  let token = env.data?.token, !token.isEmpty else { return .rejected }
+            guard code == 200 else { return .rejected }
+            // 200, но не наш JSON (страница техработ хостинга, Wi-Fi со страницей входа) — это сбой
+            // связи, а не отказ: токены не трогаем (паритет с Android, Network.kt).
+            guard let env = try? self.decoder.decode(APIEnvelope<RefreshResp>.self, from: data) else { return .unavailable }
+            guard let token = env.data?.token, !token.isEmpty else { return .rejected }
             // Пока шло продление, человек вышел (или вошёл другой) — старую
             // сессию не возвращаем: иначе после перезапуска снова прежний аккаунт.
             // Паритет с Android (refreshBlocking): вошёл заново — повторяем запрос с
